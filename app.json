@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Property24 Zimbabwe",
+    "slug": "property24-zimbabwe",
+    "scheme": "property24zimbabwe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Property24 to use your camera for video calls and listing media.",
+          "microphonePermission": "Allow Property24 to use your microphone for in-app calls."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Property24 to share your location only when you choose to send a viewing pin."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Property24 to let you choose a contact to share in chat."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "resize"
+    }
+  }
+}

@@ -1,0 +1,1733 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import { Dispatch, ReactNode, createContext, useContext, useEffect, useMemo, useReducer, useState } from "react";
+import { Platform } from "react-native";
+
+export type Property = {
+  id: string;
+  ownerId?: string;
+  ownerName?: string;
+  ownerRole?: AccountRole;
+  ownerVerified?: boolean;
+  ownerProfilePicture?: string;
+  ownerCoverPhoto?: string;
+  ownerBio?: string;
+  ownerLastSeenAt?: string;
+  agentId?: string;
+  agentName?: string;
+  agentVerified?: boolean;
+  agentProfilePicture?: string;
+  agentCoverPhoto?: string;
+  agentBio?: string;
+  agentLastSeenAt?: string;
+  supplierId?: string;
+  supplierName?: string;
+  supplierRole?: AccountRole;
+  supplierVerified?: boolean;
+  supplierProfilePicture?: string;
+  supplierCoverPhoto?: string;
+  supplierBio?: string;
+  supplierLastSeenAt?: string;
+  title: string;
+  address: string;
+  city: string;
+  suburb: string;
+  price: string;
+  deposit: string;
+  type: string;
+  bedrooms: number;
+  bathrooms: number;
+  furnished: string;
+  parking: string;
+  power: string;
+  solarPower: boolean;
+  water: string;
+  borehole: boolean;
+  gps: string;
+  videoCount: number;
+  tourAvailable: boolean;
+  petFriendly: boolean;
+  verified: boolean;
+  description: string;
+  photos: string[];
+  listingViews: number;
+  savedCount: number;
+  applicationsCount: number;
+  commentsCount?: number;
+};
+
+export type LiveEvent = {
+  id: string;
+  title: string;
+  meta: string;
+  status: string;
+  tone: "success" | "warning" | "info" | "danger";
+};
+
+export type AccountRole = "tenant" | "landlord" | "agent" | "admin";
+export type PublicAccountRole = Exclude<AccountRole, "admin">;
+
+export type AccountContext = {
+  accountType: AccountRole;
+  visibleSections: string[];
+  hiddenSections: string[];
+  capabilities: string[];
+  onboardingRequirements: string[];
+};
+
+export type PaymentItem = {
+  id: string;
+  tenantId?: string;
+  propertyId?: string;
+  tenant: string;
+  property: string;
+  amount: string;
+  method: string;
+  status: string;
+  time: string;
+  receiptId: string;
+  reminderStatus: string;
+};
+
+export type MaintenanceItem = {
+  id: string;
+  propertyId?: string;
+  tenantId?: string;
+  issue: string;
+  category: string;
+  property: string;
+  tenant: string;
+  description: string;
+  photoCount: number;
+  status: string;
+  priority: string;
+  updatedAt: string;
+};
+
+export type LeaseItem = {
+  id: string;
+  propertyId?: string;
+  tenantId?: string;
+  property: string;
+  tenant: string;
+  landlord: string;
+  startDate: string;
+  endDate: string;
+  monthlyRent: string;
+  deposit: string;
+  term: string;
+  pdf: string;
+  status: string;
+  signedByTenant: boolean;
+  signedByLandlord: boolean;
+};
+
+export type VerificationItem = {
+  id: string;
+  name: string;
+  role: string;
+  checks: string[];
+  status: string;
+  reviewedBy: string;
+};
+
+export type ApplicationItem = {
+  id: string;
+  propertyId?: string;
+  tenantId?: string;
+  applicant: string;
+  property: string;
+  role: string;
+  status: string;
+  score: number;
+  time: string;
+};
+
+export type ViewingItem = {
+  id: string;
+  propertyId?: string;
+  tenantId?: string;
+  property: string;
+  agent: string;
+  tenant: string;
+  date: string;
+  time: string;
+  status: string;
+};
+
+export type ConversationItem = {
+  id: string;
+  propertyId?: string;
+  name: string;
+  time: string;
+  preview: string;
+  status: string;
+  updatedAt?: string;
+  lastMessageSenderId?: string;
+  participants: ConversationParticipant[];
+  phoneNumbersRevealed: boolean;
+};
+
+export type ConversationParticipant = {
+  id: string;
+  name: string;
+  role: AccountRole;
+  verified: boolean;
+  profilePicture?: string;
+  coverPhoto?: string;
+  bio?: string;
+  lastSeenAt?: string;
+};
+
+export type ConversationMessage = {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  sender: string;
+  body: string;
+  attachmentUrl?: string;
+  attachmentType?: string;
+  attachmentName?: string;
+  createdAt: string;
+  readAt?: string;
+};
+
+export type ConversationCallSession = {
+  id: string;
+  conversationId: string;
+  initiatorId: string;
+  mode: "voice" | "video";
+  status: string;
+  createdAt: string;
+  endedAt?: string;
+};
+
+export type PropertyCommentItem = {
+  id: string;
+  propertyId: string;
+  authorId: string;
+  author: string;
+  authorRole: AccountRole;
+  authorVerified: boolean;
+  body: string;
+  mediaUri: string;
+  likes: number;
+  createdAt: string;
+  time: string;
+};
+
+export type PropertyCommentInput = {
+  body: string;
+  mediaUri?: string;
+  parentId?: string;
+};
+
+export type RentalPlatformState = {
+  properties: Property[];
+  payments: PaymentItem[];
+  maintenance: MaintenanceItem[];
+  leases: LeaseItem[];
+  verifications: VerificationItem[];
+  applications: ApplicationItem[];
+  viewings: ViewingItem[];
+  conversations: ConversationItem[];
+  liveEvents: LiveEvent[];
+};
+
+export type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: AccountRole;
+  verified: boolean;
+  profileStatus: string;
+  authProvider: string;
+  googleEmailVerified: boolean;
+  profilePicture?: string;
+  coverPhoto?: string;
+  bio?: string;
+  lastSeenAt?: string;
+};
+
+export type SignInPayload = {
+  username: string;
+  password: string;
+};
+
+export type RegisterAccountPayload = {
+  accountType: PublicAccountRole;
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+};
+
+export type RegistrationOtpChallenge = {
+  otpRequired: boolean;
+  challengeId: string;
+  deliveryChannel: "email" | "sms";
+  destination: string;
+  email: string;
+  phone: string;
+  expiresInSeconds: number;
+  message?: string;
+};
+
+export type VerificationSubmissionPayload = {
+  role: AccountRole;
+  national_id_number: string;
+  phone_verified: boolean;
+  selfie_uploaded: boolean;
+  ownership_or_authorization_document_url?: string;
+  proof_of_ownership_reference?: string;
+  authorization_reference?: string;
+  estate_agency_registration?: string;
+  agency_name?: string;
+  contact_details?: string;
+};
+
+export type AccountProfileUpdatePayload = {
+  name?: string;
+  bio?: string;
+  profilePicture?: string;
+  coverPhoto?: string;
+  profilePictureFile?: AccountMediaFile;
+  coverPhotoFile?: AccountMediaFile;
+  removeProfilePicture?: boolean;
+  removeCoverPhoto?: boolean;
+};
+
+export type AccountMediaFile = {
+  uri: string;
+  name: string;
+  type: string;
+};
+
+export type MessageAttachmentInput = {
+  file?: AccountMediaFile;
+  url?: string;
+  type: string;
+  name?: string;
+};
+
+type PropertyInput = Omit<Property, "id" | "verified" | "photos" | "listingViews" | "savedCount" | "applicationsCount"> & {
+  verified?: boolean;
+  photos?: string[];
+  listingViews?: number;
+  savedCount?: number;
+  applicationsCount?: number;
+};
+type PaymentInput = Omit<PaymentItem, "id" | "time" | "status" | "receiptId" | "reminderStatus"> & {
+  status?: string;
+  time?: string;
+  receiptId?: string;
+  reminderStatus?: string;
+};
+type MaintenanceInput = Omit<MaintenanceItem, "id" | "updatedAt" | "status"> & { status?: string; updatedAt?: string };
+type LeaseInput = Omit<LeaseItem, "id" | "status" | "signedByTenant" | "signedByLandlord" | "pdf"> & {
+  status?: string;
+  signedByTenant?: boolean;
+  signedByLandlord?: boolean;
+  pdf?: string;
+};
+type VerificationInput = Omit<VerificationItem, "id" | "status" | "reviewedBy"> & { status?: string; reviewedBy?: string };
+type ApplicationInput = Omit<ApplicationItem, "id" | "status" | "time"> & { status?: string; time?: string };
+type ViewingInput = Omit<ViewingItem, "id" | "status"> & { status?: string };
+type ConversationInput = Omit<ConversationItem, "id" | "time" | "status" | "participants" | "phoneNumbersRevealed"> & {
+  time?: string;
+  status?: string;
+  participants?: ConversationParticipant[];
+  phoneNumbersRevealed?: boolean;
+};
+
+const STORAGE_KEY = "property24-zimbabwe-rental-platform-v2";
+const ACCOUNT_ROLE_STORAGE_KEY = "property24-zimbabwe-account-role";
+const API_TOKEN_STORAGE_KEY = "property24-zimbabwe-api-token";
+const API_BASE_URL = resolveApiBaseUrl();
+const defaultAccountRole: AccountRole = "tenant";
+
+export const accountContexts: Record<AccountRole, Omit<AccountContext, "accountType" | "hiddenSections">> = {
+  tenant: {
+    visibleSections: ["index", "inbox", "profile", "payments", "maintenance", "leases", "verification"],
+    capabilities: ["search_properties", "save_properties", "submit_tenant_verification", "apply_for_rentals", "pay_rent", "view_rental_history", "report_maintenance", "sign_leases", "message_landlord_or_agent"],
+    onboardingRequirements: ["phone_verification", "national_id_verification", "selfie_verification"],
+  },
+  landlord: {
+    visibleSections: ["index", "listings", "inbox", "profile", "payments", "maintenance", "leases", "analytics", "verification"],
+    capabilities: ["add_properties", "upload_property_media", "submit_landlord_verification", "approve_tenants", "receive_rent", "manage_maintenance", "view_landlord_reports", "message_tenants"],
+    onboardingRequirements: ["phone_verification", "national_id_verification", "selfie_verification", "proof_of_ownership_or_authorization"],
+  },
+  agent: {
+    visibleSections: ["index", "listings", "inbox", "profile", "operations"],
+    capabilities: ["list_properties", "submit_agent_verification", "schedule_viewings", "manage_landlords", "track_applications", "track_commissions", "message_clients"],
+    onboardingRequirements: ["phone_verification", "national_id_verification", "agency_information", "estate_agency_registration"],
+  },
+  admin: {
+    visibleSections: ["index", "profile", "verification", "operations", "payments", "analytics"],
+    capabilities: ["verify_users", "remove_fake_listings", "resolve_disputes", "manage_payments", "review_reports", "manage_all_accounts"],
+    onboardingRequirements: [],
+  },
+};
+
+const allSections = Array.from(new Set(Object.values(accountContexts).flatMap((context) => context.visibleSections)));
+
+const initialState: RentalPlatformState = {
+  properties: [
+    {
+      id: "prop-borrowdale-road",
+      ownerId: "landlord-john-doe",
+      ownerName: "John Doe",
+      ownerRole: "landlord",
+      ownerVerified: true,
+      ownerProfilePicture: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=320&q=80&auto=format&fit=crop",
+      ownerCoverPhoto: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      ownerBio: "Verified landlord focused on documented leases, safe viewings, and responsive property care.",
+      supplierId: "landlord-john-doe",
+      supplierName: "John Doe",
+      supplierRole: "landlord",
+      supplierVerified: true,
+      supplierProfilePicture: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=320&q=80&auto=format&fit=crop",
+      supplierCoverPhoto: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      supplierBio: "Verified landlord focused on documented leases, safe viewings, and responsive property care.",
+      title: "Borrowdale family house",
+      address: "123 Borrowdale Road",
+      city: "Harare",
+      suburb: "Borrowdale",
+      price: "$450 / month",
+      deposit: "$450",
+      type: "House",
+      bedrooms: 3,
+      bathrooms: 2,
+      furnished: "Unfurnished",
+      parking: "2 car bays",
+      power: "Grid + solar backup",
+      solarPower: true,
+      water: "Municipal water",
+      borehole: true,
+      gps: "-17.7562, 31.0881",
+      videoCount: 2,
+      tourAvailable: false,
+      petFriendly: true,
+      verified: true,
+      description: "Verified landlord, ownership proof on file, borehole water, solar backup, and secure parking.",
+      photos: ["House photo"],
+      listingViews: 148,
+      savedCount: 31,
+      applicationsCount: 6,
+    },
+    {
+      id: "prop-avondale-flat",
+      ownerId: "landlord-john-doe",
+      ownerName: "John Doe",
+      ownerRole: "landlord",
+      ownerVerified: true,
+      ownerProfilePicture: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=320&q=80&auto=format&fit=crop",
+      ownerCoverPhoto: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+      ownerBio: "Verified landlord focused on documented leases, safe viewings, and responsive property care.",
+      agentId: "agent-tariro-moyo",
+      agentName: "Tariro Moyo",
+      agentVerified: true,
+      agentProfilePicture: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=320&q=80&auto=format&fit=crop",
+      agentCoverPhoto: "https://images.unsplash.com/photo-1494526585095-c41746248156?w=1200&q=80&auto=format&fit=crop",
+      agentBio: "Estate agent handling verified listings, scheduled viewings, applications, and landlord communication.",
+      supplierId: "agent-tariro-moyo",
+      supplierName: "Tariro Moyo",
+      supplierRole: "agent",
+      supplierVerified: true,
+      supplierProfilePicture: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=320&q=80&auto=format&fit=crop",
+      supplierCoverPhoto: "https://images.unsplash.com/photo-1494526585095-c41746248156?w=1200&q=80&auto=format&fit=crop",
+      supplierBio: "Estate agent handling verified listings, scheduled viewings, applications, and landlord communication.",
+      title: "Avondale furnished flat",
+      address: "18 King George Road",
+      city: "Harare",
+      suburb: "Avondale",
+      price: "$650 / month",
+      deposit: "$650",
+      type: "Flat",
+      bedrooms: 2,
+      bathrooms: 1,
+      furnished: "Furnished",
+      parking: "1 car bay",
+      power: "Grid",
+      solarPower: false,
+      water: "Tank reserve",
+      borehole: false,
+      gps: "-17.7984, 31.0416",
+      videoCount: 1,
+      tourAvailable: false,
+      petFriendly: false,
+      verified: true,
+      description: "Verified agent listing with furnished rooms, secure access, and digital lease support.",
+      photos: ["Flat photo"],
+      listingViews: 94,
+      savedCount: 18,
+      applicationsCount: 4,
+    },
+    {
+      id: "prop-mount-pleasant-student",
+      ownerId: "landlord-pending",
+      ownerName: "Pending supplier",
+      ownerRole: "landlord",
+      ownerVerified: false,
+      ownerProfilePicture: "",
+      ownerCoverPhoto: "",
+      ownerBio: "",
+      supplierId: "landlord-pending",
+      supplierName: "Pending supplier",
+      supplierRole: "landlord",
+      supplierVerified: false,
+      supplierProfilePicture: "",
+      supplierCoverPhoto: "",
+      supplierBio: "",
+      title: "Mount Pleasant student cottage",
+      address: "42 College Drive",
+      city: "Harare",
+      suburb: "Mount Pleasant",
+      price: "$280 / month",
+      deposit: "$280",
+      type: "Student accommodation",
+      bedrooms: 1,
+      bathrooms: 1,
+      furnished: "Furnished",
+      parking: "Street parking",
+      power: "Grid + inverter",
+      solarPower: true,
+      water: "Borehole water",
+      borehole: true,
+      gps: "-17.7738, 31.0530",
+      videoCount: 1,
+      tourAvailable: false,
+      petFriendly: false,
+      verified: false,
+      description: "Affordable student cottage awaiting final owner authorization review.",
+      photos: ["Cottage photo"],
+      listingViews: 72,
+      savedCount: 22,
+      applicationsCount: 9,
+    },
+  ],
+  payments: [
+    {
+      id: "pay-july-rent",
+      tenantId: "tenant-jane-smith",
+      propertyId: "prop-borrowdale-road",
+      tenant: "Jane Smith",
+      property: "Borrowdale family house",
+      amount: "$450",
+      method: "EcoCash",
+      status: "Received",
+      time: "Today",
+      receiptId: "RCT-2026-0001",
+      reminderStatus: "Next reminder scheduled",
+    },
+  ],
+  maintenance: [
+    {
+      id: "mnt-leaking-sink",
+      propertyId: "prop-borrowdale-road",
+      tenantId: "tenant-jane-smith",
+      issue: "Leaking kitchen sink",
+      category: "Plumbing",
+      property: "Borrowdale family house",
+      tenant: "Jane Smith",
+      description: "Tenant uploaded photos and requested plumber assignment.",
+      photoCount: 2,
+      status: "In progress",
+      priority: "High",
+      updatedAt: "Today",
+    },
+  ],
+  leases: [
+    {
+      id: "lease-borrowdale",
+      propertyId: "prop-borrowdale-road",
+      tenantId: "tenant-jane-smith",
+      property: "Borrowdale family house",
+      tenant: "Jane Smith",
+      landlord: "John Doe",
+      startDate: "2026-07-01",
+      endDate: "2027-06-30",
+      monthlyRent: "$450",
+      deposit: "$450",
+      term: "12 Months",
+      pdf: "Residential Lease Agreement",
+      status: "Active",
+      signedByTenant: true,
+      signedByLandlord: true,
+    },
+  ],
+  verifications: [
+    {
+      id: "ver-john-doe",
+      name: "John Doe",
+      role: "Landlord",
+      checks: ["National ID verification", "Selfie verification", "Proof of ownership or authorization to let", "Phone verification"],
+      status: "Approved",
+      reviewedBy: "Admin",
+    },
+    {
+      id: "ver-agency-one",
+      name: "Harare Homes Agency",
+      role: "Estate Agent",
+      checks: ["Estate agency registration", "National ID verification", "Agency information", "Contact details"],
+      status: "Approved",
+      reviewedBy: "Admin",
+    },
+  ],
+  applications: [
+    { id: "app-jane-borrowdale", propertyId: "prop-borrowdale-road", tenantId: "tenant-jane-smith", applicant: "Jane Smith", property: "Borrowdale family house", role: "Tenant", status: "Approved", score: 92, time: "Yesterday" },
+  ],
+  viewings: [
+    { id: "view-borrowdale-completed", propertyId: "prop-borrowdale-road", tenantId: "tenant-jane-smith", property: "Borrowdale family house", agent: "Tariro Moyo", tenant: "Jane Smith", date: "2026-07-20", time: "14:00", status: "Completed" },
+    { id: "view-avondale-flat", propertyId: "prop-avondale-flat", tenantId: "tenant-kuda-ndlovu", property: "Avondale furnished flat", agent: "Tariro Moyo", tenant: "Kuda Ndlovu", date: "2026-07-24", time: "10:00", status: "Confirmed" },
+  ],
+  conversations: [
+    {
+      id: "chat-lease",
+      propertyId: "prop-borrowdale-road",
+      name: "Borrowdale family house · John Doe",
+      time: "Today",
+      preview: "Lease signed and receipt generated. Phone numbers remain hidden.",
+      status: "Active",
+      participants: [
+        { id: "tenant-jane-smith", name: "Jane Smith", role: "tenant", verified: true },
+        {
+          id: "landlord-john-doe",
+          name: "John Doe",
+          role: "landlord",
+          verified: true,
+          profilePicture: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=320&q=80&auto=format&fit=crop",
+          coverPhoto: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
+          bio: "Verified landlord focused on documented leases, safe viewings, and responsive property care.",
+        },
+      ],
+      phoneNumbersRevealed: false,
+    },
+  ],
+  liveEvents: [
+    { id: "event-payment", title: "Rent payment recorded", meta: "$450 via EcoCash", status: "Today", tone: "info" },
+    { id: "event-verification", title: "Landlord verified", meta: "John Doe cleared ownership and ID checks", status: "Today", tone: "success" },
+    { id: "event-maintenance", title: "Maintenance request updated", meta: "Leaking kitchen sink moved to in progress", status: "Today", tone: "warning" },
+  ],
+};
+
+type RentalPlatformAction =
+  | { type: "hydrate"; state: RentalPlatformState }
+  | { type: "addProperty"; payload: PropertyInput }
+  | { type: "addPayment"; payload: PaymentInput }
+  | { type: "addMaintenance"; payload: MaintenanceInput }
+  | { type: "addLease"; payload: LeaseInput }
+  | { type: "addVerification"; payload: VerificationInput }
+  | { type: "addApplication"; payload: ApplicationInput }
+  | { type: "addViewing"; payload: ViewingInput }
+  | { type: "addConversation"; payload: ConversationInput }
+  | { type: "addLiveEvent"; payload: LiveEvent };
+
+const RentalPlatformContext = createContext<RentalPlatformContextValue | null>(null);
+
+function reducer(state: RentalPlatformState, action: RentalPlatformAction): RentalPlatformState {
+  switch (action.type) {
+    case "hydrate":
+      return action.state;
+    case "addProperty": {
+      const id = makeId("prop");
+      const nextProperty: Property = {
+        ...action.payload,
+        id,
+        verified: action.payload.verified ?? false,
+        photos: action.payload.photos?.length ? action.payload.photos : [action.payload.type === "House" ? "House photo" : action.payload.type === "Flat" ? "Flat photo" : "Property photo"],
+        listingViews: action.payload.listingViews ?? 0,
+        savedCount: action.payload.savedCount ?? 0,
+        applicationsCount: action.payload.applicationsCount ?? 0,
+      };
+
+      return {
+        ...state,
+        properties: [nextProperty, ...state.properties],
+        liveEvents: [
+          {
+            id: makeId("event"),
+            title: "Property added",
+            meta: `${nextProperty.title} · ${nextProperty.suburb}`,
+            status: "Now",
+            tone: "success",
+          },
+          ...state.liveEvents,
+        ],
+      };
+    }
+    case "addPayment":
+      return {
+        ...state,
+        payments: [
+          {
+            ...action.payload,
+            id: makeId("pay"),
+            status: action.payload.status ?? "Received",
+            time: action.payload.time ?? "Just now",
+            receiptId: action.payload.receiptId ?? makeReceiptId(),
+            reminderStatus: action.payload.reminderStatus ?? "Reminder scheduled",
+          },
+          ...state.payments,
+        ],
+        liveEvents: [
+          {
+            id: makeId("event"),
+            title: "Rent payment recorded",
+            meta: `${action.payload.amount} · ${action.payload.method}`,
+            status: "Now",
+            tone: "info",
+          },
+          ...state.liveEvents,
+        ],
+      };
+    case "addMaintenance":
+      return {
+        ...state,
+        maintenance: [
+          {
+            ...action.payload,
+            id: makeId("mnt"),
+            status: action.payload.status ?? "Open",
+            updatedAt: action.payload.updatedAt ?? "Just now",
+          },
+          ...state.maintenance,
+        ],
+        liveEvents: [
+          {
+            id: makeId("event"),
+            title: "Maintenance request opened",
+            meta: `${action.payload.issue} · ${action.payload.category}`,
+            status: "Now",
+            tone: "warning",
+          },
+          ...state.liveEvents,
+        ],
+      };
+    case "addLease":
+      return {
+        ...state,
+        leases: [
+          {
+            ...action.payload,
+            id: makeId("lease"),
+            status: action.payload.status ?? "Draft",
+            signedByTenant: action.payload.signedByTenant ?? false,
+            signedByLandlord: action.payload.signedByLandlord ?? false,
+            pdf: action.payload.pdf ?? "Residential Lease Agreement",
+          },
+          ...state.leases,
+        ],
+        liveEvents: [
+          {
+            id: makeId("event"),
+            title: "Lease created",
+            meta: `${action.payload.property} · ${action.payload.tenant}`,
+            status: "Now",
+            tone: "success",
+          },
+          ...state.liveEvents,
+        ],
+      };
+    case "addVerification":
+      return {
+        ...state,
+        verifications: [
+          {
+            ...action.payload,
+            id: makeId("ver"),
+            status: action.payload.status ?? "Reviewing",
+            reviewedBy: action.payload.reviewedBy ?? "Admin",
+          },
+          ...state.verifications,
+        ],
+        liveEvents: [
+          {
+            id: makeId("event"),
+            title: "Verification submitted",
+            meta: `${action.payload.name} · ${action.payload.role}`,
+            status: "Now",
+            tone: "info",
+          },
+          ...state.liveEvents,
+        ],
+      };
+    case "addApplication":
+      return {
+        ...state,
+        applications: [
+          {
+            ...action.payload,
+            id: makeId("app"),
+            status: action.payload.status ?? "Under review",
+            time: action.payload.time ?? "Now",
+          },
+          ...state.applications,
+        ],
+      };
+    case "addViewing":
+      return {
+        ...state,
+        viewings: [
+          {
+            ...action.payload,
+            id: makeId("view"),
+            status: action.payload.status ?? "Pending",
+          },
+          ...state.viewings,
+        ],
+      };
+    case "addConversation":
+      return {
+        ...state,
+        conversations: [
+          {
+            ...action.payload,
+            id: makeId("chat"),
+            time: action.payload.time ?? "Now",
+            status: action.payload.status ?? "Active",
+            participants: action.payload.participants ?? [],
+            phoneNumbersRevealed: action.payload.phoneNumbersRevealed ?? false,
+          },
+          ...state.conversations,
+        ],
+      };
+    case "addLiveEvent":
+      return {
+        ...state,
+        liveEvents: [action.payload, ...state.liveEvents],
+      };
+    default:
+      return state;
+  }
+}
+
+type RentalPlatformContextValue = {
+  state: RentalPlatformState;
+  ready: boolean;
+  authUser: AuthUser | null;
+  authToken: string | null;
+  authError: string;
+  authLoading: boolean;
+  account: AccountContext;
+  signIn: (payload: SignInPayload) => Promise<void>;
+  registerAccount: (payload: RegisterAccountPayload) => Promise<RegistrationOtpChallenge>;
+  verifyRegistrationOtp: (challengeId: string, otp: string) => Promise<void>;
+  googleSignIn: (idToken: string, accountType: PublicAccountRole) => Promise<void>;
+  signOut: () => Promise<void>;
+  submitVerification: (payload: VerificationSubmissionPayload) => Promise<void>;
+  updateAccountProfile: (payload: AccountProfileUpdatePayload) => Promise<void>;
+  reviewVerification: (verificationId: string, status: "approved" | "rejected" | "reviewing") => Promise<void>;
+  canAccessSection: (section: string) => boolean;
+  hasCapability: (capability: string) => boolean;
+  addProperty: (payload: PropertyInput) => void;
+  addPayment: (payload: PaymentInput) => void;
+  addMaintenance: (payload: MaintenanceInput) => void;
+  addLease: (payload: LeaseInput) => void;
+  addApplication: (payload: ApplicationInput) => void;
+  addViewing: (payload: ViewingInput) => void;
+  addConversation: (payload: ConversationInput) => void;
+  refreshConversations: () => Promise<void>;
+  startPropertyConversation: (propertyId: string) => Promise<ConversationItem>;
+  fetchConversationMessages: (conversationId: string) => Promise<ConversationMessage[]>;
+  sendConversationMessage: (conversationId: string, body: string, attachment?: MessageAttachmentInput) => Promise<ConversationMessage>;
+  startConversationCall: (conversationId: string, mode: "voice" | "video") => Promise<ConversationCallSession>;
+  fetchConversationCalls: (conversationId: string) => Promise<ConversationCallSession[]>;
+  endConversationCall: (conversationId: string, callId: string, status?: "ended" | "missed") => Promise<ConversationCallSession>;
+  fetchPropertyComments: (propertyId: string) => Promise<PropertyCommentItem[]>;
+  addPropertyComment: (propertyId: string, payload: PropertyCommentInput) => Promise<PropertyCommentItem>;
+  toggleSupplierFollow: (supplierId: string, following: boolean) => Promise<void>;
+  addLiveEvent: (payload: LiveEvent) => void;
+};
+
+export function RentalPlatformProvider({ children }: { children: ReactNode }) {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const [accountRole, setAccountRole] = useState<AccountRole>(defaultAccountRole);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    hydrateRentalPlatformSession()
+      .then((result) => {
+        if (!isMounted) return;
+        if (result?.state) dispatch({ type: "hydrate", state: result.state });
+        setAuthToken(result?.authToken ?? null);
+        setAuthUser(result?.authUser ?? null);
+        setAccountRole(result?.authUser?.role ?? result?.accountRole ?? defaultAccountRole);
+      })
+      .finally(() => {
+        if (isMounted) setReady(true);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
+  }, [ready, state]);
+
+  const value = useMemo<RentalPlatformContextValue>(
+    () => {
+      const baseAccount = accountContexts[accountRole];
+      const account: AccountContext = {
+        accountType: accountRole,
+        ...baseAccount,
+        hiddenSections: allSections.filter((section) => !baseAccount.visibleSections.includes(section)),
+      };
+
+      return {
+        state,
+        ready,
+        authUser,
+        authToken,
+        authError,
+        authLoading,
+        account,
+        signIn: async (payload) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            const response = await postAuth("auth/login/", { username: payload.username.trim(), password: payload.password });
+            await applyAuthPayload(response, { dispatch, setAccountRole, setAuthUser, setAuthToken });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Sign in failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        registerAccount: async (payload) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            await AsyncStorage.multiRemove([API_TOKEN_STORAGE_KEY, ACCOUNT_ROLE_STORAGE_KEY]);
+            setAuthToken(null);
+            setAuthUser(null);
+            const response = await postAuth("auth/register/", {
+              account_type: payload.accountType,
+              name: payload.name.trim(),
+              email: payload.email.trim(),
+              username: payload.email.trim() || payload.phone.trim(),
+              phone: payload.phone.trim(),
+              password: payload.password,
+            });
+            if (response.tokens || response.user || !response.otp_required || !response.challenge_id) {
+              throw new Error("OTP verification is required before account sign in");
+            }
+            return {
+              otpRequired: Boolean(response.otp_required),
+              challengeId: String(response.challenge_id || ""),
+              deliveryChannel: String(response.delivery_channel || "email") === "sms" ? "sms" : "email",
+              destination: String(response.destination || response.email || response.phone || ""),
+              email: String(response.email || ""),
+              phone: String(response.phone || ""),
+              expiresInSeconds: Number(response.expires_in_seconds || 0),
+              message: response.message ? String(response.message) : undefined,
+            };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Account creation failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        verifyRegistrationOtp: async (challengeId, otp) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            const response = await postAuth("auth/register/verify/", { challenge_id: challengeId, otp: otp.trim() });
+            await applyAuthPayload(response, { dispatch, setAccountRole, setAuthUser, setAuthToken });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "OTP verification failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        googleSignIn: async (idToken, selectedAccountType) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            const response = await postAuth("auth/google/", { id_token: idToken, account_type: selectedAccountType });
+            await applyAuthPayload(response, { dispatch, setAccountRole, setAuthUser, setAuthToken });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Google sign-in failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        signOut: async () => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            await AsyncStorage.multiRemove([API_TOKEN_STORAGE_KEY, ACCOUNT_ROLE_STORAGE_KEY]);
+            setAuthToken(null);
+            setAuthUser(null);
+            setAccountRole(defaultAccountRole);
+            if (API_BASE_URL) {
+              try {
+                dispatch({ type: "hydrate", state: await fetchRentalPlatformState(API_BASE_URL, null) });
+              } catch {
+                dispatch({ type: "hydrate", state: initialState });
+              }
+            }
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        submitVerification: async (payload) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            await postProtected("verifications/", authToken, payload);
+            await refreshRentalPlatform(dispatch, authToken);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Verification submission failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        updateAccountProfile: async (payload) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            const hasMediaPayload = Boolean(payload.profilePictureFile || payload.coverPhotoFile || payload.removeProfilePicture || payload.removeCoverPhoto);
+            const requestPayload = hasMediaPayload ? buildAccountProfileFormData(payload) : {
+              name: payload.name,
+              bio: payload.bio,
+              profile_picture_url: payload.profilePicture,
+              cover_photo_url: payload.coverPhoto,
+            };
+            const response = await protectedRequest("auth/profile/", authToken, "POST", requestPayload);
+            const nextUser = mapAuthUser(response.user, response.account);
+            setAuthUser(nextUser);
+            setAccountRole(nextUser.role);
+            await AsyncStorage.setItem(ACCOUNT_ROLE_STORAGE_KEY, nextUser.role);
+            await refreshRentalPlatform(dispatch, authToken);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Profile update failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        reviewVerification: async (verificationId, status) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            await postProtected(`verifications/${verificationId}/review/`, authToken, { status });
+            await refreshRentalPlatform(dispatch, authToken);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Verification review failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        canAccessSection: (section) => account.visibleSections.includes(section),
+        hasCapability: (capability) => account.capabilities.includes(capability),
+        addProperty: (payload) => dispatch({ type: "addProperty", payload }),
+        addPayment: (payload) => {
+          if (API_BASE_URL && authToken && payload.propertyId) {
+            void postProtected("payments/", authToken, {
+              property_id: payload.propertyId,
+              tenant_id: payload.tenantId || authUser?.id || "",
+              amount: cleanMoney(payload.amount),
+              method: payload.method,
+              reminder_status: payload.reminderStatus,
+            })
+              .then(() => refreshRentalPlatform(dispatch, authToken))
+              .catch((error) => setAuthError(error instanceof Error ? error.message : "Payment could not be recorded"));
+            return;
+          }
+          dispatch({ type: "addPayment", payload });
+        },
+        addMaintenance: (payload) => {
+          if (API_BASE_URL && authToken && payload.propertyId) {
+            void postProtected("maintenance/", authToken, {
+              property_id: payload.propertyId,
+              issue: payload.issue,
+              category: payload.category,
+              description: payload.description,
+              status: payload.status,
+              priority: payload.priority,
+            })
+              .then(() => refreshRentalPlatform(dispatch, authToken))
+              .catch((error) => setAuthError(error instanceof Error ? error.message : "Maintenance request could not be created"));
+            return;
+          }
+          dispatch({ type: "addMaintenance", payload });
+        },
+        addLease: (payload) => {
+          if (API_BASE_URL && authToken && payload.propertyId && payload.tenantId) {
+            void postProtected("leases/", authToken, {
+              property_id: payload.propertyId,
+              tenant_id: payload.tenantId,
+              start_date: payload.startDate,
+              end_date: payload.endDate,
+              monthly_rent: cleanMoney(payload.monthlyRent),
+              deposit: cleanMoney(payload.deposit),
+              term: payload.term,
+            })
+              .then(() => refreshRentalPlatform(dispatch, authToken))
+              .catch((error) => setAuthError(error instanceof Error ? error.message : "Lease could not be created"));
+            return;
+          }
+          dispatch({ type: "addLease", payload });
+        },
+        addApplication: (payload) => {
+          if (API_BASE_URL && authToken && payload.propertyId) {
+            void postProtected("applications/", authToken, {
+              property_id: payload.propertyId,
+              message: payload.role || "Tenant application",
+            })
+              .then(() => refreshRentalPlatform(dispatch, authToken))
+              .catch((error) => setAuthError(error instanceof Error ? error.message : "Application could not be submitted"));
+            return;
+          }
+          dispatch({ type: "addApplication", payload });
+        },
+        addViewing: (payload) => {
+          if (API_BASE_URL && authToken && payload.propertyId) {
+            void postProtected("viewings/", authToken, {
+              property_id: payload.propertyId,
+              scheduled_for: buildScheduledFor(payload.date, payload.time),
+              status: "pending",
+              notes: "Tenant requested a physical viewing before application or payment.",
+            })
+              .then(() => refreshRentalPlatform(dispatch, authToken))
+              .catch((error) => setAuthError(error instanceof Error ? error.message : "Viewing could not be requested"));
+            return;
+          }
+          dispatch({ type: "addViewing", payload });
+        },
+        addConversation: (payload) => dispatch({ type: "addConversation", payload }),
+        refreshConversations: async () => {
+          await refreshRentalPlatform(dispatch, authToken);
+        },
+        startPropertyConversation: async (propertyId) => {
+          const conversation = mapApiConversation(await postProtected("conversations/", authToken, { property_id: propertyId }));
+          await refreshRentalPlatform(dispatch, authToken);
+          return conversation;
+        },
+        fetchConversationMessages: async (conversationId) => {
+          if (!API_BASE_URL) throw new Error("Set EXPO_PUBLIC_API_URL to the account API before using chat");
+          if (!authToken) throw new Error("Sign in is required to load chat messages");
+          const response = await fetchJson(`${API_BASE_URL}/conversations/${conversationId}/messages/`, authToken);
+          return response.results.map(mapApiConversationMessage);
+        },
+        sendConversationMessage: async (conversationId, body, attachment) => {
+          const payload = attachment ? buildMessageFormData(body, attachment) : { body };
+          const message = mapApiConversationMessage(await postProtected(`conversations/${conversationId}/messages/`, authToken, payload));
+          await refreshRentalPlatform(dispatch, authToken);
+          return message;
+        },
+        startConversationCall: async (conversationId, mode) => {
+          const call = mapApiConversationCall(await postProtected(`conversations/${conversationId}/calls/`, authToken, { mode }));
+          await refreshRentalPlatform(dispatch, authToken);
+          return call;
+        },
+        fetchConversationCalls: async (conversationId) => {
+          if (!API_BASE_URL) throw new Error("Set EXPO_PUBLIC_API_URL to the account API before using calls");
+          if (!authToken) throw new Error("Sign in is required to load calls");
+          const response = await fetchJson(`${API_BASE_URL}/conversations/${conversationId}/calls/`, authToken);
+          return response.results.map(mapApiConversationCall);
+        },
+        endConversationCall: async (conversationId, callId, status = "ended") => {
+          const call = mapApiConversationCall(await protectedRequest(`conversations/${conversationId}/calls/${callId}/`, authToken, "PATCH", { status }));
+          await refreshRentalPlatform(dispatch, authToken);
+          return call;
+        },
+        fetchPropertyComments: async (propertyId) => {
+          if (!API_BASE_URL) throw new Error("Set EXPO_PUBLIC_API_URL to the account API before using comments");
+          if (!authToken) throw new Error("Sign in is required to view comments");
+          const response = await fetchJson(`${API_BASE_URL}/properties/${propertyId}/comments/`, authToken);
+          return response.results.map(mapApiPropertyComment);
+        },
+        addPropertyComment: async (propertyId, payload) => {
+          return mapApiPropertyComment(await postProtected(`properties/${propertyId}/comments/`, authToken, {
+            body: payload.body,
+            media_url: payload.mediaUri || "",
+            parent_id: payload.parentId || "",
+          }));
+        },
+        toggleSupplierFollow: async (supplierId, following) => {
+          if (!supplierId) throw new Error("Verified supplier account is required");
+          await protectedRequest(`users/${supplierId}/follow/`, authToken, following ? "POST" : "DELETE");
+        },
+        addLiveEvent: (payload) => dispatch({ type: "addLiveEvent", payload }),
+      };
+    },
+    [accountRole, authError, authLoading, authToken, authUser, ready, state]
+  );
+
+  return <RentalPlatformContext.Provider value={value}>{children}</RentalPlatformContext.Provider>;
+}
+
+export function useRentalPlatform() {
+  const context = useContext(RentalPlatformContext);
+  if (!context) {
+    throw new Error("useRentalPlatform must be used inside RentalPlatformProvider");
+  }
+
+  return context;
+}
+
+export function useRentalPlatformStats() {
+  const { state } = useRentalPlatform();
+
+  return useMemo(
+    () => ({
+      verifiedProperties: state.properties.filter((item) => item.verified).length,
+      listings: state.properties.length,
+      receivedPayments: state.payments.filter((item) => item.status === "Received").length,
+      maintenanceOpen: state.maintenance.filter((item) => item.status !== "Resolved").length,
+      occupiedRate: state.leases.length ? Math.round((state.leases.filter((item) => item.status === "Active").length / state.leases.length) * 100) : 0,
+      applications: state.applications.length,
+      verifications: state.verifications.length,
+      viewings: state.viewings.length,
+    }),
+    [state]
+  );
+}
+
+function cleanMoney(value: string) {
+  return value.replace(/[^0-9.]/g, "") || "0";
+}
+
+function buildScheduledFor(date: string, time: string) {
+  const fallback = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const value = `${date || fallback.toISOString().slice(0, 10)}T${time || "10:00"}:00`;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? fallback.toISOString() : parsed.toISOString();
+}
+
+function makeId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function makeReceiptId() {
+  return `RCT-${new Date().getFullYear()}-${Math.random().toString(10).slice(2, 6)}`;
+}
+
+async function hydrateRentalPlatformSession(): Promise<{ state: RentalPlatformState | null; accountRole?: AccountRole; authUser?: AuthUser | null; authToken?: string | null } | null> {
+  const savedRole = await readSavedRole();
+  if (API_BASE_URL) {
+    try {
+      const token = await AsyncStorage.getItem(API_TOKEN_STORAGE_KEY);
+      if (!token) {
+        return { state: await fetchRentalPlatformState(API_BASE_URL, null), accountRole: defaultAccountRole, authToken: null, authUser: null };
+      }
+
+      const me = await fetchJson(`${API_BASE_URL}/auth/me/`, token);
+      const authUser = mapAuthUser(me.user, me.account);
+      await AsyncStorage.setItem(ACCOUNT_ROLE_STORAGE_KEY, authUser.role);
+      return { state: await fetchRentalPlatformState(API_BASE_URL, token), accountRole: authUser.role, authToken: token, authUser };
+    } catch {
+      await AsyncStorage.multiRemove([API_TOKEN_STORAGE_KEY, ACCOUNT_ROLE_STORAGE_KEY]);
+      // Local seed data keeps the mobile app usable when the API is offline.
+    }
+  }
+
+  const value = await AsyncStorage.getItem(STORAGE_KEY);
+  return { state: value ? (JSON.parse(value) as RentalPlatformState) : null, accountRole: savedRole ?? defaultAccountRole, authToken: null, authUser: null };
+}
+
+async function fetchRentalPlatformState(baseUrl: string, token: string | null): Promise<RentalPlatformState> {
+  const properties = await fetchJson(`${baseUrl}/properties/`, token);
+
+  if (!token) {
+    return {
+      ...initialState,
+      properties: properties.results.map(mapApiProperty),
+      liveEvents: [
+        { id: "event-api-public-sync", title: "Public listings synced", meta: `${properties.results.length} listings loaded`, status: "Now", tone: "success" },
+        ...initialState.liveEvents,
+      ],
+    };
+  }
+
+  const [payments, maintenance, leases, verifications, applications, viewings, conversations] = await Promise.all([
+    fetchJson(`${baseUrl}/payments/`, token),
+    fetchJson(`${baseUrl}/maintenance/`, token),
+    fetchJson(`${baseUrl}/leases/`, token),
+    fetchJson(`${baseUrl}/verifications/`, token),
+    fetchJson(`${baseUrl}/applications/`, token),
+    fetchJson(`${baseUrl}/viewings/`, token),
+    fetchJson(`${baseUrl}/conversations/`, token),
+  ]);
+
+  return {
+    ...initialState,
+    properties: properties.results.map(mapApiProperty),
+    payments: payments.results.map(mapApiPayment),
+    maintenance: maintenance.results.map(mapApiMaintenance),
+    leases: leases.results.map(mapApiLease),
+    verifications: verifications.results.map(mapApiVerification),
+    applications: applications.results.map(mapApiApplication),
+    viewings: viewings.results.map(mapApiViewing),
+    conversations: conversations.results.map(mapApiConversation),
+    liveEvents: [
+      { id: "event-api-sync", title: "Rentals API synced", meta: `${properties.results.length} listings loaded`, status: "Now", tone: "success" },
+      ...initialState.liveEvents,
+    ],
+  };
+}
+
+async function fetchJson(url: string, token?: string | null) {
+  const response = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+  if (!response.ok) throw new Error(`API request failed: ${response.status}`);
+  return response.json();
+}
+
+async function postAuth(endpoint: string, payload: Record<string, unknown>) {
+  if (!API_BASE_URL) {
+    throw new Error("Set EXPO_PUBLIC_API_URL to the account API before signing in");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || "Authentication request failed");
+  return body;
+}
+
+async function postProtected(endpoint: string, token: string | null, payload: Record<string, unknown> | FormData) {
+  return protectedRequest(endpoint, token, "POST", payload);
+}
+
+function buildAccountProfileFormData(payload: AccountProfileUpdatePayload) {
+  const formData = new FormData();
+  if (payload.name !== undefined) formData.append("name", payload.name);
+  if (payload.bio !== undefined) formData.append("bio", payload.bio);
+  if (payload.profilePicture !== undefined) formData.append("profile_picture_url", payload.profilePicture);
+  if (payload.coverPhoto !== undefined) formData.append("cover_photo_url", payload.coverPhoto);
+  if (payload.removeProfilePicture) formData.append("remove_profile_picture", "true");
+  if (payload.removeCoverPhoto) formData.append("remove_cover_photo", "true");
+  if (payload.profilePictureFile) formData.append("profile_picture", payload.profilePictureFile as unknown as Blob);
+  if (payload.coverPhotoFile) formData.append("cover_photo", payload.coverPhotoFile as unknown as Blob);
+  return formData;
+}
+
+function buildMessageFormData(body: string, attachment: MessageAttachmentInput) {
+  const formData = new FormData();
+  formData.append("body", body);
+  formData.append("attachment_type", attachment.type);
+  if (attachment.name) formData.append("attachment_name", attachment.name);
+  if (attachment.url) formData.append("attachment_url", attachment.url);
+  if (attachment.file) formData.append("attachment", attachment.file as unknown as Blob);
+  return formData;
+}
+
+async function protectedRequest(endpoint: string, token: string | null, method: "POST" | "PATCH" | "DELETE", payload?: Record<string, unknown> | FormData): Promise<any> {
+  if (!API_BASE_URL) {
+    throw new Error("Set EXPO_PUBLIC_API_URL to the account API before using protected actions");
+  }
+  if (!token) {
+    throw new Error("Sign in is required for this action");
+  }
+
+  const isMultipart = typeof FormData !== "undefined" && payload instanceof FormData;
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  const requestBody = isMultipart ? payload : payload ? JSON.stringify(payload) : undefined;
+  if (!isMultipart) headers["Content-Type"] = "application/json";
+
+  const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+    method,
+    headers,
+    body: requestBody,
+  });
+  const responseBody = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(responseBody.errors?.join("\n") || responseBody.error || "Protected request failed");
+  return responseBody;
+}
+
+async function refreshRentalPlatform(dispatch: Dispatch<RentalPlatformAction>, token: string | null) {
+  if (!API_BASE_URL || !token) return;
+  dispatch({ type: "hydrate", state: await fetchRentalPlatformState(API_BASE_URL, token) });
+}
+
+async function applyAuthPayload(
+  payload: any,
+  setters: {
+    dispatch: Dispatch<RentalPlatformAction>;
+    setAccountRole: (role: AccountRole) => void;
+    setAuthUser: (user: AuthUser | null) => void;
+    setAuthToken: (token: string | null) => void;
+  }
+) {
+  const token = payload.tokens?.access;
+  if (!token) throw new Error("The account service did not return an access token");
+
+  const user = mapAuthUser(payload.user, payload.account);
+  await AsyncStorage.multiSet([
+    [API_TOKEN_STORAGE_KEY, token],
+    [ACCOUNT_ROLE_STORAGE_KEY, user.role],
+  ]);
+
+  setters.setAuthToken(token);
+  setters.setAuthUser(user);
+  setters.setAccountRole(user.role);
+
+  if (API_BASE_URL) {
+    fetchRentalPlatformState(API_BASE_URL, token)
+      .then((state) => setters.dispatch({ type: "hydrate", state }))
+      .catch(() => undefined);
+  }
+}
+
+async function readSavedRole(): Promise<AccountRole | undefined> {
+  const value = await AsyncStorage.getItem(ACCOUNT_ROLE_STORAGE_KEY);
+  return value === "tenant" || value === "landlord" || value === "agent" || value === "admin" ? value : undefined;
+}
+
+function mapAuthUser(user: any, account?: any): AuthUser {
+  const role = toAccountRole(account?.account_type || user?.account_type || user?.role);
+  return {
+    id: String(user?.id ?? ""),
+    name: user?.name || user?.email || user?.phone || "Property24 user",
+    email: user?.email || "",
+    phone: user?.phone || "",
+    role,
+    verified: Boolean(user?.verified ?? account?.is_verified),
+    profileStatus: user?.profile_status || (user?.verified || account?.is_verified ? "verified" : "verification_required"),
+    authProvider: user?.auth_provider || "password",
+    googleEmailVerified: Boolean(user?.google_email_verified),
+    profilePicture: resolveMediaUrl(user?.profile_picture),
+    coverPhoto: resolveMediaUrl(user?.cover_photo),
+    bio: user?.bio || "",
+    lastSeenAt: user?.last_seen_at || undefined,
+  };
+}
+
+function toAccountRole(value: string): AccountRole {
+  if (value === "landlord" || value === "agent" || value === "admin") return value;
+  return "tenant";
+}
+
+function mapApiProperty(item: any): Property {
+  const supplier = item.agent || item.owner;
+  const supplierRole = supplier?.role ? toAccountRole(supplier.role) : undefined;
+  return {
+    id: String(item.id),
+    ownerId: item.owner?.id ? String(item.owner.id) : undefined,
+    ownerName: item.owner?.name,
+    ownerRole: item.owner?.role ? toAccountRole(item.owner.role) : undefined,
+    ownerVerified: Boolean(item.owner?.verified),
+    ownerProfilePicture: resolveMediaUrl(item.owner?.profile_picture),
+    ownerCoverPhoto: resolveMediaUrl(item.owner?.cover_photo),
+    ownerBio: item.owner?.bio || "",
+    ownerLastSeenAt: item.owner?.last_seen_at || undefined,
+    agentId: item.agent?.id ? String(item.agent.id) : undefined,
+    agentName: item.agent?.name,
+    agentVerified: item.agent ? Boolean(item.agent.verified) : undefined,
+    agentProfilePicture: resolveMediaUrl(item.agent?.profile_picture),
+    agentCoverPhoto: resolveMediaUrl(item.agent?.cover_photo),
+    agentBio: item.agent?.bio || "",
+    agentLastSeenAt: item.agent?.last_seen_at || undefined,
+    supplierId: supplier?.id ? String(supplier.id) : undefined,
+    supplierName: supplier?.name,
+    supplierRole,
+    supplierVerified: Boolean(supplier?.verified),
+    supplierProfilePicture: resolveMediaUrl(supplier?.profile_picture),
+    supplierCoverPhoto: resolveMediaUrl(supplier?.cover_photo),
+    supplierBio: supplier?.bio || "",
+    supplierLastSeenAt: supplier?.last_seen_at || undefined,
+    title: item.title,
+    address: item.address,
+    city: item.city,
+    suburb: item.suburb,
+    price: `$${item.monthly_rent} / month`,
+    deposit: `$${item.deposit_required}`,
+    type: titleize(item.property_type),
+    bedrooms: Number(item.bedrooms) || 0,
+    bathrooms: Number(item.bathrooms) || 0,
+    furnished: item.furnished ? "Furnished" : "Unfurnished",
+    parking: item.parking || "Parking available",
+    power: item.solar_power ? "Grid + solar backup" : "Grid",
+    solarPower: Boolean(item.solar_power),
+    water: item.water_availability || "Available",
+    borehole: Boolean(item.borehole),
+    gps: item.gps || "Unknown",
+    videoCount: item.videos?.length ?? 0,
+    tourAvailable: Boolean(item.has_360_tour),
+    petFriendly: Boolean(item.pet_friendly),
+    verified: Boolean(item.verified),
+    description: item.description,
+    photos: item.photos?.length ? item.photos.map(resolveMediaUrl) : ["Property photo"],
+    listingViews: Number(item.listing_views) || 0,
+    savedCount: Number(item.saved_count) || 0,
+    applicationsCount: Number(item.applications_count) || 0,
+    commentsCount: Number(item.comments_count) || 0,
+  };
+}
+
+function mapApiPropertyComment(item: any): PropertyCommentItem {
+  const author = item.author || {};
+  const createdAt = String(item.created_at || "");
+  return {
+    id: String(item.id),
+    propertyId: String(item.property_id || ""),
+    authorId: String(item.author_id || author.id || ""),
+    author: author.name || "Property24 user",
+    authorRole: toAccountRole(author.role),
+    authorVerified: Boolean(author.verified),
+    body: String(item.body || ""),
+    mediaUri: String(item.media_url || ""),
+    likes: Number(item.likes_count) || 0,
+    createdAt,
+    time: formatCommentTime(createdAt),
+  };
+}
+
+function formatCommentTime(value: string) {
+  if (!value) return "Now";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Now";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function mapApiPayment(item: any): PaymentItem {
+  return {
+    id: String(item.id),
+    tenantId: item.tenant_id ? String(item.tenant_id) : undefined,
+    propertyId: item.property_id ? String(item.property_id) : undefined,
+    tenant: item.tenant,
+    property: item.property,
+    amount: `$${item.amount}`,
+    method: titleize(item.method),
+    status: titleize(item.status),
+    time: item.paid_at ? new Date(item.paid_at).toLocaleDateString() : "Recorded",
+    receiptId: item.receipt_number,
+    reminderStatus: item.reminder_status,
+  };
+}
+
+function mapApiMaintenance(item: any): MaintenanceItem {
+  return {
+    id: String(item.id),
+    propertyId: item.property_id ? String(item.property_id) : undefined,
+    tenantId: item.tenant_id ? String(item.tenant_id) : undefined,
+    issue: item.issue,
+    category: titleize(item.category),
+    property: item.property,
+    tenant: item.tenant,
+    description: item.description,
+    photoCount: item.photo ? 1 : 0,
+    status: titleize(item.status),
+    priority: titleize(item.priority),
+    updatedAt: item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "Updated",
+  };
+}
+
+function mapApiLease(item: any): LeaseItem {
+  return {
+    id: String(item.id),
+    propertyId: item.property_id ? String(item.property_id) : undefined,
+    tenantId: item.tenant_id ? String(item.tenant_id) : undefined,
+    property: item.property,
+    tenant: item.tenant,
+    landlord: item.landlord,
+    startDate: item.start_date,
+    endDate: item.end_date,
+    monthlyRent: `$${item.monthly_rent}`,
+    deposit: `$${item.deposit}`,
+    term: item.term,
+    pdf: item.pdf || "Residential Lease Agreement",
+    status: titleize(item.status),
+    signedByTenant: Boolean(item.signed_by_tenant),
+    signedByLandlord: Boolean(item.signed_by_landlord),
+  };
+}
+
+function mapApiVerification(item: any): VerificationItem {
+  return {
+    id: String(item.id),
+    name: item.name,
+    role: titleize(item.role),
+    checks: item.checks ?? [],
+    status: titleize(item.status),
+    reviewedBy: item.reviewed_by || "Admin",
+  };
+}
+
+function mapApiApplication(item: any): ApplicationItem {
+  return {
+    id: String(item.id),
+    propertyId: item.property_id ? String(item.property_id) : undefined,
+    tenantId: item.tenant_id ? String(item.tenant_id) : undefined,
+    applicant: item.tenant,
+    property: item.property,
+    role: "Tenant",
+    status: titleize(item.status),
+    score: Number(item.score) || 0,
+    time: item.created_at ? new Date(item.created_at).toLocaleDateString() : "Submitted",
+  };
+}
+
+function mapApiViewing(item: any): ViewingItem {
+  const scheduledFor = item.scheduled_for ? new Date(item.scheduled_for) : null;
+  return {
+    id: String(item.id),
+    propertyId: item.property_id ? String(item.property_id) : undefined,
+    tenantId: item.tenant_id ? String(item.tenant_id) : undefined,
+    property: item.property,
+    agent: item.agent || "Unassigned",
+    tenant: item.tenant,
+    date: scheduledFor ? scheduledFor.toLocaleDateString() : "",
+    time: scheduledFor ? scheduledFor.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+    status: titleize(item.status),
+  };
+}
+
+function mapApiConversation(item: any): ConversationItem {
+  const participants = (item.participants ?? []).map(mapApiConversationParticipant);
+  return {
+    id: String(item.id),
+    propertyId: item.property_id ? String(item.property_id) : undefined,
+    name: item.title || participants.map((participant: ConversationParticipant) => participant.name).join(" and ") || "Conversation",
+    time: item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "Updated",
+    preview: item.last_message?.body || "Phone numbers remain hidden.",
+    status: item.phone_numbers_revealed ? "Contact shared" : "Active",
+    updatedAt: item.updated_at || "",
+    lastMessageSenderId: item.last_message?.sender_id ? String(item.last_message.sender_id) : undefined,
+    participants,
+    phoneNumbersRevealed: Boolean(item.phone_numbers_revealed),
+  };
+}
+
+function mapApiConversationParticipant(item: any): ConversationParticipant {
+  return {
+    id: String(item.id),
+    name: item.name || "Property24 user",
+    role: toAccountRole(item.role || item.account_type),
+    verified: Boolean(item.verified),
+    profilePicture: resolveMediaUrl(item.profile_picture),
+    coverPhoto: resolveMediaUrl(item.cover_photo),
+    bio: item.bio || "",
+    lastSeenAt: item.last_seen_at || undefined,
+  };
+}
+
+function mapApiConversationMessage(item: any): ConversationMessage {
+  return {
+    id: String(item.id),
+    conversationId: String(item.conversation_id),
+    senderId: String(item.sender_id),
+    sender: item.sender || "Property24 user",
+    body: item.body || "",
+    attachmentUrl: resolveMediaUrl(item.attachment_url),
+    attachmentType: item.attachment_type || undefined,
+    attachmentName: item.attachment_name || undefined,
+    createdAt: item.created_at,
+    readAt: item.read_at || undefined,
+  };
+}
+
+function mapApiConversationCall(item: any): ConversationCallSession {
+  return {
+    id: String(item.id),
+    conversationId: String(item.conversation_id),
+    initiatorId: String(item.initiator_id),
+    mode: item.mode === "video" ? "video" : "voice",
+    status: titleize(item.status),
+    createdAt: item.created_at,
+    endedAt: item.ended_at || undefined,
+  };
+}
+
+function resolveApiBaseUrl() {
+  const explicitUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (explicitUrl) return normalizeApiUrlForDevice(trimTrailingSlash(explicitUrl));
+
+  if (Platform.OS === "web") {
+    return "http://127.0.0.1:8011/api";
+  }
+
+  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost;
+  const host = hostUri?.split(":")[0];
+  if (host) {
+    return `http://${host}:8011/api`;
+  }
+
+  if (Platform.OS === "android") {
+    return "http://10.0.2.2:8011/api";
+  }
+
+  return "http://127.0.0.1:8011/api";
+}
+
+function normalizeApiUrlForDevice(value: string) {
+  if (Platform.OS === "web") return value;
+
+  try {
+    const url = new URL(value);
+    if (!["127.0.0.1", "localhost", "0.0.0.0"].includes(url.hostname)) {
+      return value;
+    }
+
+    const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost;
+    const host = hostUri?.split(":")[0];
+    if (!host) return value;
+
+    url.hostname = host;
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return value;
+  }
+}
+
+function resolveMediaUrl(value?: string | null) {
+  const mediaPath = String(value || "").trim();
+  if (!mediaPath) return "";
+
+  try {
+    const mediaUrl = new URL(mediaPath);
+    if (Platform.OS !== "web" && ["127.0.0.1", "localhost", "0.0.0.0"].includes(mediaUrl.hostname)) {
+      const apiUrl = new URL(API_BASE_URL);
+      mediaUrl.protocol = apiUrl.protocol;
+      mediaUrl.hostname = apiUrl.hostname;
+      mediaUrl.port = apiUrl.port;
+    }
+    return mediaUrl.toString();
+  } catch {
+    if (!mediaPath.startsWith("/")) return mediaPath;
+    try {
+      const apiUrl = new URL(API_BASE_URL);
+      return `${apiUrl.protocol}//${apiUrl.host}${mediaPath}`;
+    } catch {
+      return mediaPath;
+    }
+  }
+}
+
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+function titleize(value: string) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}

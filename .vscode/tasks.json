@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Property24: Backend API",
+      "type": "shell",
+      "command": "DJANGO_ALLOWED_HOSTS='*' backend/venv/bin/python backend/manage.py runserver 0.0.0.0:8011",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "property24",
+        "clear": true
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "group": "build"
+    },
+    {
+      "label": "Property24: Frontend Expo",
+      "type": "shell",
+      "command": "EXPO_PUBLIC_API_URL=http://192.168.1.59:8011/api npx expo start --clear --port 8093",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "property24",
+        "clear": true
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "group": "build"
+    },
+    {
+      "label": "Property24: Full Stack",
+      "dependsOrder": "parallel",
+      "dependsOn": [
+        "Property24: Backend API",
+        "Property24: Frontend Expo"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}

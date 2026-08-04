@@ -1,0 +1,621 @@
+import { Ionicons } from "@expo/vector-icons";
+import { Link, type Href } from "expo-router";
+import * as Linking from "expo-linking";
+import { useEffect, useState } from "react";
+import { FlatList, ImageBackground, KeyboardAvoidingView, Modal, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { colors, radius, shadows, spacing, typography } from "../constants/theme";
+import { useRentalPlatform, type Property, type PropertyCommentItem } from "../state/rentalPlatform";
+
+type PropertyCardProps = {
+  property: Property;
+  variant?: "default" | "feed";
+};
+
+export function PropertyCard({ property, variant = "default" }: PropertyCardProps) {
+  const { addPropertyComment, authToken, authUser, fetchPropertyComments, toggleSupplierFollow } = useRentalPlatform();
+  const imageUri = property.photos?.[0]?.startsWith("http") ? property.photos[0] : fallbackImage(property.type);
+  const feed = variant === "feed";
+  const cardStyle = StyleSheet.flatten([styles.card, feed ? styles.feedCard : null]);
+  const imageStyle = StyleSheet.flatten([styles.image, feed ? styles.feedImage : null]);
+  const depositStyle = StyleSheet.flatten([styles.deposit, property.verified ? styles.depositVerified : null]);
+  const [liked, setLiked] = useState(false);
+  const [disliked, setDisliked] = useState(false);
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [shareCount, setShareCount] = useState(0);
+  const [followingSupplier, setFollowingSupplier] = useState(false);
+
+  const likes = Math.max(12, property.savedCount + property.bedrooms * 4) + (liked ? 1 : 0);
+  const dislikes = Math.max(0, Math.floor(property.applicationsCount / 2)) + (disliked ? 1 : 0);
+  const commentCount = comments.length || property.commentsCount || 0;
+  const supplierName = property.supplierName || property.agentName || property.ownerName || `${property.suburb} supplier`;
+  const supplierRole = property.supplierRole === "agent" ? "Verified agent" : "Verified landlord";
+  const supplierInitials = initials(supplierName);
+  const supplierProfilePicture = property.supplierProfilePicture;
+  const supplierProfileHref: Href = property.supplierId
+    ? { pathname: "/supplier/[id]", params: { id: property.supplierId, propertyId: property.id } }
+    : { pathname: "/property/[id]", params: { id: property.id } };
+  const toggleFollow = () => {
+    const nextValue = !followingSupplier;
+    setFollowingSupplier(nextValue);
+    if (property.supplierId) {
+      void toggleSupplierFollow(property.supplierId, nextValue).catch(() => setFollowingSupplier(!nextValue));
+    }
+  };
+
+  const toggleLike = () => {
+    setLiked((value) => !value);
+    if (!liked) setDisliked(false);
+  };
+
+  const toggleDislike = () => {
+    setDisliked((value) => !value);
+    if (!disliked) setLiked(false);
+  };
+
+  useEffect(() => {
+    if (!commentOpen || !authToken) return;
+    let cancelled = false;
+    fetchPropertyComments(property.id)
+      .then((items) => {
+        if (!cancelled) setComments(items);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, commentOpen, fetchPropertyComments, property.id]);
+
+  const addComment = async () => {
+    const nextComment = commentDraft.trim();
+    if (!nextComment) return;
+    const optimisticComment: CommentItem = {
+      id: `local-${Date.now()}`,
+      propertyId: property.id,
+      authorId: authUser?.id || "me",
+      author: authUser?.name || "You",
+      authorRole: authUser?.role || "tenant",
+      authorVerified: Boolean(authUser?.verified),
+      body: nextComment,
+      likes: 0,
+      mediaUri: imageUri,
+      createdAt: new Date().toISOString(),
+      time: "Now",
+    };
+
+    setComments((current) => [optimisticComment, ...current]);
+    setCommentDraft("");
+
+    try {
+      const savedComment = await addPropertyComment(property.id, { body: nextComment, mediaUri: imageUri });
+      setComments((current) => current.map((comment) => (comment.id === optimisticComment.id ? savedComment : comment)));
+    } catch {
+      setComments((current) => current.map((comment) => (comment.id === optimisticComment.id ? { ...comment, time: "Not synced" } : comment)));
+    }
+  };
+
+  const shareProperty = async () => {
+    const appLink = Linking.createURL(`/property/${property.id}`);
+    const verification = property.verified && property.supplierVerified ? supplierRole : "Verification pending";
+    const message = [
+      `${property.title}`,
+      `${property.price} · Deposit ${property.deposit}`,
+      `${property.bedrooms} bed · ${property.bathrooms} bath · ${property.suburb}, ${property.city}`,
+      `${verification} · ${property.water} · ${property.solarPower ? "Solar backup" : property.power}`,
+      `Media: ${Math.max(1, property.photos?.length ?? 1)} photo(s), ${property.videoCount} video(s)`,
+      `Open in Property24: ${appLink}`,
+      `Preview image: ${imageUri}`,
+    ].join("\n");
+
+    const result = await Share.share({
+      title: property.title,
+      message,
+    }).catch(() => undefined);
+    if (result?.action !== Share.dismissedAction) {
+      setShareCount((value) => value + 1);
+    }
+  };
+
+  const cardContent = (
+    <>
+      {feed ? (
+        <View style={styles.feedHeader}>
+          <Link href={supplierProfileHref} asChild>
+            <Pressable style={styles.feedAvatar}>
+              {supplierProfilePicture ? (
+                <ImageBackground source={{ uri: supplierProfilePicture }} resizeMode="cover" style={styles.feedAvatarImage} />
+              ) : (
+                <Text style={styles.feedAvatarText}>{supplierInitials}</Text>
+              )}
+            </Pressable>
+          </Link>
+          <View style={styles.feedHeaderCopy}>
+            <View style={styles.feedNameRow}>
+              <Link href={supplierProfileHref} asChild>
+                <Pressable style={styles.supplierLink}>
+                  <Text numberOfLines={1} style={styles.feedName}>{supplierName}</Text>
+                  {property.supplierVerified ? <Ionicons name="shield-checkmark" size={13} color={colors.success} /> : null}
+                </Pressable>
+              </Link>
+              <Text style={styles.feedHandle}>@{supplierHandle(supplierName)}</Text>
+            </View>
+            <Text numberOfLines={1} style={styles.feedMeta}>{supplierRole} · Tap name to view profile</Text>
+          </View>
+          <Pressable onPress={toggleFollow} style={[styles.followButton, followingSupplier && styles.followButtonActive]}>
+            <Text style={[styles.followText, followingSupplier && styles.followTextActive]}>{followingSupplier ? "Following" : "Follow"}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <Link href={`/property/${property.id}`} asChild>
+        <Pressable>
+          <ImageBackground source={{ uri: imageUri }} resizeMode="cover" style={imageStyle}>
+            <View style={styles.imageShade} />
+            <View style={styles.topRow}>
+              {property.verified ? (
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="shield-checkmark" size={13} color={colors.success} />
+                  <Text style={styles.verifiedText}>Verified</Text>
+                </View>
+              ) : null}
+              <View style={styles.mediaStack}>
+                <View style={styles.mediaBadge}>
+                  <Ionicons name="camera-outline" size={13} color="#FFFFFF" />
+                  <Text style={styles.mediaText}>{Math.max(1, property.photos?.length ?? 1)}</Text>
+                </View>
+                {property.videoCount ? (
+                  <View style={styles.mediaBadge}>
+                    <Ionicons name="videocam-outline" size={13} color="#FFFFFF" />
+                    <Text style={styles.mediaText}>{property.videoCount}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+            <View style={styles.priceBadge}>
+              <Text style={styles.price}>{property.price}</Text>
+            </View>
+          </ImageBackground>
+        </Pressable>
+      </Link>
+
+      {feed ? (
+        <View style={styles.feedActions}>
+          <FeedMetric icon={liked ? "heart" : "heart-outline"} value={`${likes}`} active={liked} activeColor={colors.danger} onPress={toggleLike} />
+          <FeedMetric icon={disliked ? "thumbs-down" : "thumbs-down-outline"} value={`${dislikes}`} active={disliked} activeColor={colors.warning} onPress={toggleDislike} />
+          <FeedMetric icon="chatbubble-outline" value={`${commentCount}`} onPress={() => setCommentOpen(true)} />
+          <FeedMetric icon="share-social-outline" value={`${shareCount}`} onPress={shareProperty} />
+          <FeedMetric icon="stats-chart-outline" value={`${property.listingViews}`} />
+        </View>
+      ) : null}
+
+      <View style={styles.body}>
+        <View style={styles.titleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title} numberOfLines={1}>{property.title}</Text>
+            <Text style={styles.location} numberOfLines={1}>{property.suburb}, {property.city}</Text>
+          </View>
+          <Link href={`/property/${property.id}`} asChild>
+            <Pressable style={styles.openButton}>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Pressable>
+          </Link>
+        </View>
+
+        <View style={styles.factRow}>
+          <Fact icon="bed-outline" label={`${property.bedrooms} beds`} />
+          <Fact icon="water-outline" label={property.borehole ? "Borehole" : property.water} />
+          <Fact icon="flash-outline" label={property.solarPower ? "Solar" : "Grid"} />
+        </View>
+
+        <View style={styles.footerRow}>
+          <View style={styles.trustRow}>
+            <Ionicons name={property.verified ? "shield-checkmark" : "time-outline"} size={13} color={property.verified ? colors.success : colors.warning} />
+            <Text style={depositStyle}>{property.verified && property.supplierVerified ? `${supplierRole}` : "Verification pending"}</Text>
+          </View>
+          <Text style={styles.type}>{property.type}</Text>
+        </View>
+        {!feed ? (
+          <View style={styles.supplierRow}>
+            <Link href={supplierProfileHref} asChild>
+              <Pressable style={styles.supplierNameButton}>
+                <Text style={styles.supplierName} numberOfLines={1}>{supplierName}</Text>
+                {property.supplierVerified ? <Ionicons name="shield-checkmark" size={13} color={colors.success} /> : null}
+              </Pressable>
+            </Link>
+            <Pressable onPress={toggleFollow} style={[styles.followButtonSmall, followingSupplier && styles.followButtonActive]}>
+              <Text style={[styles.followTextSmall, followingSupplier && styles.followTextActive]}>{followingSupplier ? "Following" : "Follow"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        <Text style={styles.depositLine} numberOfLines={1}>Deposit {property.deposit} · GPS {property.gps}</Text>
+        {feed ? <Text style={styles.caption} numberOfLines={3}>{property.description}</Text> : null}
+
+        {feed && comments.length ? <Text style={styles.commentPreview} numberOfLines={1}>Latest comment on photo: {comments[0].body}</Text> : null}
+      </View>
+
+      {feed ? (
+        <CommentSheet
+          comments={comments}
+          commentDraft={commentDraft}
+          imageUri={imageUri}
+          onAddComment={addComment}
+          onChangeDraft={setCommentDraft}
+          onClose={() => setCommentOpen(false)}
+          property={property}
+          visible={commentOpen}
+        />
+      ) : null}
+    </>
+  );
+
+  return <View style={cardStyle}>{cardContent}</View>;
+}
+
+type CommentItem = PropertyCommentItem;
+
+function CommentSheet({
+  comments,
+  commentDraft,
+  imageUri,
+  onAddComment,
+  onChangeDraft,
+  onClose,
+  property,
+  visible,
+}: {
+  comments: CommentItem[];
+  commentDraft: string;
+  imageUri: string;
+  onAddComment: () => void;
+  onChangeDraft: (value: string) => void;
+  onClose: () => void;
+  property: Property;
+  visible: boolean;
+}) {
+  const canPostComment = Boolean(commentDraft.trim());
+  const commentTotal = comments.length;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <Pressable style={styles.modalBackdrop} onPress={onClose} />
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.commentKeyboard}>
+          <View style={styles.commentSheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleWrap}>
+                <Text style={styles.sheetTitle}>Comments</Text>
+                <Text style={styles.sheetSubtitle}>{commentTotal ? `${commentTotal} on this listing` : "Ask inside the app"}</Text>
+              </View>
+              <Pressable onPress={onClose} style={styles.sheetClose}>
+                <Ionicons name="close" size={20} color={colors.text} />
+              </Pressable>
+            </View>
+
+            <View style={styles.commentMediaRow}>
+              <ImageBackground source={{ uri: imageUri }} resizeMode="cover" style={styles.commentMediaThumb}>
+                {property.videoCount ? (
+                  <View style={styles.commentVideoPill}>
+                    <Ionicons name="play" size={10} color="#FFFFFF" />
+                    <Text style={styles.commentVideoText}>{property.videoCount}</Text>
+                  </View>
+                ) : null}
+              </ImageBackground>
+              <View style={styles.commentMediaCopy}>
+                <Text style={styles.commentMediaTitle} numberOfLines={1}>{property.title}</Text>
+                <Text style={styles.commentMediaMeta} numberOfLines={2}>{property.price} · {property.suburb}, {property.city}</Text>
+                <Text style={styles.commentMediaTrust}>{property.verified ? "Verified listing" : "Verification pending"}</Text>
+              </View>
+            </View>
+
+            <View style={styles.commentStatsRow}>
+              <View style={styles.commentStat}>
+                <Ionicons name="chatbubble-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.commentStatText}>{commentTotal} comments</Text>
+              </View>
+              <View style={styles.commentStat}>
+                <Ionicons name="image-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.commentStatText}>Attached to media</Text>
+              </View>
+            </View>
+
+            <FlatList
+              data={comments}
+              keyExtractor={(comment) => comment.id}
+              keyboardShouldPersistTaps="handled"
+              style={styles.commentList}
+              contentContainerStyle={[styles.commentListContent, !comments.length && styles.commentListEmptyContent]}
+              ListEmptyComponent={
+                <View style={styles.emptyComments}>
+                  <Ionicons name="chatbubbles-outline" size={24} color={colors.textMuted} />
+                  <Text style={styles.emptyCommentTitle}>No comments yet</Text>
+                  <Text style={styles.emptyCommentText}>Ask about rent, viewing times, utilities, or the photos shown above.</Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <View style={styles.commentItem}>
+                  <View style={styles.commentAvatar}>
+                    <Text style={styles.commentAvatarText}>{initials(item.author)}</Text>
+                  </View>
+                  <View style={styles.commentBubbleWrap}>
+                    <View style={styles.commentBubble}>
+                      <View style={styles.commentAuthorRow}>
+                        <Text style={styles.commentAuthor}>{item.author}</Text>
+                        <Text style={styles.commentTime}>{item.time}</Text>
+                      </View>
+                      <Text style={styles.commentText}>{item.body}</Text>
+                      <Text style={styles.commentAttachment}>Commented on this house media</Text>
+                    </View>
+                    <View style={styles.commentActionRow}>
+                      <Text style={styles.commentActionText}>Like</Text>
+                      <Text style={styles.commentActionText}>Reply</Text>
+                      <Text style={styles.commentActionText}>{item.likes ? `${item.likes} likes` : "0 likes"}</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+            />
+
+            <View style={styles.commentComposer}>
+              <View style={styles.commentComposerAvatar}>
+                <Text style={styles.commentComposerAvatarText}>Y</Text>
+              </View>
+              <View style={styles.commentInputWrap}>
+                <TextInput
+                  value={commentDraft}
+                  onChangeText={onChangeDraft}
+                  placeholder="Write a comment"
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  style={styles.commentInput}
+                />
+              </View>
+              <Pressable disabled={!canPostComment} onPress={onAddComment} style={[styles.commentButton, !canPostComment && styles.commentButtonDisabled]}>
+                <Ionicons name="send" size={15} color="#FFFFFF" />
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
+function FeedMetric({ icon, value, active, activeColor, onPress }: { active?: boolean; activeColor?: string; icon: keyof typeof Ionicons.glyphMap; value: string; onPress?: () => void }) {
+  const color = active ? activeColor || colors.accent : colors.textMuted;
+  return (
+    <Pressable onPress={onPress} disabled={!onPress} style={styles.feedMetric}>
+      <Ionicons name={icon} size={17} color={color} />
+      <Text style={[styles.feedMetricText, active && { color }]}>{value}</Text>
+    </Pressable>
+  );
+}
+
+function Fact({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
+  return (
+    <View style={styles.fact}>
+      <Ionicons name={icon} size={14} color={colors.textMuted} />
+      <Text style={styles.factText} numberOfLines={1}>{label}</Text>
+    </View>
+  );
+}
+
+function initials(name: string) {
+  const value = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+  return value || "S";
+}
+
+function supplierHandle(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 18) || "supplier";
+}
+
+function fallbackImage(type: string) {
+  const normalized = type.toLowerCase();
+  if (normalized.includes("flat")) return "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1000&q=80&auto=format&fit=crop";
+  if (normalized.includes("cottage")) return "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=1000&q=80&auto=format&fit=crop";
+  if (normalized.includes("student")) return "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1000&q=80&auto=format&fit=crop";
+  if (normalized.includes("commercial")) return "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1000&q=80&auto=format&fit=crop";
+  return "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1000&q=80&auto=format&fit=crop";
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    ...shadows.soft,
+  },
+  feedCard: {
+    borderRadius: 8,
+    shadowOpacity: 0.02,
+  },
+  feedHeader: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 11,
+    backgroundColor: colors.surfaceElevated,
+  },
+  feedAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.text,
+  },
+  feedAvatarImage: { width: "100%", height: "100%" },
+  feedAvatarText: { color: "#FFFFFF", fontSize: 11, ...typography.button },
+  feedHeaderCopy: { flex: 1, minWidth: 0 },
+  feedNameRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  supplierLink: { flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 4 },
+  feedName: { color: colors.text, fontSize: 13, lineHeight: 17, ...typography.title },
+  feedHandle: { color: colors.textMuted, fontSize: 11, ...typography.label },
+  feedMeta: { color: colors.textMuted, fontSize: 11, marginTop: 1, ...typography.body },
+  followButton: { minHeight: 30, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 12, backgroundColor: colors.accent },
+  followButtonActive: { borderColor: colors.accent, backgroundColor: "transparent" },
+  followText: { color: "#FFFFFF", fontSize: 12, ...typography.button },
+  followTextActive: { color: colors.accent },
+  image: {
+    height: 166,
+    justifyContent: "space-between",
+    padding: spacing.sm,
+    backgroundColor: colors.border,
+  },
+  feedImage: {
+    height: 230,
+    padding: 10,
+    marginHorizontal: 12,
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  imageShade: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    backgroundColor: "rgba(0,0,0,0.12)",
+  },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  mediaStack: { alignItems: "flex-end", gap: 6 },
+  verifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(16,16,16,0.86)",
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  verifiedText: { color: colors.success, fontSize: 12, ...typography.button },
+  mediaBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(17,19,21,0.72)",
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  mediaText: { color: "#FFFFFF", fontSize: 12, ...typography.button },
+  priceBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(17,19,21,0.82)",
+    borderRadius: radius.md,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  price: { color: "#FFFFFF", fontSize: 15, lineHeight: 19, ...typography.display },
+  feedActions: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceElevated,
+  },
+  feedMetric: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 2 },
+  feedMetricText: { color: colors.textMuted, fontSize: 11, ...typography.label },
+  body: { padding: 12, gap: spacing.sm },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  openButton: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
+  title: { color: colors.text, fontSize: 16, lineHeight: 21, ...typography.title },
+  location: { color: colors.textMuted, fontSize: 13, marginTop: 2, ...typography.body },
+  factRow: { flexDirection: "row", gap: spacing.sm },
+  fact: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5 },
+  factText: { flex: 1, minWidth: 0, color: colors.textMuted, fontSize: 12, ...typography.label },
+  footerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, paddingTop: 2 },
+  trustRow: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5 },
+  deposit: { flex: 1, minWidth: 0, color: colors.warning, fontSize: 12, ...typography.button },
+  depositVerified: { color: colors.success },
+  supplierRow: { minHeight: 34, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+  supplierNameButton: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5 },
+  supplierName: { flexShrink: 1, color: colors.text, fontSize: 13, ...typography.title },
+  followButtonSmall: { minHeight: 30, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 11, backgroundColor: colors.accent },
+  followTextSmall: { color: "#FFFFFF", fontSize: 11, ...typography.button },
+  depositLine: { color: colors.textMuted, fontSize: 11, ...typography.body },
+  caption: { color: colors.text, fontSize: 13, lineHeight: 19, ...typography.body },
+  commentPreview: { color: colors.textMuted, fontSize: 12, lineHeight: 17, ...typography.label },
+  modalOverlay: { flex: 1, justifyContent: "flex-end" },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.72)" },
+  commentKeyboard: { justifyContent: "flex-end" },
+  commentSheet: {
+    maxHeight: "88%",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: "#242424",
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 10,
+    backgroundColor: "#050505",
+  },
+  sheetHandle: { alignSelf: "center", width: 44, height: 4, borderRadius: 2, backgroundColor: "#3A3A3A", marginBottom: 8 },
+  sheetHeader: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  sheetTitleWrap: { flex: 1, minWidth: 0 },
+  sheetTitle: { color: colors.text, fontSize: 18, lineHeight: 23, ...typography.title },
+  sheetSubtitle: { color: colors.textMuted, fontSize: 12, lineHeight: 16, ...typography.body },
+  sheetClose: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17, backgroundColor: "#161616" },
+  commentMediaRow: {
+    flexDirection: "row",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#202020",
+    borderRadius: 10,
+    padding: 8,
+    backgroundColor: "#0B0B0B",
+  },
+  commentMediaThumb: { width: 74, height: 74, justifyContent: "flex-end", alignItems: "flex-start", padding: 6, borderRadius: 8, overflow: "hidden", backgroundColor: colors.border },
+  commentVideoPill: { flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 4, backgroundColor: "rgba(0,0,0,0.72)" },
+  commentVideoText: { color: "#FFFFFF", fontSize: 10, ...typography.button },
+  commentMediaCopy: { flex: 1, minWidth: 0, justifyContent: "center", gap: 3 },
+  commentMediaTitle: { color: colors.text, fontSize: 14, lineHeight: 18, ...typography.title },
+  commentMediaMeta: { color: colors.textMuted, fontSize: 12, lineHeight: 16, ...typography.body },
+  commentMediaTrust: { color: colors.success, fontSize: 11, ...typography.button },
+  commentStatsRow: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 1, borderBottomColor: "#171717" },
+  commentStat: { flexDirection: "row", alignItems: "center", gap: 5 },
+  commentStatText: { color: colors.textMuted, fontSize: 11, ...typography.label },
+  commentList: { maxHeight: 310 },
+  commentListContent: { paddingTop: 12, paddingBottom: 10, gap: 12 },
+  commentListEmptyContent: { minHeight: 190, justifyContent: "center" },
+  commentItem: { flexDirection: "row", gap: 9, alignItems: "flex-start" },
+  commentAvatar: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "#1D1D1D", borderWidth: 1, borderColor: "#303030" },
+  commentAvatarText: { color: colors.text, fontSize: 11, ...typography.button },
+  commentBubbleWrap: { flex: 1, minWidth: 0, gap: 5 },
+  commentBubble: { alignSelf: "flex-start", maxWidth: "100%", borderRadius: 14, borderTopLeftRadius: 4, paddingHorizontal: 11, paddingVertical: 9, backgroundColor: "#151515" },
+  commentAuthorRow: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 2 },
+  commentAuthor: { color: colors.text, fontSize: 12, ...typography.title },
+  commentTime: { color: colors.textMuted, fontSize: 10, ...typography.label },
+  commentText: { color: colors.text, fontSize: 13, lineHeight: 18, ...typography.body },
+  commentAttachment: { color: colors.textMuted, fontSize: 10, marginTop: 5, ...typography.body },
+  commentActionRow: { flexDirection: "row", alignItems: "center", gap: 13, paddingLeft: 8 },
+  commentActionText: { color: colors.textMuted, fontSize: 11, ...typography.button },
+  emptyComments: { alignItems: "center", gap: 6, paddingHorizontal: 26 },
+  emptyCommentTitle: { color: colors.text, fontSize: 15, ...typography.title },
+  emptyCommentText: { color: colors.textMuted, fontSize: 12, lineHeight: 17, textAlign: "center", ...typography.body },
+  commentComposer: { minHeight: 48, flexDirection: "row", alignItems: "flex-end", gap: 8, borderTopWidth: 1, borderTopColor: "#171717", paddingTop: 9 },
+  commentComposerAvatar: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "#1D1D1D", borderWidth: 1, borderColor: "#303030", marginBottom: 4 },
+  commentComposerAvatarText: { color: colors.text, fontSize: 11, ...typography.button },
+  commentInputWrap: { flex: 1, minWidth: 0, minHeight: 40, maxHeight: 96, justifyContent: "center", borderRadius: 20, borderWidth: 1, borderColor: "#242424", backgroundColor: "#111111" },
+  commentInput: { minHeight: 40, maxHeight: 96, paddingHorizontal: 13, paddingTop: 9, paddingBottom: 9, color: colors.text, fontSize: 13, lineHeight: 18, outlineStyle: "none" as any, ...typography.body },
+  commentButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: colors.accent },
+  commentButtonDisabled: { opacity: 0.38 },
+  type: { color: colors.textMuted, fontSize: 12, ...typography.label },
+});
