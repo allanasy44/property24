@@ -40,12 +40,19 @@ from .models import (
     PropertyVideo,
     Review,
     SavedProperty,
+    SecurityAuditEvent,
     SupplierFollow,
     VerificationRequest,
     Viewing,
 )
 from .ai import review_listing_payload, score_application_payload, triage_maintenance_payload
 from .auth import issue_token_pair, user_from_authorization_header, user_from_token
+from .chat_services import (
+    audit_event,
+    broadcast_to_conversation,
+    create_call,
+    mark_conversation_read,
+)
 from .google_auth import GoogleAuthError, verify_google_id_token
 from .object_storage import object_storage_status
 
@@ -1252,8 +1259,13 @@ def conversation_messages(request, conversation_id):
 
     if request.method == "GET":
         messages = conversation.messages.select_related("sender")
-        if not is_admin(acting_user):
-            messages.filter(read_at__isnull=True).exclude(sender=acting_user).update(read_at=timezone.now())
+        message_ids = mark_conversation_read(conversation, acting_user)
+        if message_ids:
+            broadcast_to_conversation(conversation.id, "messages.read", {
+                "conversation_id": str(conversation.id),
+                "reader_id": str(acting_user.id),
+                "message_ids": [str(item) for item in message_ids],
+            })
         return JsonResponse({"results": [serialize_message(item) for item in messages]})
 
     if request.content_type and request.content_type.startswith("multipart/form-data"):
@@ -1285,7 +1297,10 @@ def conversation_messages(request, conversation_id):
         attachment_name=attachment_name or getattr(attachment, "name", "")[:180],
     )
     conversation.save(update_fields=["updated_at"])
-    return JsonResponse(serialize_message(message), status=201)
+    payload = serialize_message(message)
+    audit_event("message_created_rest", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, metadata={"conversation_id": conversation.id, "message_id": message.id})
+    broadcast_to_conversation(conversation.id, "message.created", payload)
+    return JsonResponse(payload, status=201)
 
 
 @csrf_exempt
@@ -1308,9 +1323,11 @@ def conversation_calls(request, conversation_id):
     mode = data.get("mode")
     if mode not in {CallSession.Mode.VOICE, CallSession.Mode.VIDEO}:
         return json_error("mode must be voice or video")
-    call = CallSession.objects.create(conversation=conversation, initiator=acting_user, mode=mode)
-    conversation.save(update_fields=["updated_at"])
-    return JsonResponse(serialize_call_session(call), status=201)
+    call = create_call(conversation, acting_user, mode)
+    payload = serialize_call_session(call)
+    audit_event("call_started_rest", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, metadata={"conversation_id": conversation.id, "call_id": call.id, "mode": mode})
+    broadcast_to_conversation(conversation.id, "call.started", payload)
+    return JsonResponse(payload, status=201)
 
 
 @csrf_exempt
@@ -1335,7 +1352,10 @@ def conversation_call_detail(request, conversation_id, call_id):
         call.ended_at = timezone.now()
     call.save(update_fields=["status", "ended_at"])
     conversation.save(update_fields=["updated_at"])
-    return JsonResponse(serialize_call_session(call))
+    payload = serialize_call_session(call)
+    audit_event("call_ended_rest", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, metadata={"conversation_id": conversation.id, "call_id": call.id, "status": status})
+    broadcast_to_conversation(conversation.id, "call.ended", payload)
+    return JsonResponse(payload)
 
 
 @csrf_exempt

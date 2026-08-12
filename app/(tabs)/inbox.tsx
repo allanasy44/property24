@@ -36,6 +36,7 @@ export default function InboxScreen() {
     state,
     authUser,
     authToken,
+    chatWebSocketUrl,
     refreshConversations,
     startPropertyConversation,
     fetchConversationMessages,
@@ -60,6 +61,11 @@ export default function InboxScreen() {
   const [speakerOn, setSpeakerOn] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<"front" | "back">("front");
   const messagesRef = useRef<ScrollView>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [liveConnected, setLiveConnected] = useState(false);
+  const [typingUser, setTypingUser] = useState("");
+  const [presenceOverrides, setPresenceOverrides] = useState<Record<string, { online: boolean; lastSeenAt?: string }>>({});
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
 
@@ -82,8 +88,11 @@ export default function InboxScreen() {
   const activeConversation =
     selectedThread?.conversation ?? (createdConversation?.propertyId === selectedThread?.propertyId ? createdConversation : null);
   const activeCall = calls.find((call) => call.status.toLowerCase() === "ringing");
-  const contactOnline = Boolean(selectedThread?.online);
-  const contactPresence = activeCall ? "Ringing" : contactOnline ? "Online" : formatLastSeen(selectedThread?.contactLastSeenAt);
+  const contactId = selectedThread?.supplierId;
+  const contactPresenceOverride = contactId ? presenceOverrides[contactId] : undefined;
+  const contactOnline = contactPresenceOverride?.online ?? Boolean(selectedThread?.online);
+  const contactLastSeenAt = contactPresenceOverride?.lastSeenAt || selectedThread?.contactLastSeenAt;
+  const contactPresence = activeCall ? "Ringing" : contactOnline ? "Online" : formatLastSeen(contactLastSeenAt);
   const supplierProfileHref: Href | null = selectedThread?.supplierId
     ? { pathname: "/supplier/[id]", params: { id: selectedThread.supplierId, propertyId: selectedThread.propertyId } }
     : null;
@@ -154,6 +163,7 @@ export default function InboxScreen() {
     if (!activeConversation?.id) {
       setMessages([]);
       setCalls([]);
+      setTypingUser("");
       return undefined;
     }
 
@@ -162,9 +172,9 @@ export default function InboxScreen() {
     const timer = setInterval(() => {
       void loadMessages(activeConversation.id);
       void loadCalls(activeConversation.id);
-    }, 2500);
+    }, liveConnected ? 15000 : 3500);
     return () => clearInterval(timer);
-  }, [activeConversation?.id, loadCalls, loadMessages]);
+  }, [activeConversation?.id, liveConnected, loadCalls, loadMessages]);
 
   useEffect(() => {
     messagesRef.current?.scrollToEnd({ animated: true });
@@ -205,11 +215,96 @@ export default function InboxScreen() {
     return () => clearInterval(timer);
   }, [authToken, refreshConversations]);
 
+  useEffect(() => {
+    if (!chatWebSocketUrl || !authToken) {
+      setLiveConnected(false);
+      return undefined;
+    }
+
+    const socket = new WebSocket(chatWebSocketUrl);
+    socketRef.current = socket;
+
+    socket.onopen = () => {
+      setLiveConnected(true);
+      setError("");
+      sendSocketEvent("presence.ping", {});
+      if (activeConversation?.id) sendSocketEvent("read", { conversation_id: activeConversation.id });
+    };
+
+    socket.onmessage = (event) => {
+      handleLiveChatEvent(event.data, {
+        activeConversationId: activeConversation?.id || "",
+        authUserId: authUser?.id || "",
+        onCallEnded: (call) => setCalls((current) => current.map((item) => item.id === call.id ? call : item)),
+        onCallStarted: (call) => {
+          setCalls((current) => [call, ...current.filter((item) => item.id !== call.id)]);
+          setCallOverlayVisible(true);
+        },
+        onError: setError,
+        onMessage: (message) => {
+          setMessages((current) => upsertMessages(current, message));
+          if (String(message.senderId) !== String(authUser?.id || "") && activeConversation?.id === message.conversationId) {
+            sendSocketEvent("read", { conversation_id: activeConversation.id });
+          }
+          void refreshConversations().catch(() => undefined);
+        },
+        onPresence: (payload) => {
+          setPresenceOverrides((current) => ({
+            ...current,
+            [String(payload.user_id)]: { online: Boolean(payload.online), lastSeenAt: payload.last_seen_at || undefined },
+          }));
+          void refreshConversations().catch(() => undefined);
+        },
+        onRead: (payload) => {
+          const ids = new Set((payload.message_ids || []).map(String));
+          if (!ids.size) return;
+          setMessages((current) => current.map((item) => ids.has(item.id) ? { ...item, readAt: item.readAt || new Date().toISOString() } : item));
+        },
+        onTyping: (payload) => {
+          if (String(payload.user_id) === String(authUser?.id || "") || String(payload.conversation_id) !== String(activeConversation?.id || "")) return;
+          setTypingUser(payload.is_typing ? String(payload.name || "Contact") : "");
+          if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+          if (payload.is_typing) typingTimerRef.current = setTimeout(() => setTypingUser(""), 2200);
+        },
+      });
+    };
+
+    socket.onerror = () => setLiveConnected(false);
+    socket.onclose = () => {
+      if (socketRef.current === socket) socketRef.current = null;
+      setLiveConnected(false);
+    };
+
+    const pingTimer = setInterval(() => sendSocketEvent("presence.ping", {}), 25000);
+    return () => {
+      clearInterval(pingTimer);
+      if (socketRef.current === socket) socketRef.current = null;
+      socket.close();
+    };
+  }, [activeConversation?.id, authToken, authUser?.id, chatWebSocketUrl, refreshConversations]);
+
+  const sendSocketEvent = (type: string, payload: Record<string, unknown>) => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify({ type, ...payload }));
+    return true;
+  };
+
+  const handleDraftChange = (value: string) => {
+    setDraft(value);
+    if (activeConversation?.id) {
+      sendSocketEvent("typing", { conversation_id: activeConversation.id, is_typing: Boolean(value.trim()) });
+    }
+  };
+
   const sendChatBody = async (body: string, clearDraft = false, attachment?: MessageAttachmentInput) => {
     const conversation = await ensureConversation();
     const sent = await sendConversationMessage(conversation.id, body.trim(), attachment);
     setMessages((current) => [...current.filter((item) => item.id !== sent.id), sent]);
-    if (clearDraft) setDraft("");
+    if (clearDraft) {
+      setDraft("");
+      sendSocketEvent("typing", { conversation_id: conversation.id, is_typing: false });
+    }
     await loadMessages(conversation.id);
     await loadCalls(conversation.id);
   };
@@ -469,6 +564,11 @@ export default function InboxScreen() {
                   </Pressable>
                 </View>
               ) : null}
+              <View style={styles.liveStatusPill}>
+                <View style={[styles.liveStatusDot, liveConnected && styles.liveStatusDotOnline]} />
+                <Text style={styles.liveStatusText}>{liveConnected ? "Live chat connected" : "Reconnecting live chat"}</Text>
+              </View>
+              {typingUser ? <Text style={styles.typingText}>{typingUser} is typing...</Text> : null}
               {notice ? <Text style={styles.notice}>{notice}</Text> : null}
               {error ? <Text style={styles.error}>{error}</Text> : null}
               {!activeConversation ? (
@@ -503,7 +603,7 @@ export default function InboxScreen() {
               </Pressable>
               <TextInput
                 value={draft}
-                onChangeText={setDraft}
+                onChangeText={handleDraftChange}
                 editable={Boolean(selectedThread) && !loading}
                 placeholder={selectedThread ? "Message this listing contact" : "Select a listing"}
                 placeholderTextColor={colors.textMuted}
@@ -542,6 +642,66 @@ export default function InboxScreen() {
       </Screen>
     </AccessGuard>
   );
+}
+
+type LiveChatHandlers = {
+  activeConversationId: string;
+  authUserId: string;
+  onCallEnded: (call: ConversationCallSession) => void;
+  onCallStarted: (call: ConversationCallSession) => void;
+  onError: (message: string) => void;
+  onMessage: (message: ConversationMessage) => void;
+  onPresence: (payload: any) => void;
+  onRead: (payload: any) => void;
+  onTyping: (payload: any) => void;
+};
+
+function handleLiveChatEvent(raw: string, handlers: LiveChatHandlers) {
+  let event: any;
+  try {
+    event = JSON.parse(raw);
+  } catch {
+    return;
+  }
+  const payload = event.payload || {};
+  if (event.type === "error") handlers.onError(String(payload.message || "Live chat error"));
+  if (event.type === "message.created") handlers.onMessage(mapLiveMessage(payload));
+  if (event.type === "messages.read") handlers.onRead(payload);
+  if (event.type === "typing") handlers.onTyping(payload);
+  if (event.type === "presence.changed") handlers.onPresence(payload);
+  if (event.type === "call.started") handlers.onCallStarted(mapLiveCall(payload));
+  if (event.type === "call.ended") handlers.onCallEnded(mapLiveCall(payload));
+}
+
+function mapLiveMessage(item: any): ConversationMessage {
+  return {
+    id: String(item.id),
+    conversationId: String(item.conversation_id),
+    senderId: String(item.sender_id),
+    sender: item.sender || "Property24 user",
+    body: item.body || "",
+    attachmentUrl: item.attachment_url || undefined,
+    attachmentType: item.attachment_type || undefined,
+    attachmentName: item.attachment_name || undefined,
+    createdAt: item.created_at || new Date().toISOString(),
+    readAt: item.read_at || undefined,
+  };
+}
+
+function mapLiveCall(item: any): ConversationCallSession {
+  return {
+    id: String(item.id),
+    conversationId: String(item.conversation_id),
+    initiatorId: String(item.initiator_id),
+    mode: item.mode === "video" ? "video" : "voice",
+    status: titleize(item.status || "ringing"),
+    createdAt: item.created_at || new Date().toISOString(),
+    endedAt: item.ended_at || undefined,
+  };
+}
+
+function upsertMessages(current: ConversationMessage[], message: ConversationMessage) {
+  return [...current.filter((item) => item.id !== message.id), message].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
 function CallOverlay({ call, cameraFacing, cameraReady, contactName, contactOnline, muted, onEnd, onFlipCamera, onMessage, onToggleMuted, onToggleSpeaker, profilePicture, speakerOn, visible }: { call?: ConversationCallSession; cameraFacing: "front" | "back"; cameraReady: boolean; contactName: string; contactOnline: boolean; muted: boolean; onEnd: (call: ConversationCallSession) => void; onFlipCamera: () => void; onMessage: () => void; onToggleMuted: () => void; onToggleSpeaker: () => void; profilePicture?: string; speakerOn: boolean; visible: boolean }) {
@@ -841,6 +1001,11 @@ function formatMediaShare(source: string, asset: ImagePicker.ImagePickerAsset | 
   return `[${mediaType === "video" ? "Video" : "Photo"}] ${source} ${mediaType}${name} selected for ${title}.`;
 }
 
+function titleize(value: string) {
+  const clean = String(value || "").replace(/_/g, " ");
+  return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : "";
+}
+
 function initials(name: string) {
   const value = name
     .split(/\s+/)
@@ -939,6 +1104,11 @@ const styles = StyleSheet.create({
   messagesContent: { paddingHorizontal: 7, paddingTop: 4, paddingBottom: 18, gap: 4 },
   securityNotice: { alignSelf: "center", maxWidth: "88%", flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "rgba(16,16,16,0.86)" },
   securityText: { flexShrink: 1, color: colors.textMuted, fontSize: 10, lineHeight: 13, textAlign: "center", ...typography.label },
+  liveStatusPill: { alignSelf: "center", minHeight: 25, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: colors.surface },
+  liveStatusDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.warning },
+  liveStatusDotOnline: { backgroundColor: colors.success },
+  liveStatusText: { color: colors.textMuted, fontSize: 10, lineHeight: 13, ...typography.label },
+  typingText: { alignSelf: "flex-start", color: colors.textMuted, fontSize: 11, lineHeight: 15, paddingLeft: 8, ...typography.body },
   callBanner: { alignSelf: "center", width: "94%", minHeight: 50, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: "rgba(229,9,20,0.36)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.surfaceElevated, ...shadows.soft },
   callBannerIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.accent },
   callBannerCopy: { flex: 1, minWidth: 0 },

@@ -75,6 +75,42 @@ class PendingRegistrationOTP(models.Model):
         return f"OTP for {self.phone} ({self.status})"
 
 
+class SecurityAuditEvent(models.Model):
+    class Category(models.TextChoices):
+        AUTHENTICATION = "authentication", "Authentication"
+        AUTHORIZATION = "authorization", "Authorization"
+        CHAT = "chat", "Chat"
+        PRESENCE = "presence", "Presence"
+        RATE_LIMIT = "rate_limit", "Rate limit"
+        SYSTEM = "system", "System"
+
+    class Severity(models.TextChoices):
+        INFO = "info", "Info"
+        LOW = "low", "Low"
+        MEDIUM = "medium", "Medium"
+        HIGH = "high", "High"
+        CRITICAL = "critical", "Critical"
+
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="security_audit_events")
+    category = models.CharField(max_length=32, choices=Category.choices)
+    event_type = models.CharField(max_length=80)
+    severity = models.CharField(max_length=16, choices=Severity.choices, default=Severity.INFO)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["category", "event_type", "created_at"], name="rentals_sec_categor_ea206d_idx"),
+            models.Index(fields=["actor", "created_at"], name="rentals_sec_actor_i_4996af_idx"),
+            models.Index(fields=["severity", "created_at"], name="rentals_sec_severit_bab0de_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.severity} {self.category}.{self.event_type}"
+
+
 class VerificationRequest(models.Model):
     class Status(models.TextChoices):
         SUBMITTED = "submitted", "Submitted"

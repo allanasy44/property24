@@ -811,6 +811,7 @@ type RentalPlatformContextValue = {
   authError: string;
   authLoading: boolean;
   account: AccountContext;
+  chatWebSocketUrl: string;
   signIn: (payload: SignInPayload) => Promise<void>;
   registerAccount: (payload: RegisterAccountPayload) => Promise<RegistrationOtpChallenge>;
   verifyRegistrationOtp: (challengeId: string, otp: string) => Promise<void>;
@@ -892,6 +893,7 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
         authError,
         authLoading,
         account,
+        chatWebSocketUrl: buildChatWebSocketUrl(authToken),
         signIn: async (payload) => {
           setAuthLoading(true);
           setAuthError("");
@@ -1655,6 +1657,22 @@ function mapApiConversationCall(item: any): ConversationCallSession {
     createdAt: item.created_at,
     endedAt: item.ended_at || undefined,
   };
+}
+
+function buildChatWebSocketUrl(token: string | null) {
+  if (!API_BASE_URL || !token) return "";
+  try {
+    const url = new URL(API_BASE_URL);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = url.pathname.replace(/\/?api\/?$/, "/ws/conversations/");
+    if (!url.pathname.endsWith("/ws/conversations/")) {
+      url.pathname = "/ws/conversations/";
+    }
+    url.search = `token=${encodeURIComponent(token)}`;
+    return url.toString();
+  } catch {
+    return "";
+  }
 }
 
 function resolveApiBaseUrl() {

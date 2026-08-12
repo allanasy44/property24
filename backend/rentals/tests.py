@@ -5,10 +5,15 @@ from django.contrib.auth import get_user_model
 from django.core import mail
 from django.utils import timezone
 from django.test import override_settings
-from django.test import Client, TestCase
+from asgiref.sync import async_to_sync
+from channels.db import database_sync_to_async
+from channels.testing import WebsocketCommunicator
+from django.test import Client, TestCase, TransactionTestCase
 
 from .auth import issue_token_pair
-from .models import AIAnalysis, Application, CallSession, Conversation, DisputeReport, LeaseAgreement, MaintenanceRequest, Message, Payment, PendingRegistrationOTP, Property, PropertyComment, VerificationRequest, Viewing
+from property24_backend.asgi import application
+
+from .models import AIAnalysis, Application, CallSession, Conversation, DisputeReport, LeaseAgreement, MaintenanceRequest, Message, Payment, PendingRegistrationOTP, Property, PropertyComment, SecurityAuditEvent, VerificationRequest, Viewing
 
 
 class RentalApiTests(TestCase):
@@ -632,3 +637,94 @@ class RentalApiTests(TestCase):
         self.assertEqual(report_response.json()["status"], DisputeReport.Status.RESOLVED)
         self.assertEqual(commission_response.status_code, 201)
         self.assertEqual(reminder_response.json()["reminder_status"], "Reminder sent by SMS")
+
+
+class RentalWebSocketTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        User = get_user_model()
+        self.landlord = User.objects.create_user(username="ws-landlord", password="secret12345", full_name="John Doe", role=User.Roles.LANDLORD, is_verified=True)
+        self.tenant = User.objects.create_user(username="ws-tenant", password="secret12345", full_name="Jane Smith", role=User.Roles.TENANT)
+        self.agent = User.objects.create_user(username="ws-agent", password="secret12345", full_name="Tariro Moyo", role=User.Roles.AGENT, is_verified=True)
+        self.property = Property.objects.create(
+            owner=self.landlord,
+            agent=self.agent,
+            title="Borrowdale family house",
+            address="123 Borrowdale Road",
+            city="Harare",
+            suburb="Borrowdale",
+            monthly_rent="450.00",
+            deposit_required="450.00",
+            property_type=Property.PropertyType.HOUSE,
+            bedrooms=3,
+            bathrooms="2.0",
+            listing_status=Property.ListingStatus.VERIFIED,
+        )
+        self.conversation = Conversation.objects.create(property=self.property, title="Live chat")
+        self.conversation.participants.set([self.tenant, self.agent])
+
+    def test_websocket_participant_can_send_live_message_and_presence_is_audited(self):
+        async_to_sync(self._websocket_participant_can_send_live_message_and_presence_is_audited)()
+
+    async def _websocket_participant_can_send_live_message_and_presence_is_audited(self):
+        token = issue_token_pair(self.tenant)["access"]
+        communicator = WebsocketCommunicator(application, f"/ws/conversations/?token={token}", headers=[(b"host", b"localhost"), (b"origin", b"http://localhost")])
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        ready = await receive_until(communicator, "connection.ready")
+        self.assertIn(str(self.conversation.id), ready["payload"]["conversation_ids"])
+
+        await communicator.send_json_to({"type": "message.send", "conversation_id": self.conversation.id, "body": "Is viewing still available?"})
+        created = await receive_until(communicator, "message.created")
+        self.assertEqual(created["payload"]["body"], "Is viewing still available?")
+
+        await communicator.disconnect()
+        self.assertTrue(await message_exists("Is viewing still available?"))
+        self.assertTrue(await audit_exists("websocket_connected"))
+        self.assertTrue(await audit_exists("message_created"))
+
+    def test_websocket_denies_conversation_outside_participation(self):
+        async_to_sync(self._websocket_denies_conversation_outside_participation)()
+
+    async def _websocket_denies_conversation_outside_participation(self):
+        other = await create_other_conversation(self.landlord, self.property)
+        token = issue_token_pair(self.tenant)["access"]
+        communicator = WebsocketCommunicator(application, f"/ws/conversations/?token={token}", headers=[(b"host", b"localhost"), (b"origin", b"http://localhost")])
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await receive_until(communicator, "connection.ready")
+
+        await communicator.send_json_to({"type": "message.send", "conversation_id": other.id, "body": "Let me in"})
+        error = await receive_until(communicator, "error")
+        self.assertIn("cannot access", error["payload"]["message"])
+
+        await communicator.disconnect()
+        self.assertFalse(await message_exists("Let me in"))
+        self.assertTrue(await audit_exists("conversation_access_denied"))
+
+
+async def receive_until(communicator, event_type, limit=6):
+    for _ in range(limit):
+        event = await communicator.receive_json_from()
+        if event.get("type") == event_type:
+            return event
+    raise AssertionError(f"WebSocket event {event_type} was not received")
+
+
+@database_sync_to_async
+def message_exists(body):
+    return Message.objects.filter(body=body).exists()
+
+
+@database_sync_to_async
+def audit_exists(event_type):
+    return SecurityAuditEvent.objects.filter(event_type=event_type).exists()
+
+
+@database_sync_to_async
+def create_other_conversation(landlord, prop):
+    conversation = Conversation.objects.create(property=prop, title="Private owner chat")
+    conversation.participants.set([landlord])
+    return conversation

@@ -26,6 +26,8 @@ CORS_ALLOWED_ORIGINS = env_list(
 )
 
 INSTALLED_APPS = [
+    "daphne",
+    "channels",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -65,6 +67,23 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "property24_backend.wsgi.application"
+ASGI_APPLICATION = "property24_backend.asgi.application"
+
+REDIS_URL = env_str("REDIS_URL", "")
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+
 
 DATABASE_ENGINE = env_str("DATABASE_ENGINE", "sqlite").lower()
 if DATABASE_ENGINE == "postgresql":
