@@ -2,9 +2,9 @@ import { Link } from "expo-router";
 import { useMemo, useState } from "react";
 import { FlatList, ImageBackground, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { AccountRole, useRentalPlatform, useRentalPlatformStats } from "../../state/rentalPlatform";
+import { AccountRole, RentalPlatformState, useRentalPlatform, useRentalPlatformStats } from "../../state/rentalPlatform";
 import { colors, spacing, radius, shadows, typography } from "../../constants/theme";
-import { quickActions, roleCards, trustSignals, journeyPoints } from "../../constants/content";
+import { quickActions } from "../../constants/content";
 import { ActionCard } from "../../components/ActionCard";
 import { LiveFeed } from "../../components/LiveFeed";
 import { PropertyCard } from "../../components/PropertyCard";
@@ -19,117 +19,155 @@ export default function HomeScreen() {
   const { state, account, authUser } = useRentalPlatform();
   const stats = useRentalPlatformStats();
   const visibleActions = quickActions.filter((action) => action.roles.includes(account.accountType));
-  const currentRoleCards = roleCards.filter((item) => toAccountRole(item.title) === account.accountType);
+
 
   if (account.accountType === "tenant") {
     return <TenantHome state={state} visibleActions={visibleActions} userName={authUser?.name} verified={Boolean(authUser?.verified)} />;
   }
 
-  const statCards = [
-    { label: "Listings", value: `${stats.listings}`, detail: `${stats.verifiedProperties} verified in app` },
-    { label: "Payments", value: `${stats.receivedPayments}`, detail: "Rent transactions recorded" },
-    { label: "Open issues", value: `${stats.maintenanceOpen}`, detail: "Active maintenance requests" },
-  ];
+  return <RoleDashboard role={account.accountType} state={state} stats={stats} visibleActions={visibleActions} userName={authUser?.name} verified={Boolean(authUser?.verified)} />;
+}
+
+type DashboardMetric = {
+  label: string;
+  value: string;
+  detail: string;
+  icon: keyof typeof Ionicons.glyphMap;
+};
+
+type DashboardPanel = {
+  title: string;
+  subtitle: string;
+  rows: Array<{ id: string; title: string; meta: string; status?: string }>;
+  empty: string;
+};
+
+function RoleDashboard({ role, state, stats, visibleActions, userName, verified }: { role: Exclude<AccountRole, "tenant">; state: RentalPlatformState; stats: ReturnType<typeof useRentalPlatformStats>; visibleActions: typeof quickActions; userName?: string; verified: boolean }) {
+  const dashboard = getRoleDashboard(role, state, stats);
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <View style={styles.heroTopRow}>
-            <View>
-              <Text style={styles.kicker}>Property24 Zimbabwe</Text>
-              <Text style={styles.title}>Find, verify, rent, and manage homes with confidence.</Text>
-            </View>
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="shield-checkmark" size={18} color={colors.success} />
-              <Text style={styles.verifiedText}>Verified</Text>
-            </View>
-          </View>
-
-          <Text style={styles.heroBody}>
-            Mobile-first rental operations for tenants, landlords, agents, and administrators.
-          </Text>
-
-          <View style={styles.heroStatsRow}>
-            {statCards.map((item) => (
-              <StatCard key={item.label} label={item.label} value={item.value} detail={item.detail} />
-            ))}
-          </View>
-
-          <View style={styles.heroActions}>
-            <Link href="/listings" asChild>
-              <Text style={styles.primaryAction}>View listings</Text>
-            </Link>
-            <Link href="/operations" asChild>
-              <Text style={styles.secondaryAction}>Open live ops</Text>
-            </Link>
-          </View>
+      <ScrollView contentContainerStyle={styles.dashboardContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.dashboardHero}>
+          <Text style={styles.kicker}>{roleLabel(role)} dashboard</Text>
+          <Text style={styles.dashboardTitle}>{userName ? firstName(userName) : roleLabel(role)}</Text>
+          <Text style={styles.dashboardSubcopy}>{verified ? "Verified account" : "Verification pending"}</Text>
         </View>
 
-        <SectionHeader title="Current workspace" subtitle={`${roleLabel(account.accountType)} tools only.`} />
-        <FlatList
-          data={currentRoleCards}
-          keyExtractor={(item) => item.title}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.roleList}
-          renderItem={({ item }) => (
-            <View style={[styles.roleCard, { borderColor: item.accent }]}>
-              <View style={[styles.roleIcon, { backgroundColor: item.accentSoft }]}>
-                <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={20} color={item.accent} />
+        <View style={styles.dashboardGrid}>
+          {dashboard.metrics.map((metric) => (
+            <View key={metric.label} style={styles.dashboardMetricCard}>
+              <View style={styles.dashboardMetricTop}>
+                <Ionicons name={metric.icon} size={18} color={colors.accent} />
+                <Text style={styles.dashboardMetricValue}>{metric.value}</Text>
               </View>
-              <Text style={styles.roleTitle}>{item.title}</Text>
-              <Text style={styles.roleDescription}>{item.description}</Text>
+              <Text style={styles.dashboardMetricLabel}>{metric.label}</Text>
+              <Text style={styles.dashboardMetricDetail}>{metric.detail}</Text>
             </View>
-          )}
-        />
-
-        <SectionHeader title="Featured listings" subtitle="Driven by the live local store." />
-        <View style={styles.propertyStack}>
-          {state.properties.length ? (
-            state.properties.map((property) => <PropertyCard key={property.id} property={property} />)
-          ) : (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No properties yet</Text>
-              <Text style={styles.emptyBody}>Create your first listing in the Listings tab.</Text>
-              <Link href="/listings" asChild>
-                <Text style={styles.emptyAction}>Add first property</Text>
-              </Link>
-            </View>
-          )}
+          ))}
         </View>
 
-        <SectionHeader title="Core workflows" subtitle="Everything needed in one phone interface." />
+        <View style={styles.dashboardSectionHeader}>
+          <Text style={styles.tenantSectionTitle}>Today</Text>
+          <Text style={styles.tenantSeeAll}>Live backend data</Text>
+        </View>
+
+        <View style={styles.dashboardPanelStack}>
+          {dashboard.panels.map((panel) => (
+            <View key={panel.title} style={styles.dashboardPanel}>
+              <View style={styles.dashboardPanelHeader}>
+                <Text style={styles.dashboardPanelTitle}>{panel.title}</Text>
+                <Text style={styles.dashboardPanelSubtitle}>{panel.subtitle}</Text>
+              </View>
+              {panel.rows.length ? panel.rows.map((row) => (
+                <View key={row.id} style={styles.dashboardRow}>
+                  <View style={styles.dashboardRowAvatar}>
+                    <Text style={styles.dashboardRowInitial}>{row.title.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.dashboardRowBody}>
+                    <Text style={styles.dashboardRowTitle} numberOfLines={1}>{row.title}</Text>
+                    <Text style={styles.dashboardRowMeta} numberOfLines={1}>{row.meta}</Text>
+                  </View>
+                  {row.status ? <Text style={styles.dashboardRowStatus}>{row.status}</Text> : null}
+                </View>
+              )) : <Text style={styles.dashboardEmpty}>{panel.empty}</Text>}
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.dashboardSectionHeader}>
+          <Text style={styles.tenantSectionTitle}>Actions</Text>
+        </View>
         <View style={styles.actionsGrid}>
           {visibleActions.map((action) => (
             <ActionCard key={action.title} title={action.title} subtitle={action.subtitle} icon={action.icon as keyof typeof Ionicons.glyphMap} href={action.href} />
           ))}
         </View>
 
-        <SectionHeader title="What users get" subtitle="Clear value per role." />
-        <View style={styles.journeyGrid}>
-          <JourneyCard title="Tenant" points={journeyPoints.Tenant} accent={colors.accent} />
-          <JourneyCard title="Landlord" points={journeyPoints.Landlord} accent={colors.accent} />
-          <JourneyCard title="Agent" points={journeyPoints.Agent} accent={colors.accent} />
-          <JourneyCard title="Administrator" points={journeyPoints.Administrator} accent={colors.accent} />
+        <View style={styles.dashboardSectionHeader}>
+          <Text style={styles.tenantSectionTitle}>Live activity</Text>
         </View>
-
-        <SectionHeader title="Live activity" subtitle="Updates when users perform actions in-app." />
         <LiveFeed items={state.liveEvents} />
-
-        <SectionHeader title="Trust signals" subtitle="Verification and fraud-reduction controls." />
-        <View style={styles.trustGrid}>
-          {trustSignals.map((signal) => (
-            <View key={signal.title} style={styles.trustCard}>
-              <Ionicons name={signal.icon as keyof typeof Ionicons.glyphMap} size={18} color={colors.accent} />
-              <Text style={styles.trustTitle}>{signal.title}</Text>
-              <Text style={styles.trustDescription}>{signal.description}</Text>
-            </View>
-          ))}
-        </View>
       </ScrollView>
     </Screen>
   );
+}
+
+function getRoleDashboard(role: Exclude<AccountRole, "tenant">, state: RentalPlatformState, stats: ReturnType<typeof useRentalPlatformStats>): { metrics: DashboardMetric[]; panels: DashboardPanel[] } {
+  const openMaintenance = state.maintenance.filter((item) => item.status.toLowerCase() !== "resolved");
+  const listings = state.properties.slice(0, 4).map((item) => ({ id: item.id, title: item.title, meta: [item.suburb, item.price].filter(Boolean).join(" · "), status: item.verified ? "Verified" : "Review" }));
+  const payments = state.payments.slice(0, 4).map((item) => ({ id: item.id, title: item.tenant || "Tenant", meta: [item.property, item.method].filter(Boolean).join(" · "), status: item.amount }));
+  const maintenance = openMaintenance.slice(0, 4).map((item) => ({ id: item.id, title: item.issue, meta: [item.property, item.category].filter(Boolean).join(" · "), status: item.status }));
+  const applications = state.applications.slice(0, 4).map((item) => ({ id: item.id, title: item.applicant, meta: item.property, status: item.status }));
+  const viewings = state.viewings.slice(0, 4).map((item) => ({ id: item.id, title: item.property, meta: [item.tenant, item.date, item.time].filter(Boolean).join(" · "), status: item.status }));
+  const verifications = state.verifications.slice(0, 4).map((item) => ({ id: item.id, title: item.name, meta: item.role, status: item.status }));
+  const conversations = state.conversations.slice(0, 4).map((item) => ({ id: item.id, title: item.name, meta: item.preview, status: item.time }));
+
+  if (role === "landlord") {
+    return {
+      metrics: [
+        { label: "Listings", value: String(stats.listings), detail: `${stats.verifiedProperties} verified`, icon: "home-outline" },
+        { label: "Rent", value: String(stats.receivedPayments), detail: "payments received", icon: "card-outline" },
+        { label: "Maintenance", value: String(openMaintenance.length), detail: "open requests", icon: "construct-outline" },
+        { label: "Occupancy", value: `${stats.occupiedRate}%`, detail: "active leases", icon: "stats-chart-outline" },
+      ],
+      panels: [
+        { title: "Listings", subtitle: "Your properties", rows: listings, empty: "No properties have been listed yet." },
+        { title: "Applications", subtitle: "Tenant requests", rows: applications, empty: "No applications yet." },
+        { title: "Maintenance", subtitle: "Active work", rows: maintenance, empty: "No maintenance requests yet." },
+      ],
+    };
+  }
+
+  if (role === "agent") {
+    return {
+      metrics: [
+        { label: "Listings", value: String(stats.listings), detail: "assigned properties", icon: "business-outline" },
+        { label: "Viewings", value: String(stats.viewings), detail: "scheduled visits", icon: "calendar-outline" },
+        { label: "Applications", value: String(stats.applications), detail: "tracked tenants", icon: "document-text-outline" },
+        { label: "Chats", value: String(state.conversations.length), detail: "listing contacts", icon: "chatbubbles-outline" },
+      ],
+      panels: [
+        { title: "Viewings", subtitle: "Physical house visits", rows: viewings, empty: "No viewings scheduled yet." },
+        { title: "Applications", subtitle: "Pipeline", rows: applications, empty: "No applications yet." },
+        { title: "Conversations", subtitle: "Listing chats", rows: conversations, empty: "No listing conversations yet." },
+      ],
+    };
+  }
+
+  return {
+    metrics: [
+      { label: "Verifications", value: String(stats.verifications), detail: "user checks", icon: "shield-checkmark-outline" },
+      { label: "Listings", value: String(stats.listings), detail: `${stats.verifiedProperties} verified`, icon: "home-outline" },
+      { label: "Payments", value: String(state.payments.length), detail: "records", icon: "wallet-outline" },
+      { label: "Reports", value: String(openMaintenance.length), detail: "open issues", icon: "alert-circle-outline" },
+    ],
+    panels: [
+      { title: "Verification queue", subtitle: "Trust checks", rows: verifications, empty: "No verification requests yet." },
+      { title: "Listings", subtitle: "Marketplace", rows: listings, empty: "No properties have been listed yet." },
+      { title: "Maintenance", subtitle: "Dispute signals", rows: maintenance, empty: "No open maintenance reports." },
+    ],
+  };
 }
 
 function TenantHome({ state, visibleActions, userName, verified }: { state: ReturnType<typeof useRentalPlatform>["state"]; visibleActions: typeof quickActions; userName?: string; verified: boolean }) {
@@ -234,7 +272,8 @@ function TenantHome({ state, visibleActions, userName, verified }: { state: Retu
           renderItem={({ item }) => (
             <Link href={`/property/${item.id}`} asChild>
               <Pressable style={styles.storyItem}>
-                <ImageBackground source={{ uri: storyImage(item.type, item.photos?.[0]) }} resizeMode="cover" style={styles.storyImage}>
+                {storyImage(item.photos?.[0]) ? (
+                <ImageBackground source={{ uri: storyImage(item.photos?.[0]) }} resizeMode="cover" style={styles.storyImage}>
                   <View style={styles.storyShade} />
                   <View style={styles.storyBadge}>
                     <Ionicons name={item.verified ? "shield-checkmark" : "time-outline"} size={12} color="#FFFFFF" />
@@ -245,6 +284,11 @@ function TenantHome({ state, visibleActions, userName, verified }: { state: Retu
                     </View>
                   ) : null}
                 </ImageBackground>
+                ) : (
+                  <View style={[styles.storyImage, styles.storyImageEmpty]}>
+                    <Ionicons name="image-outline" size={14} color={colors.textMuted} />
+                  </View>
+                )}
                 <View style={styles.storyCopy}>
                   <Text style={styles.storyLabel} numberOfLines={1}>{item.suburb}</Text>
                   <Text style={styles.storyMeta} numberOfLines={1}>{item.price}</Text>
@@ -355,31 +399,35 @@ function isVerifiedSupplierListing(property: ReturnType<typeof useRentalPlatform
   return property.verified && property.supplierVerified !== false;
 }
 
-function storyImage(type: string, photo?: string) {
-  if (photo?.startsWith("http")) return photo;
-  const normalized = type.toLowerCase();
-  if (normalized.includes("flat")) return "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&q=80&auto=format&fit=crop";
-  if (normalized.includes("cottage")) return "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=400&q=80&auto=format&fit=crop";
-  if (normalized.includes("student")) return "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&q=80&auto=format&fit=crop";
-  if (normalized.includes("commercial")) return "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=400&q=80&auto=format&fit=crop";
-  return "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400&q=80&auto=format&fit=crop";
-}
-
-function JourneyCard({ title, points, accent }: { title: string; points: string[]; accent: string }) {
-  return (
-    <View style={styles.journeyCard}>
-      <Text style={[styles.journeyTitle, { color: accent }]}>{title}</Text>
-      {points.slice(0, 3).map((point) => (
-        <View key={point} style={styles.journeyPointRow}>
-          <View style={[styles.journeyDot, { backgroundColor: accent }]} />
-          <Text style={styles.journeyPoint}>{point}</Text>
-        </View>
-      ))}
-    </View>
-  );
+function storyImage(photo?: string) {
+  return photo?.startsWith("http") ? photo : "";
 }
 
 const styles = StyleSheet.create({
+  dashboardContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: spacing.xl, gap: 10, backgroundColor: colors.background },
+  dashboardHero: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: 4, ...shadows.card },
+  dashboardTitle: { color: colors.text, fontSize: 25, lineHeight: 30, ...typography.display },
+  dashboardSubcopy: { color: colors.textMuted, fontSize: 13, ...typography.body },
+  dashboardGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  dashboardMetricCard: { flexGrow: 1, flexBasis: "47%", minHeight: 94, backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 6, ...shadows.soft },
+  dashboardMetricTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  dashboardMetricValue: { color: colors.text, fontSize: 22, ...typography.display },
+  dashboardMetricLabel: { color: colors.text, fontSize: 13, ...typography.title },
+  dashboardMetricDetail: { color: colors.textMuted, fontSize: 11, ...typography.body },
+  dashboardSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, marginTop: 2 },
+  dashboardPanelStack: { gap: 8 },
+  dashboardPanel: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: "hidden", ...shadows.soft },
+  dashboardPanelHeader: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8, borderBottomWidth: 1, borderColor: colors.border },
+  dashboardPanelTitle: { color: colors.text, fontSize: 15, ...typography.title },
+  dashboardPanelSubtitle: { color: colors.textMuted, fontSize: 11, marginTop: 2, ...typography.body },
+  dashboardRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderColor: colors.border },
+  dashboardRowAvatar: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted },
+  dashboardRowInitial: { color: colors.text, fontSize: 13, ...typography.title },
+  dashboardRowBody: { flex: 1, minWidth: 0 },
+  dashboardRowTitle: { color: colors.text, fontSize: 13, ...typography.title },
+  dashboardRowMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2, ...typography.body },
+  dashboardRowStatus: { color: colors.accent, fontSize: 11, ...typography.label },
+  dashboardEmpty: { color: colors.textMuted, padding: 12, lineHeight: 18, ...typography.body },
   tenantContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: spacing.xl, gap: 6, backgroundColor: colors.background },
   tenantTopBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
   tenantKicker: { color: colors.textMuted, fontSize: 10, textTransform: "uppercase", ...typography.label },
@@ -419,6 +467,7 @@ const styles = StyleSheet.create({
   storyRail: { gap: 3, alignItems: "flex-start", paddingRight: 6, paddingTop: 0, paddingBottom: 0 },
   storyItem: { width: 40, height: 48, alignItems: "center", gap: 0 },
   storyImage: { width: 34, height: 34, borderRadius: 17, overflow: "hidden", justifyContent: "flex-start", alignItems: "flex-end", padding: 2, borderWidth: 1.5, borderColor: colors.accent, backgroundColor: colors.border },
+  storyImageEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted },
   storyShade: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,0.08)" },
   storyBadge: { width: 14, height: 14, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(17,19,21,0.72)" },
   storyVideoBadge: { position: "absolute", left: 2, bottom: 2, width: 13, height: 13, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: colors.danger },

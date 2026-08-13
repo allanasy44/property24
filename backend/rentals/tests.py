@@ -20,7 +20,7 @@ class RentalApiTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.client = Client()
-        self.landlord = User.objects.create_user(username="landlord", password="secret12345", full_name="John Doe", role=User.Roles.LANDLORD, is_verified=True)
+        self.landlord = User.objects.create_user(username="landlord", password="secret12345", full_name="John Doe", phone="0771111111", role=User.Roles.LANDLORD, is_verified=True)
         self.tenant = User.objects.create_user(username="tenant", password="secret12345", full_name="Jane Smith", role=User.Roles.TENANT)
         self.agent = User.objects.create_user(username="agent", password="secret12345", full_name="Tariro Moyo", role=User.Roles.AGENT, is_verified=True)
         self.admin = User.objects.create_user(username="admin", password="secret12345", full_name="Admin", role=User.Roles.ADMIN, is_verified=True)
@@ -67,8 +67,10 @@ class RentalApiTests(TestCase):
 
     def test_jwt_login_refresh_and_me(self):
         login = self.post_json("/api/auth/login/", {"username": "landlord", "password": "secret12345"})
+        phone_login = self.post_json("/api/auth/login/", {"username": "0771111111", "password": "secret12345"})
 
         self.assertEqual(login.status_code, 200)
+        self.assertEqual(phone_login.status_code, 200)
         tokens = login.json()["tokens"]
         self.assertIn("access", tokens)
 
@@ -89,9 +91,7 @@ class RentalApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["email"], "generated@property24.test")
 
-    @override_settings(DEBUG=True, EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
-    @patch("rentals.views.get_random_string", return_value="123456")
-    def test_public_registration_separates_account_context_by_role(self, _otp):
+    def test_public_registration_creates_role_scoped_account_without_otp(self):
         response = self.post_json(
             "/api/auth/register/",
             {
@@ -104,32 +104,16 @@ class RentalApiTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 202)
-        challenge_payload = response.json()
-        self.assertTrue(challenge_payload["otp_required"])
-        self.assertIn("challenge_id", challenge_payload)
-        self.assertEqual(challenge_payload["delivery_channel"], "email")
-        self.assertEqual(challenge_payload["email"], "n**********d@property24.test")
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("123456", mail.outbox[0].body)
-        self.assertEqual(mail.outbox[0].to, ["new-landlord@property24.test"])
-        self.assertNotIn("tokens", challenge_payload)
-        self.assertFalse(get_user_model().objects.filter(username="new-landlord").exists())
-
-        verify_response = self.post_json(
-            "/api/auth/register/verify/",
-            {"challenge_id": challenge_payload["challenge_id"], "otp": "123456"},
-        )
-
-        self.assertEqual(verify_response.status_code, 201)
-        payload = verify_response.json()
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
         self.assertEqual(payload["user"]["role"], "landlord")
         self.assertIn("add_properties", payload["account"]["capabilities"])
         self.assertIn("proof_of_ownership_or_authorization", payload["account"]["onboarding"]["requirements"])
         self.assertIn("tokens", payload)
-        self.assertEqual(PendingRegistrationOTP.objects.get(pk=challenge_payload["challenge_id"]).status, PendingRegistrationOTP.Status.CONSUMED)
+        self.assertTrue(get_user_model().objects.filter(username="new-landlord").exists())
+        self.assertFalse(PendingRegistrationOTP.objects.filter(username="new-landlord").exists())
 
-    def test_public_registration_rejects_duplicate_phone_before_otp(self):
+    def test_public_registration_rejects_duplicate_phone_before_account_creation(self):
         User = get_user_model()
         User.objects.create_user(username="existing-phone", password="secret12345", phone="263771000000")
 
@@ -144,65 +128,33 @@ class RentalApiTests(TestCase):
                 "phone": "+263771000000",
             },
         )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("phone number", response.json()["error"])
-        self.assertFalse(PendingRegistrationOTP.objects.filter(username="duplicate-phone").exists())
-
-    @override_settings(DEBUG=True, EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
-    @patch("rentals.views.get_random_string", return_value="654321")
-    def test_public_registration_rejects_wrong_otp_without_creating_account(self, _otp):
-        before_count = get_user_model().objects.count()
-        response = self.post_json(
+        username_phone_response = self.post_json(
             "/api/auth/register/",
             {
-                "username": "wrong-otp-user",
-                "email": "wrong-otp@property24.test",
+                "username": "+263771000000",
+                "email": "duplicate-username-phone@property24.test",
                 "password": "secret12345",
-                "name": "Wrong OTP",
+                "name": "Duplicate Username Phone",
                 "account_type": "tenant",
                 "phone": "+263772000000",
             },
         )
-        challenge_id = response.json()["challenge_id"]
-
-        verify_response = self.post_json("/api/auth/register/verify/", {"challenge_id": challenge_id, "otp": "000000"})
-
-        self.assertEqual(verify_response.status_code, 400)
-        self.assertIn("Invalid OTP", verify_response.json()["error"])
-        self.assertEqual(get_user_model().objects.count(), before_count)
-        self.assertEqual(PendingRegistrationOTP.objects.get(pk=challenge_id).attempts, 1)
-
-    @override_settings(DEBUG=False, EMAIL_BACKEND="django.core.mail.backends.console.EmailBackend")
-    @patch("rentals.views.get_random_string", return_value="111222")
-    def test_public_registration_requires_email_sender_outside_debug(self, _otp):
-        response = self.post_json(
-            "/api/auth/register/",
-            {
-                "username": "prod-otp-user",
-                "email": "prod-otp@property24.test",
-                "password": "secret12345",
-                "name": "Production OTP",
-                "account_type": "tenant",
-                "phone": "+263773000000",
-            },
-        )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("Email OTP provider", response.json()["error"])
-        self.assertFalse(PendingRegistrationOTP.objects.filter(username="prod-otp-user", status=PendingRegistrationOTP.Status.PENDING).exists())
+        self.assertIn("phone number", response.json()["error"])
+        self.assertEqual(username_phone_response.status_code, 400)
+        self.assertFalse(get_user_model().objects.filter(username="duplicate-phone").exists())
+        self.assertFalse(get_user_model().objects.filter(username="+263771000000").exists())
 
     def test_public_registration_rejects_admin_accounts(self):
         response = self.post_json(
             "/api/auth/register/",
-            {"username": "public-admin", "email": "public-admin@property24.test", "password": "secret12345", "account_type": "admin"},
+            {"username": "public-admin", "email": "public-admin@property24.test", "password": "secret12345", "account_type": "admin", "phone": "+263774000000"},
         )
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("Public registration", response.json()["error"])
 
-    @override_settings(GOOGLE_SIGN_IN_ENABLED=True, GOOGLE_CLIENT_IDS=["web-client-id.apps.googleusercontent.com"])
-    @patch("rentals.views.verify_google_id_token")
     def test_google_auth_creates_role_scoped_account_without_platform_verification(self, verify_google_id_token):
         verify_google_id_token.return_value = {
             "sub": "google-user-123",

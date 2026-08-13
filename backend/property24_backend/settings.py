@@ -8,11 +8,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env_list("DJANGO_SECRET_KEYS", ["unsafe-local-development-key"])[0]
 DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", ["127.0.0.1", "localhost"])
+if DEBUG and "*" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("*")
 CORS_ALLOWED_ORIGINS = env_list(
     "DJANGO_CORS_ALLOWED_ORIGINS",
     [
         "http://localhost:8081",
         "http://127.0.0.1:8081",
+        "http://localhost:8082",
+        "http://127.0.0.1:8082",
         "http://localhost:8091",
         "http://127.0.0.1:8091",
         "http://localhost:8092",

@@ -20,6 +20,20 @@ const toneMap = {
 };
 
 export function LiveFeed({ items }: LiveFeedProps) {
+  if (!items.length) {
+    return (
+      <View style={styles.emptyCard}>
+        <View style={styles.iconWrap}>
+          <Ionicons name="radio-outline" size={16} color={colors.textMuted} />
+        </View>
+        <View style={styles.body}>
+          <Text style={styles.title}>No live activity yet</Text>
+          <Text style={styles.meta}>New actions will appear here when real users create listings, payments, messages, maintenance requests, or verification updates.</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {items.map((item) => {
@@ -47,6 +61,16 @@ export function LiveFeed({ items }: LiveFeedProps) {
 const styles = StyleSheet.create({
   container: {
     gap: spacing.sm,
+  },
+  emptyCard: {
+    flexDirection: "row",
+    gap: 10,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    ...shadows.soft,
   },
   card: {
     flexDirection: "row",

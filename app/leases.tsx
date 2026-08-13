@@ -25,10 +25,10 @@ export default function LeasesScreen() {
       property: property.trim(),
       tenant: tenant.trim(),
       landlord: landlord.trim(),
-      startDate: startDate.trim() || "2026-07-01",
-      endDate: endDate.trim() || "2027-06-30",
-      monthlyRent: formatMoney(monthlyRent) || "$450",
-      deposit: formatMoney(deposit) || "$450",
+      startDate: startDate.trim(),
+      endDate: endDate.trim(),
+      monthlyRent: formatMoney(monthlyRent),
+      deposit: formatMoney(deposit),
       term: term.trim() || "12 Months",
       pdf: "Residential Lease Agreement",
       status: "Draft",
@@ -81,7 +81,7 @@ export default function LeasesScreen() {
               <Text style={styles.meta}>Landlord: {lease.landlord}</Text>
               <Text style={styles.meta}>Tenant: {lease.tenant}</Text>
               <Text style={styles.meta}>{lease.startDate} to {lease.endDate}</Text>
-              <Text style={styles.meta}>Rent {lease.monthlyRent ?? "$450"} · Deposit {lease.deposit ?? "$450"} · {lease.term ?? "12 Months"}</Text>
+              <Text style={styles.meta}>Rent {lease.monthlyRent || "Not set"} · Deposit {lease.deposit || "Not set"} · {lease.term || "Not set"}</Text>
               <Text style={styles.meta}>PDF: {lease.pdf ?? "Residential Lease Agreement"}</Text>
               <View style={styles.signatureRow}>
                 <SignatureBubble label="Tenant signed" signed={lease.signedByTenant} />
@@ -95,11 +95,11 @@ export default function LeasesScreen() {
         <SectionHeader title="Template preview" subtitle="Auto-generated from form fields." />
         <View style={styles.templateCard}>
           <Text style={styles.templateLine}>Residential Lease Agreement</Text>
-          <Text style={styles.templateLine}>Landlord: {landlord || "John Doe"}</Text>
-          <Text style={styles.templateLine}>Tenant: {tenant || "Jane Smith"}</Text>
-          <Text style={styles.templateLine}>Property: {property || "123 Borrowdale Road"}</Text>
-          <Text style={styles.templateLine}>Monthly Rent: {formatMoney(monthlyRent) || "$450"}</Text>
-          <Text style={styles.templateLine}>Deposit: {formatMoney(deposit) || "$450"}</Text>
+          <Text style={styles.templateLine}>Landlord: {landlord || "Not selected"}</Text>
+          <Text style={styles.templateLine}>Tenant: {tenant || "Not selected"}</Text>
+          <Text style={styles.templateLine}>Property: {property || "Not selected"}</Text>
+          <Text style={styles.templateLine}>Monthly Rent: {formatMoney(monthlyRent) || "Not set"}</Text>
+          <Text style={styles.templateLine}>Deposit: {formatMoney(deposit) || "Not set"}</Text>
           <Text style={styles.templateLine}>Lease: {term || "12 Months"}</Text>
           <Text style={styles.templateLine}>Electronic signatures: Tenant and landlord</Text>
         </View>

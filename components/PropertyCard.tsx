@@ -13,7 +13,8 @@ type PropertyCardProps = {
 
 export function PropertyCard({ property, variant = "default" }: PropertyCardProps) {
   const { addPropertyComment, authToken, authUser, fetchPropertyComments, toggleSupplierFollow } = useRentalPlatform();
-  const imageUri = property.photos?.[0]?.startsWith("http") ? property.photos[0] : fallbackImage(property.type);
+  const imageUri = property.photos?.find((photo) => photo?.startsWith("http")) || "";
+  const photoCount = property.photos?.filter((photo) => photo?.startsWith("http")).length ?? 0;
   const feed = variant === "feed";
   const cardStyle = StyleSheet.flatten([styles.card, feed ? styles.feedCard : null]);
   const imageStyle = StyleSheet.flatten([styles.image, feed ? styles.feedImage : null]);
@@ -26,8 +27,8 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
   const [shareCount, setShareCount] = useState(0);
   const [followingSupplier, setFollowingSupplier] = useState(false);
 
-  const likes = Math.max(12, property.savedCount + property.bedrooms * 4) + (liked ? 1 : 0);
-  const dislikes = Math.max(0, Math.floor(property.applicationsCount / 2)) + (disliked ? 1 : 0);
+  const likes = property.savedCount + (liked ? 1 : 0);
+  const dislikes = disliked ? 1 : 0;
   const commentCount = comments.length || property.commentsCount || 0;
   const supplierName = property.supplierName || property.agentName || property.ownerName || `${property.suburb} supplier`;
   const supplierRole = property.supplierRole === "agent" ? "Verified agent" : "Verified landlord";
@@ -103,9 +104,9 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
       `${property.price} · Deposit ${property.deposit}`,
       `${property.bedrooms} bed · ${property.bathrooms} bath · ${property.suburb}, ${property.city}`,
       `${verification} · ${property.water} · ${property.solarPower ? "Solar backup" : property.power}`,
-      `Media: ${Math.max(1, property.photos?.length ?? 1)} photo(s), ${property.videoCount} video(s)`,
+      `Media: ${photoCount} photo(s), ${property.videoCount} video(s)`,
       `Open in Property24: ${appLink}`,
-      `Preview image: ${imageUri}`,
+      ...(imageUri ? [`Preview image: ${imageUri}`] : []),
     ].join("\n");
 
     const result = await Share.share({
@@ -150,6 +151,7 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
 
       <Link href={`/property/${property.id}`} asChild>
         <Pressable>
+          {imageUri ? (
           <ImageBackground source={{ uri: imageUri }} resizeMode="cover" style={imageStyle}>
             <View style={styles.imageShade} />
             <View style={styles.topRow}>
@@ -162,7 +164,7 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
               <View style={styles.mediaStack}>
                 <View style={styles.mediaBadge}>
                   <Ionicons name="camera-outline" size={13} color="#FFFFFF" />
-                  <Text style={styles.mediaText}>{Math.max(1, property.photos?.length ?? 1)}</Text>
+                  <Text style={styles.mediaText}>{photoCount}</Text>
                 </View>
                 {property.videoCount ? (
                   <View style={styles.mediaBadge}>
@@ -176,6 +178,29 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
               <Text style={styles.price}>{property.price}</Text>
             </View>
           </ImageBackground>
+          ) : (
+            <View style={[imageStyle, styles.noPhotoImage]}>
+              <View style={styles.topRow}>
+                {property.verified ? (
+                  <View style={styles.verifiedBadge}>
+                    <Ionicons name="shield-checkmark" size={13} color={colors.success} />
+                    <Text style={styles.verifiedText}>Verified</Text>
+                  </View>
+                ) : <View />}
+                <View style={styles.mediaBadge}>
+                  <Ionicons name="camera-outline" size={13} color="#FFFFFF" />
+                  <Text style={styles.mediaText}>{photoCount}</Text>
+                </View>
+              </View>
+              <View>
+                <Ionicons name="image-outline" size={28} color={colors.textMuted} />
+                <Text style={styles.noPhotoText}>No photos uploaded</Text>
+              </View>
+              <View style={styles.priceBadge}>
+                <Text style={styles.price}>{property.price}</Text>
+              </View>
+            </View>
+          )}
         </Pressable>
       </Link>
 
@@ -231,7 +256,7 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
         <Text style={styles.depositLine} numberOfLines={1}>Deposit {property.deposit} · GPS {property.gps}</Text>
         {feed ? <Text style={styles.caption} numberOfLines={3}>{property.description}</Text> : null}
 
-        {feed && comments.length ? <Text style={styles.commentPreview} numberOfLines={1}>Latest comment on photo: {comments[0].body}</Text> : null}
+        {feed && comments.length ? <Text style={styles.commentPreview} numberOfLines={1}>Latest comment: {comments[0].body}</Text> : null}
       </View>
 
       {feed ? (
@@ -294,14 +319,20 @@ function CommentSheet({
             </View>
 
             <View style={styles.commentMediaRow}>
-              <ImageBackground source={{ uri: imageUri }} resizeMode="cover" style={styles.commentMediaThumb}>
-                {property.videoCount ? (
-                  <View style={styles.commentVideoPill}>
-                    <Ionicons name="play" size={10} color="#FFFFFF" />
-                    <Text style={styles.commentVideoText}>{property.videoCount}</Text>
-                  </View>
-                ) : null}
-              </ImageBackground>
+              {imageUri ? (
+                <ImageBackground source={{ uri: imageUri }} resizeMode="cover" style={styles.commentMediaThumb}>
+                  {property.videoCount ? (
+                    <View style={styles.commentVideoPill}>
+                      <Ionicons name="play" size={10} color="#FFFFFF" />
+                      <Text style={styles.commentVideoText}>{property.videoCount}</Text>
+                    </View>
+                  ) : null}
+                </ImageBackground>
+              ) : (
+                <View style={[styles.commentMediaThumb, styles.commentMediaEmpty]}>
+                  <Ionicons name="image-outline" size={22} color={colors.textMuted} />
+                </View>
+              )}
               <View style={styles.commentMediaCopy}>
                 <Text style={styles.commentMediaTitle} numberOfLines={1}>{property.title}</Text>
                 <Text style={styles.commentMediaMeta} numberOfLines={2}>{property.price} · {property.suburb}, {property.city}</Text>
@@ -316,7 +347,7 @@ function CommentSheet({
               </View>
               <View style={styles.commentStat}>
                 <Ionicons name="image-outline" size={14} color={colors.textMuted} />
-                <Text style={styles.commentStatText}>Attached to media</Text>
+                <Text style={styles.commentStatText}>{imageUri ? "Attached to media" : "Attached to listing"}</Text>
               </View>
             </View>
 
@@ -330,7 +361,7 @@ function CommentSheet({
                 <View style={styles.emptyComments}>
                   <Ionicons name="chatbubbles-outline" size={24} color={colors.textMuted} />
                   <Text style={styles.emptyCommentTitle}>No comments yet</Text>
-                  <Text style={styles.emptyCommentText}>Ask about rent, viewing times, utilities, or the photos shown above.</Text>
+                  <Text style={styles.emptyCommentText}>Ask about rent, viewing times, utilities, or the listing details.</Text>
                 </View>
               }
               renderItem={({ item }) => (
@@ -345,7 +376,7 @@ function CommentSheet({
                         <Text style={styles.commentTime}>{item.time}</Text>
                       </View>
                       <Text style={styles.commentText}>{item.body}</Text>
-                      <Text style={styles.commentAttachment}>Commented on this house media</Text>
+                      <Text style={styles.commentAttachment}>Commented on this listing</Text>
                     </View>
                     <View style={styles.commentActionRow}>
                       <Text style={styles.commentActionText}>Like</Text>
@@ -415,15 +446,6 @@ function supplierHandle(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 18) || "supplier";
 }
 
-function fallbackImage(type: string) {
-  const normalized = type.toLowerCase();
-  if (normalized.includes("flat")) return "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=1000&q=80&auto=format&fit=crop";
-  if (normalized.includes("cottage")) return "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=1000&q=80&auto=format&fit=crop";
-  if (normalized.includes("student")) return "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1000&q=80&auto=format&fit=crop";
-  if (normalized.includes("commercial")) return "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1000&q=80&auto=format&fit=crop";
-  return "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1000&q=80&auto=format&fit=crop";
-}
-
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surfaceElevated,
@@ -478,6 +500,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     borderRadius: 8,
     overflow: "hidden",
+  },
+  noPhotoImage: {
+    alignItems: "stretch",
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  noPhotoText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 6,
+    ...typography.label,
   },
   imageShade: {
     bottom: 0,
@@ -583,6 +617,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0B0B0B",
   },
   commentMediaThumb: { width: 74, height: 74, justifyContent: "flex-end", alignItems: "flex-start", padding: 6, borderRadius: 8, overflow: "hidden", backgroundColor: colors.border },
+  commentMediaEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted },
   commentVideoPill: { flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 4, backgroundColor: "rgba(0,0,0,0.72)" },
   commentVideoText: { color: "#FFFFFF", fontSize: 10, ...typography.button },
   commentMediaCopy: { flex: 1, minWidth: 0, justifyContent: "center", gap: 3 },

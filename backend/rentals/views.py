@@ -274,8 +274,12 @@ def auth_login(request):
         return json_error("username/email and password are required")
 
     user = authenticate(request, username=username, password=password)
-    if user is None and "@" in username:
-        candidate = User.objects.filter(email__iexact=username).first()
+    if user is None:
+        candidate_query = Q(email__iexact=username)
+        normalized_phone = normalize_phone(username)
+        if normalized_phone:
+            candidate_query |= Q(phone=normalized_phone)
+        candidate = User.objects.filter(candidate_query).first()
         if candidate and candidate.check_password(password):
             user = candidate
     if user is None or not user.is_active:
@@ -360,21 +364,11 @@ def auth_register(request):
     if data is None:
         return json_error("Invalid JSON body")
 
-    challenge, otp_code, error = create_registration_otp_challenge(data)
+    user, error = create_public_account(data)
     if error:
         return json_error(error)
 
-    payload = {
-        "otp_required": True,
-        "challenge_id": str(challenge.id),
-        "delivery_channel": "email",
-        "destination": mask_email(challenge.email),
-        "email": mask_email(challenge.email),
-        "phone": mask_phone(challenge.phone),
-        "expires_in_seconds": int((challenge.expires_at - timezone.now()).total_seconds()),
-        "message": "OTP sent to the account email address.",
-    }
-    return JsonResponse(payload, status=202)
+    return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user), "tokens": issue_token_pair(user)}, status=201)
 
 
 @csrf_exempt
@@ -1780,8 +1774,10 @@ def validate_public_registration_payload(data):
         return None, "An account with this email already exists"
     if User.objects.filter(username__iexact=username).exists():
         return None, "An account with this username already exists"
-    if User.objects.filter(phone=phone).exists():
+    if User.objects.filter(Q(phone=phone) | Q(username__iexact=phone) | Q(email__iexact=phone)).exists():
         return None, "An account with this phone number already exists"
+    if normalize_phone(username) and User.objects.filter(phone=normalize_phone(username)).exists():
+        return None, "An account with this username or phone number already exists"
 
     return {
         "username": username,
@@ -1827,8 +1823,7 @@ def create_registration_otp_challenge(data):
 def send_registration_otp(email, code):
     subject = "Your Property24 account OTP"
     message = f"Your Property24 account OTP is {code}. It expires in {settings.REGISTRATION_OTP_TTL_MINUTES} minutes."
-    if not settings.DEBUG and settings.EMAIL_BACKEND.endswith("console.EmailBackend"):
-        raise ValueError("Email OTP provider is not configured")
+    validate_email_otp_provider()
     try:
         sent = send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email], fail_silently=False)
     except Exception as exc:
@@ -1837,13 +1832,27 @@ def send_registration_otp(email, code):
         raise ValueError("OTP email could not be sent. Try again later")
 
 
+def validate_email_otp_provider():
+    backend = settings.EMAIL_BACKEND
+    if backend.endswith("locmem.EmailBackend"):
+        return
+    if backend.endswith("console.EmailBackend"):
+        raise ValueError("Email OTP provider is not configured")
+    if backend.endswith("smtp.EmailBackend"):
+        values = [settings.EMAIL_HOST, settings.EMAIL_HOST_USER, settings.EMAIL_HOST_PASSWORD]
+        if any(not str(value or "").strip() or str(value).startswith("replace-me") for value in values):
+            raise ValueError("Email OTP provider is not configured")
+
+
 def create_public_account_from_otp(challenge):
     if User.objects.filter(email__iexact=challenge.email).exists() and challenge.email:
         return None, "An account with this email already exists"
     if User.objects.filter(username__iexact=challenge.username).exists():
         return None, "An account with this username already exists"
-    if User.objects.filter(phone=challenge.phone).exists():
+    if User.objects.filter(Q(phone=challenge.phone) | Q(username__iexact=challenge.phone) | Q(email__iexact=challenge.phone)).exists():
         return None, "An account with this phone number already exists"
+    if normalize_phone(challenge.username) and User.objects.filter(phone=normalize_phone(challenge.username)).exists():
+        return None, "An account with this username or phone number already exists"
 
     try:
         user = User(
@@ -1876,8 +1885,10 @@ def create_public_account(data):
         return None, "An account with this email already exists"
     if User.objects.filter(username__iexact=username).exists():
         return None, "An account with this username already exists"
-    if phone and User.objects.filter(phone=phone).exists():
+    if phone and User.objects.filter(Q(phone=phone) | Q(username__iexact=phone) | Q(email__iexact=phone)).exists():
         return None, "An account with this phone number already exists"
+    if normalize_phone(username) and User.objects.filter(phone=normalize_phone(username)).exists():
+        return None, "An account with this username or phone number already exists"
 
     try:
         user = User.objects.create_user(

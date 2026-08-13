@@ -341,7 +341,7 @@ type ConversationInput = Omit<ConversationItem, "id" | "time" | "status" | "part
   phoneNumbersRevealed?: boolean;
 };
 
-const STORAGE_KEY = "property24-zimbabwe-rental-platform-v2";
+const STORAGE_KEY = "property24-zimbabwe-rental-platform-v3";
 const ACCOUNT_ROLE_STORAGE_KEY = "property24-zimbabwe-account-role";
 const API_TOKEN_STORAGE_KEY = "property24-zimbabwe-api-token";
 const API_BASE_URL = resolveApiBaseUrl();
@@ -372,245 +372,21 @@ export const accountContexts: Record<AccountRole, Omit<AccountContext, "accountT
 
 const allSections = Array.from(new Set(Object.values(accountContexts).flatMap((context) => context.visibleSections)));
 
-const initialState: RentalPlatformState = {
-  properties: [
-    {
-      id: "prop-borrowdale-road",
-      ownerId: "landlord-john-doe",
-      ownerName: "John Doe",
-      ownerRole: "landlord",
-      ownerVerified: true,
-      ownerProfilePicture: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=320&q=80&auto=format&fit=crop",
-      ownerCoverPhoto: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
-      ownerBio: "Verified landlord focused on documented leases, safe viewings, and responsive property care.",
-      supplierId: "landlord-john-doe",
-      supplierName: "John Doe",
-      supplierRole: "landlord",
-      supplierVerified: true,
-      supplierProfilePicture: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=320&q=80&auto=format&fit=crop",
-      supplierCoverPhoto: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
-      supplierBio: "Verified landlord focused on documented leases, safe viewings, and responsive property care.",
-      title: "Borrowdale family house",
-      address: "123 Borrowdale Road",
-      city: "Harare",
-      suburb: "Borrowdale",
-      price: "$450 / month",
-      deposit: "$450",
-      type: "House",
-      bedrooms: 3,
-      bathrooms: 2,
-      furnished: "Unfurnished",
-      parking: "2 car bays",
-      power: "Grid + solar backup",
-      solarPower: true,
-      water: "Municipal water",
-      borehole: true,
-      gps: "-17.7562, 31.0881",
-      videoCount: 2,
-      tourAvailable: false,
-      petFriendly: true,
-      verified: true,
-      description: "Verified landlord, ownership proof on file, borehole water, solar backup, and secure parking.",
-      photos: ["House photo"],
-      listingViews: 148,
-      savedCount: 31,
-      applicationsCount: 6,
-    },
-    {
-      id: "prop-avondale-flat",
-      ownerId: "landlord-john-doe",
-      ownerName: "John Doe",
-      ownerRole: "landlord",
-      ownerVerified: true,
-      ownerProfilePicture: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=320&q=80&auto=format&fit=crop",
-      ownerCoverPhoto: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
-      ownerBio: "Verified landlord focused on documented leases, safe viewings, and responsive property care.",
-      agentId: "agent-tariro-moyo",
-      agentName: "Tariro Moyo",
-      agentVerified: true,
-      agentProfilePicture: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=320&q=80&auto=format&fit=crop",
-      agentCoverPhoto: "https://images.unsplash.com/photo-1494526585095-c41746248156?w=1200&q=80&auto=format&fit=crop",
-      agentBio: "Estate agent handling verified listings, scheduled viewings, applications, and landlord communication.",
-      supplierId: "agent-tariro-moyo",
-      supplierName: "Tariro Moyo",
-      supplierRole: "agent",
-      supplierVerified: true,
-      supplierProfilePicture: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=320&q=80&auto=format&fit=crop",
-      supplierCoverPhoto: "https://images.unsplash.com/photo-1494526585095-c41746248156?w=1200&q=80&auto=format&fit=crop",
-      supplierBio: "Estate agent handling verified listings, scheduled viewings, applications, and landlord communication.",
-      title: "Avondale furnished flat",
-      address: "18 King George Road",
-      city: "Harare",
-      suburb: "Avondale",
-      price: "$650 / month",
-      deposit: "$650",
-      type: "Flat",
-      bedrooms: 2,
-      bathrooms: 1,
-      furnished: "Furnished",
-      parking: "1 car bay",
-      power: "Grid",
-      solarPower: false,
-      water: "Tank reserve",
-      borehole: false,
-      gps: "-17.7984, 31.0416",
-      videoCount: 1,
-      tourAvailable: false,
-      petFriendly: false,
-      verified: true,
-      description: "Verified agent listing with furnished rooms, secure access, and digital lease support.",
-      photos: ["Flat photo"],
-      listingViews: 94,
-      savedCount: 18,
-      applicationsCount: 4,
-    },
-    {
-      id: "prop-mount-pleasant-student",
-      ownerId: "landlord-pending",
-      ownerName: "Pending supplier",
-      ownerRole: "landlord",
-      ownerVerified: false,
-      ownerProfilePicture: "",
-      ownerCoverPhoto: "",
-      ownerBio: "",
-      supplierId: "landlord-pending",
-      supplierName: "Pending supplier",
-      supplierRole: "landlord",
-      supplierVerified: false,
-      supplierProfilePicture: "",
-      supplierCoverPhoto: "",
-      supplierBio: "",
-      title: "Mount Pleasant student cottage",
-      address: "42 College Drive",
-      city: "Harare",
-      suburb: "Mount Pleasant",
-      price: "$280 / month",
-      deposit: "$280",
-      type: "Student accommodation",
-      bedrooms: 1,
-      bathrooms: 1,
-      furnished: "Furnished",
-      parking: "Street parking",
-      power: "Grid + inverter",
-      solarPower: true,
-      water: "Borehole water",
-      borehole: true,
-      gps: "-17.7738, 31.0530",
-      videoCount: 1,
-      tourAvailable: false,
-      petFriendly: false,
-      verified: false,
-      description: "Affordable student cottage awaiting final owner authorization review.",
-      photos: ["Cottage photo"],
-      listingViews: 72,
-      savedCount: 22,
-      applicationsCount: 9,
-    },
-  ],
-  payments: [
-    {
-      id: "pay-july-rent",
-      tenantId: "tenant-jane-smith",
-      propertyId: "prop-borrowdale-road",
-      tenant: "Jane Smith",
-      property: "Borrowdale family house",
-      amount: "$450",
-      method: "EcoCash",
-      status: "Received",
-      time: "Today",
-      receiptId: "RCT-2026-0001",
-      reminderStatus: "Next reminder scheduled",
-    },
-  ],
-  maintenance: [
-    {
-      id: "mnt-leaking-sink",
-      propertyId: "prop-borrowdale-road",
-      tenantId: "tenant-jane-smith",
-      issue: "Leaking kitchen sink",
-      category: "Plumbing",
-      property: "Borrowdale family house",
-      tenant: "Jane Smith",
-      description: "Tenant uploaded photos and requested plumber assignment.",
-      photoCount: 2,
-      status: "In progress",
-      priority: "High",
-      updatedAt: "Today",
-    },
-  ],
-  leases: [
-    {
-      id: "lease-borrowdale",
-      propertyId: "prop-borrowdale-road",
-      tenantId: "tenant-jane-smith",
-      property: "Borrowdale family house",
-      tenant: "Jane Smith",
-      landlord: "John Doe",
-      startDate: "2026-07-01",
-      endDate: "2027-06-30",
-      monthlyRent: "$450",
-      deposit: "$450",
-      term: "12 Months",
-      pdf: "Residential Lease Agreement",
-      status: "Active",
-      signedByTenant: true,
-      signedByLandlord: true,
-    },
-  ],
-  verifications: [
-    {
-      id: "ver-john-doe",
-      name: "John Doe",
-      role: "Landlord",
-      checks: ["National ID verification", "Selfie verification", "Proof of ownership or authorization to let", "Phone verification"],
-      status: "Approved",
-      reviewedBy: "Admin",
-    },
-    {
-      id: "ver-agency-one",
-      name: "Harare Homes Agency",
-      role: "Estate Agent",
-      checks: ["Estate agency registration", "National ID verification", "Agency information", "Contact details"],
-      status: "Approved",
-      reviewedBy: "Admin",
-    },
-  ],
-  applications: [
-    { id: "app-jane-borrowdale", propertyId: "prop-borrowdale-road", tenantId: "tenant-jane-smith", applicant: "Jane Smith", property: "Borrowdale family house", role: "Tenant", status: "Approved", score: 92, time: "Yesterday" },
-  ],
-  viewings: [
-    { id: "view-borrowdale-completed", propertyId: "prop-borrowdale-road", tenantId: "tenant-jane-smith", property: "Borrowdale family house", agent: "Tariro Moyo", tenant: "Jane Smith", date: "2026-07-20", time: "14:00", status: "Completed" },
-    { id: "view-avondale-flat", propertyId: "prop-avondale-flat", tenantId: "tenant-kuda-ndlovu", property: "Avondale furnished flat", agent: "Tariro Moyo", tenant: "Kuda Ndlovu", date: "2026-07-24", time: "10:00", status: "Confirmed" },
-  ],
-  conversations: [
-    {
-      id: "chat-lease",
-      propertyId: "prop-borrowdale-road",
-      name: "Borrowdale family house · John Doe",
-      time: "Today",
-      preview: "Lease signed and receipt generated. Phone numbers remain hidden.",
-      status: "Active",
-      participants: [
-        { id: "tenant-jane-smith", name: "Jane Smith", role: "tenant", verified: true },
-        {
-          id: "landlord-john-doe",
-          name: "John Doe",
-          role: "landlord",
-          verified: true,
-          profilePicture: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=320&q=80&auto=format&fit=crop",
-          coverPhoto: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80&auto=format&fit=crop",
-          bio: "Verified landlord focused on documented leases, safe viewings, and responsive property care.",
-        },
-      ],
-      phoneNumbersRevealed: false,
-    },
-  ],
-  liveEvents: [
-    { id: "event-payment", title: "Rent payment recorded", meta: "$450 via EcoCash", status: "Today", tone: "info" },
-    { id: "event-verification", title: "Landlord verified", meta: "John Doe cleared ownership and ID checks", status: "Today", tone: "success" },
-    { id: "event-maintenance", title: "Maintenance request updated", meta: "Leaking kitchen sink moved to in progress", status: "Today", tone: "warning" },
-  ],
-};
+const initialState: RentalPlatformState = createEmptyRentalPlatformState();
+
+function createEmptyRentalPlatformState(): RentalPlatformState {
+  return {
+    properties: [],
+    payments: [],
+    maintenance: [],
+    leases: [],
+    verifications: [],
+    applications: [],
+    viewings: [],
+    conversations: [],
+    liveEvents: [],
+  };
+}
 
 type RentalPlatformAction =
   | { type: "hydrate"; state: RentalPlatformState }
@@ -636,7 +412,7 @@ function reducer(state: RentalPlatformState, action: RentalPlatformAction): Rent
         ...action.payload,
         id,
         verified: action.payload.verified ?? false,
-        photos: action.payload.photos?.length ? action.payload.photos : [action.payload.type === "House" ? "House photo" : action.payload.type === "Flat" ? "Flat photo" : "Property photo"],
+        photos: action.payload.photos?.filter(Boolean) ?? [],
         listingViews: action.payload.listingViews ?? 0,
         savedCount: action.payload.savedCount ?? 0,
         applicationsCount: action.payload.applicationsCount ?? 0,
@@ -813,8 +589,7 @@ type RentalPlatformContextValue = {
   account: AccountContext;
   chatWebSocketUrl: string;
   signIn: (payload: SignInPayload) => Promise<void>;
-  registerAccount: (payload: RegisterAccountPayload) => Promise<RegistrationOtpChallenge>;
-  verifyRegistrationOtp: (challengeId: string, otp: string) => Promise<void>;
+  registerAccount: (payload: RegisterAccountPayload) => Promise<void>;
   googleSignIn: (idToken: string, accountType: PublicAccountRole) => Promise<void>;
   signOut: () => Promise<void>;
   submitVerification: (payload: VerificationSubmissionPayload) => Promise<void>;
@@ -923,35 +698,12 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
               phone: payload.phone.trim(),
               password: payload.password,
             });
-            if (response.tokens || response.user || !response.otp_required || !response.challenge_id) {
-              throw new Error("OTP verification is required before account sign in");
+            if (!response.tokens || !response.user) {
+              throw new Error("Account creation failed");
             }
-            return {
-              otpRequired: Boolean(response.otp_required),
-              challengeId: String(response.challenge_id || ""),
-              deliveryChannel: String(response.delivery_channel || "email") === "sms" ? "sms" : "email",
-              destination: String(response.destination || response.email || response.phone || ""),
-              email: String(response.email || ""),
-              phone: String(response.phone || ""),
-              expiresInSeconds: Number(response.expires_in_seconds || 0),
-              message: response.message ? String(response.message) : undefined,
-            };
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Account creation failed";
-            setAuthError(message);
-            throw error;
-          } finally {
-            setAuthLoading(false);
-          }
-        },
-        verifyRegistrationOtp: async (challengeId, otp) => {
-          setAuthLoading(true);
-          setAuthError("");
-          try {
-            const response = await postAuth("auth/register/verify/", { challenge_id: challengeId, otp: otp.trim() });
             await applyAuthPayload(response, { dispatch, setAccountRole, setAuthUser, setAuthToken });
           } catch (error) {
-            const message = error instanceof Error ? error.message : "OTP verification failed";
+            const message = error instanceof Error ? error.message : "Account creation failed";
             setAuthError(message);
             throw error;
           } finally {
@@ -1245,12 +997,11 @@ async function hydrateRentalPlatformSession(): Promise<{ state: RentalPlatformSt
       return { state: await fetchRentalPlatformState(API_BASE_URL, token), accountRole: authUser.role, authToken: token, authUser };
     } catch {
       await AsyncStorage.multiRemove([API_TOKEN_STORAGE_KEY, ACCOUNT_ROLE_STORAGE_KEY]);
-      // Local seed data keeps the mobile app usable when the API is offline.
+      return { state: createEmptyRentalPlatformState(), accountRole: defaultAccountRole, authToken: null, authUser: null };
     }
   }
 
-  const value = await AsyncStorage.getItem(STORAGE_KEY);
-  return { state: value ? (JSON.parse(value) as RentalPlatformState) : null, accountRole: savedRole ?? defaultAccountRole, authToken: null, authUser: null };
+  return { state: createEmptyRentalPlatformState(), accountRole: savedRole ?? defaultAccountRole, authToken: null, authUser: null };
 }
 
 async function fetchRentalPlatformState(baseUrl: string, token: string | null): Promise<RentalPlatformState> {
@@ -1258,12 +1009,8 @@ async function fetchRentalPlatformState(baseUrl: string, token: string | null): 
 
   if (!token) {
     return {
-      ...initialState,
+      ...createEmptyRentalPlatformState(),
       properties: properties.results.map(mapApiProperty),
-      liveEvents: [
-        { id: "event-api-public-sync", title: "Public listings synced", meta: `${properties.results.length} listings loaded`, status: "Now", tone: "success" },
-        ...initialState.liveEvents,
-      ],
     };
   }
 
@@ -1278,7 +1025,7 @@ async function fetchRentalPlatformState(baseUrl: string, token: string | null): 
   ]);
 
   return {
-    ...initialState,
+    ...createEmptyRentalPlatformState(),
     properties: properties.results.map(mapApiProperty),
     payments: payments.results.map(mapApiPayment),
     maintenance: maintenance.results.map(mapApiMaintenance),
@@ -1287,10 +1034,6 @@ async function fetchRentalPlatformState(baseUrl: string, token: string | null): 
     applications: applications.results.map(mapApiApplication),
     viewings: viewings.results.map(mapApiViewing),
     conversations: conversations.results.map(mapApiConversation),
-    liveEvents: [
-      { id: "event-api-sync", title: "Rentals API synced", meta: `${properties.results.length} listings loaded`, status: "Now", tone: "success" },
-      ...initialState.liveEvents,
-    ],
   };
 }
 
@@ -1477,7 +1220,7 @@ function mapApiProperty(item: any): Property {
     petFriendly: Boolean(item.pet_friendly),
     verified: Boolean(item.verified),
     description: item.description,
-    photos: item.photos?.length ? item.photos.map(resolveMediaUrl) : ["Property photo"],
+    photos: item.photos?.length ? item.photos.map(resolveMediaUrl).filter(Boolean) : [],
     listingViews: Number(item.listing_views) || 0,
     savedCount: Number(item.saved_count) || 0,
     applicationsCount: Number(item.applications_count) || 0,

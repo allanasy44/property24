@@ -4,7 +4,7 @@ Mobile-first React Native rental platform for Zimbabwean property discovery, app
 
 ## Stack
 
-- Expo 57
+- Expo SDK 54
 - Expo Router
 - TypeScript
 - React Native
@@ -32,10 +32,10 @@ npm install
 npm run start
 ```
 
-To hydrate the mobile app from Django instead of the local seed store:
+To hydrate the mobile app from Django:
 
 ```bash
-EXPO_PUBLIC_API_URL=http://127.0.0.1:8000/api npm run web
+EXPO_PUBLIC_API_URL=http://127.0.0.1:8011/api npm run web
 ```
 
 For Google sign-in, set `EXPO_PUBLIC_GOOGLE_CLIENT_ID` for web and `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` / `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` for native builds.
@@ -47,8 +47,7 @@ cd backend
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 python3 manage.py migrate
-python3 manage.py seed_initial_data
-python3 manage.py runserver 0.0.0.0:8000
+python3 manage.py runserver 0.0.0.0:8011
 ```
 
 Local admin login:
@@ -60,7 +59,6 @@ Or from the project root:
 
 ```bash
 npm run backend:migrate
-npm run backend:seed
 npm run backend
 ```
 
@@ -75,7 +73,7 @@ To customize secrets or service addresses, copy `backend/.env.example` to `backe
 
 ## Django API
 
-The backend exposes JSON endpoints under `http://localhost:8000/api/`.
+The local npm backend exposes JSON endpoints under `http://localhost:8011/api/`; Docker exposes them under `http://localhost:8010/api/`.
 
 - `GET /api/properties/` with filters for `city`, `suburb`, `rent_min`, `rent_max`, `bedrooms_min`, `type`, and `verified_only`
 - `POST /api/auth/login/`, `POST /api/auth/refresh/`, and `GET /api/auth/me/` for JWT authentication
@@ -103,5 +101,5 @@ python3 manage.py makemigrations --check --dry-run
 - When `OBJECT_STORAGE_PROVIDER=minio`, Django file fields use the MinIO bucket configured in `backend/.env`.
 - Google sign-in must send a verified Google ID token to the backend. Use `EXPO_PUBLIC_GOOGLE_CLIENT_ID` on the frontend, and put the same client ID in backend `GOOGLE_CLIENT_IDS`.
 - `GET /api/health/` reports database, object storage, AI provider, and map provider status.
-- The mobile data layer includes local seed state for offline use; the Django API provides the production backend shape.
+- The mobile data layer hydrates from the Django API and does not inject demo listings, payments, leases, or conversations.
 - Payment provider callbacks for EcoCash, ZIPIT, bank transfer reconciliation, and cards are still modeled as recorded payment events; production provider integrations should be added behind those endpoints before launch.

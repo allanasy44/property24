@@ -15,13 +15,13 @@ const publicRoles: PublicAccountRole[] = ["tenant", "landlord", "agent"];
 const introLetters = "PROPERTY24".split("");
 
 const verificationByRole: Record<PublicAccountRole, string[]> = {
-  tenant: ["Email OTP", "National ID", "Selfie match"],
-  landlord: ["Email OTP", "National ID", "Selfie match", "Ownership proof"],
-  agent: ["Email OTP", "National ID", "Agency registration", "Agency contacts"],
+  tenant: ["National ID", "Selfie match", "Phone check"],
+  landlord: ["National ID", "Selfie match", "Ownership proof"],
+  agent: ["National ID", "Agency registration", "Agency contacts"],
 };
 
 export function AuthGate({ children }: AuthGateProps) {
-  const { ready, authUser, authToken, authError, authLoading, signIn, registerAccount, verifyRegistrationOtp } = useRentalPlatform();
+  const { ready, authUser, authToken, authError, authLoading, signIn, registerAccount } = useRentalPlatform();
   const { width } = useWindowDimensions();
   const compact = width < 680;
   const [mode, setMode] = useState<AuthMode>("signin");
@@ -30,10 +30,6 @@ export function AuthGate({ children }: AuthGateProps) {
   const [identifier, setIdentifier] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpChallengeId, setOtpChallengeId] = useState("");
-  const [otpDestination, setOtpDestination] = useState("");
-  const [otpHint, setOtpHint] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [localError, setLocalError] = useState("");
   const [introVisible, setIntroVisible] = useState(false);
@@ -53,11 +49,10 @@ export function AuthGate({ children }: AuthGateProps) {
 
   const canSubmit = useMemo(() => {
     if (authLoading) return false;
-    if (otpChallengeId) return otp.trim().length >= 4;
     if (!password.trim()) return false;
     if (mode === "signin") return Boolean(identifier.trim());
     return Boolean(name.trim() && identifier.trim() && phone.trim());
-  }, [authLoading, identifier, mode, name, otp, otpChallengeId, password, phone]);
+  }, [authLoading, identifier, mode, name, password, phone]);
 
   if (!ready) {
     return (
@@ -82,20 +77,11 @@ export function AuthGate({ children }: AuthGateProps) {
     if (!canSubmit) return;
 
     try {
-      if (otpChallengeId) {
-        await verifyRegistrationOtp(otpChallengeId, otp);
-        return;
-      }
       if (mode === "signin") {
         await signIn({ username: identifier, password });
         return;
       }
-      const challenge = await registerAccount({ accountType, name, email: identifier, phone, password });
-      setOtpChallengeId(challenge.challengeId);
-      setOtpDestination(challenge.destination || challenge.email);
-      setOtpHint(challenge.message || "OTP sent to your account email address.");
-      setOtp("");
-      setSubmitted(false);
+      await registerAccount({ accountType, name, email: identifier, phone, password });
     } catch {
       // The provider exposes the displayable authError.
     }
@@ -109,12 +95,12 @@ export function AuthGate({ children }: AuthGateProps) {
           <View style={[styles.formPanel, compact && styles.formPanelCompact]}>
             <View style={styles.authHeader}>
               <Text style={[styles.brand, compact && styles.brandCompact]}>PROPERTY24</Text>
-              <Text style={[styles.headline, compact && styles.headlineCompact]}>{otpChallengeId ? "Verify OTP" : mode === "signin" ? "Sign In" : "Create Account"}</Text>
+              <Text style={[styles.headline, compact && styles.headlineCompact]}>{mode === "signin" ? "Sign In" : "Create Account"}</Text>
               <Text style={[styles.subhead, compact && styles.subheadCompact]}>
-                {otpChallengeId ? `Enter the OTP sent to ${otpDestination || "your email"}.` : mode === "signin" ? "Continue with your role-based rental account." : `${roleLabel(accountType)} access starts with account verification.`}
+                {mode === "signin" ? "Continue with your role-based rental account." : `${roleLabel(accountType)} access starts with account verification.`}
               </Text>
             </View>
-            {!otpChallengeId && mode === "register" ? (
+            {mode === "register" ? (
               <View style={[styles.roleGrid, compact && styles.roleGridCompact]}>
                 {publicRoles.map((role) => (
                   <Pressable key={role} onPress={() => setAccountType(role)} style={[styles.roleCard, compact && styles.roleCardCompact, accountType === role && styles.roleCardActive]}>
@@ -126,29 +112,20 @@ export function AuthGate({ children }: AuthGateProps) {
             ) : null}
 
             <View style={styles.form}>
-              {otpChallengeId ? (
-                <>
-                  <Field compact={compact} icon="keypad-outline" placeholder="Enter OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" />
-                  {otpHint ? <Text style={styles.otpHint}>{otpHint}</Text> : null}
-                </>
-              ) : (
-                <>
-                  {mode === "register" ? (
-                    <Field compact={compact} icon="person-outline" placeholder="Full name" value={name} onChangeText={setName} autoCapitalize="words" />
-                  ) : null}
-                  <Field
-                    compact={compact}
-                    icon="mail-outline"
-                    placeholder={mode === "signin" ? "Email, username, or phone" : "Email address for OTP"}
-                    value={identifier}
-                    onChangeText={setIdentifier}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                  />
-                  {mode === "register" ? <Field compact={compact} icon="call-outline" placeholder="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" /> : null}
-                  <Field compact={compact} icon="lock-closed-outline" placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
-                </>
-              )}
+              {mode === "register" ? (
+                <Field compact={compact} icon="person-outline" placeholder="Full name" value={name} onChangeText={setName} autoCapitalize="words" />
+              ) : null}
+              <Field
+                compact={compact}
+                icon="mail-outline"
+                placeholder={mode === "signin" ? "Email, username, or phone" : "Email address"}
+                value={identifier}
+                onChangeText={setIdentifier}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+              {mode === "register" ? <Field compact={compact} icon="call-outline" placeholder="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" /> : null}
+              <Field compact={compact} icon="lock-closed-outline" placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
             </View>
 
             {authError || localError ? <Text style={styles.error}>{authError || localError}</Text> : null}
@@ -158,24 +135,20 @@ export function AuthGate({ children }: AuthGateProps) {
               {authLoading ? (
                 <ActivityIndicator color={colors.accentText} />
               ) : (
-                <Text style={styles.submitText}>{otpChallengeId ? "Verify Account" : mode === "signin" ? "Sign In" : `Create ${roleLabel(accountType)} Account`}</Text>
+                <Text style={styles.submitText}>{mode === "signin" ? "Sign In" : `Create ${roleLabel(accountType)} Account`}</Text>
               )}
             </Pressable>
 
             <Pressable
               onPress={() => {
-                setOtpChallengeId("");
-                setOtp("");
-                setOtpDestination("");
-                setOtpHint("");
                 setSubmitted(false);
                 setLocalError("");
-                if (!otpChallengeId) setMode(mode === "signin" ? "register" : "signin");
+                setMode(mode === "signin" ? "register" : "signin");
               }}
               style={styles.switchPrompt}
             >
-              <Text style={styles.switchMuted}>{otpChallengeId ? "Wrong details?" : mode === "signin" ? "New to Property24?" : "Already have an account?"}</Text>
-              <Text style={styles.switchAction}>{otpChallengeId ? " Start again." : mode === "signin" ? " Create an account." : " Sign in."}</Text>
+              <Text style={styles.switchMuted}>{mode === "signin" ? "New to Property24?" : "Already have an account?"}</Text>
+              <Text style={styles.switchAction}>{mode === "signin" ? " Create an account." : " Sign in."}</Text>
             </Pressable>
 
           </View>

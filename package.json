@@ -8,7 +8,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "backend": "PYTHON=\"$PWD/backend/.venv/bin/python\"; [ -x \"$PYTHON\" ] || PYTHON=python3; cd backend && \"$PYTHON\" manage.py runserver 0.0.0.0:8000",
+    "backend": "PYTHON=\"$PWD/backend/.venv/bin/python\"; [ -x \"$PYTHON\" ] || PYTHON=python3; cd backend && \"$PYTHON\" manage.py runserver 0.0.0.0:8011",
     "backend:migrate": "PYTHON=\"$PWD/backend/.venv/bin/python\"; [ -x \"$PYTHON\" ] || PYTHON=python3; cd backend && \"$PYTHON\" manage.py migrate",
     "backend:seed": "PYTHON=\"$PWD/backend/.venv/bin/python\"; [ -x \"$PYTHON\" ] || PYTHON=python3; cd backend && \"$PYTHON\" manage.py seed_initial_data",
     "backend:test": "PYTHON=\"$PWD/backend/.venv/bin/python\"; [ -x \"$PYTHON\" ] || PYTHON=python3; cd backend && \"$PYTHON\" manage.py test",
