@@ -1,17 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AccessGuard } from "../components/AccessGuard";
 import { Screen } from "../components/Screen";
 import { SectionHeader } from "../components/SectionHeader";
 import { verificationChecks } from "../constants/content";
 import { colors, radius, shadows, spacing, typography } from "../constants/theme";
-import { AccountRole, useRentalPlatform } from "../state/rentalPlatform";
+import { AccountMediaFile, AccountRole, useRentalPlatform } from "../state/rentalPlatform";
 
 export default function VerificationScreen() {
-  const { state, account, authError, authLoading, reviewVerification, hasCapability } = useRentalPlatform();
+  const { state, account, authUser, authError, authLoading, reviewVerification, hasCapability, submitVerification, extractVerificationId } = useRentalPlatform();
   const isAdmin = hasCapability("verify_users");
   const [notice, setNotice] = useState("");
+  const [documentNumber, setDocumentNumber] = useState("");
+  const [idFrontFile, setIdFrontFile] = useState<AccountMediaFile | undefined>();
+  const [idBackFile, setIdBackFile] = useState<AccountMediaFile | undefined>();
+  const [ownershipFile, setOwnershipFile] = useState<AccountMediaFile | undefined>();
+  const [agencyName, setAgencyName] = useState("");
+  const [contactDetails, setContactDetails] = useState("");
 
   const review = async (id: string, status: "approved" | "rejected") => {
     setNotice("");
@@ -20,6 +27,84 @@ export default function VerificationScreen() {
       setNotice(`Verification ${status}.`);
     } catch {
       // The provider exposes authError from the account service.
+    }
+  };
+
+  const captureIdentityImage = async (side: "front" | "back") => {
+    setNotice("");
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setNotice("Camera permission is required.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.9, allowsEditing: false });
+    const asset = result.assets?.[0];
+    if (result.canceled || !asset) return;
+    const file = imageAssetToUpload(asset, `id-${side}`);
+    if (side === "front") setIdFrontFile(file);
+    else setIdBackFile(file);
+  };
+
+  const chooseOwnershipEvidence = async () => {
+    setNotice("");
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setNotice("Photo library permission is required.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.9, allowsEditing: false });
+    const asset = result.assets?.[0];
+    if (result.canceled || !asset) return;
+    setOwnershipFile(imageAssetToUpload(asset, "ownership-authority"));
+  };
+
+  const submitFullVerification = async () => {
+    setNotice("");
+    if (!authUser) return;
+    if (!idFrontFile || !idBackFile) {
+      setNotice("Capture the front and back of your ID first.");
+      return;
+    }
+    if (!documentNumber.trim()) {
+      setNotice("Enter your document number.");
+      return;
+    }
+    if (authUser.role === "landlord" && !ownershipFile) {
+      setNotice("Upload property ownership or authority evidence.");
+      return;
+    }
+    if (authUser.role === "landlord" && !agencyName.trim()) {
+      setNotice("Enter the estate or company name.");
+      return;
+    }
+    try {
+      const extraction = await extractVerificationId({ idFrontFile, idBackFile });
+      await submitVerification({
+        role: authUser.role,
+        name: authUser.name,
+        phone: authUser.phone,
+        privacy_notice_accepted: true,
+        document_type: "identity_document",
+        declaration_accepted: true,
+        national_id_number: documentNumber.trim(),
+        extracted_national_id_number: extraction.extractedNationalIdNumber,
+        phone_verified: authUser.phoneVerified,
+        email_verified: authUser.emailVerified,
+        selfie_uploaded: false,
+        identity_confirmed: true,
+        idFrontFile,
+        idBackFile,
+        ownershipOrAuthorizationFile: ownershipFile,
+        agency_name: agencyName.trim(),
+        contact_details: contactDetails.trim(),
+      });
+      setNotice("Verification submitted for review.");
+      setDocumentNumber("");
+      setIdFrontFile(undefined);
+      setIdBackFile(undefined);
+      setOwnershipFile(undefined);
+    } catch {
+      // authError is shown below.
     }
   };
 
@@ -34,7 +119,18 @@ export default function VerificationScreen() {
 
           {!isAdmin ? (
             <View style={styles.formCard}>
-              <SectionHeader title={`${roleLabel(account.accountType)} verification`} subtitle="Verification is completed immediately after sign-in using phone OTP, ID front/back capture, extracted ID confirmation, and liveness." />
+              <SectionHeader title={account.accountType === "landlord" ? "Become a Verified Landlord" : `${roleLabel(account.accountType)} verification`} subtitle="Submit identity evidence for review. Basic account access stays available while this is reviewed." />
+              <View style={styles.actionGrid}>
+                <EvidenceButton label="ID front" done={Boolean(idFrontFile)} icon="card-outline" onPress={() => captureIdentityImage("front")} />
+                <EvidenceButton label="ID back" done={Boolean(idBackFile)} icon="albums-outline" onPress={() => captureIdentityImage("back")} />
+                {account.accountType === "landlord" ? <EvidenceButton label="Ownership/authority" done={Boolean(ownershipFile)} icon="document-attach-outline" onPress={chooseOwnershipEvidence} /> : null}
+              </View>
+              <TextInput placeholder="Document number" placeholderTextColor={colors.textMuted} value={documentNumber} onChangeText={setDocumentNumber} style={styles.input} />
+              {account.accountType === "landlord" ? <TextInput placeholder="Estate or company name" placeholderTextColor={colors.textMuted} value={agencyName} onChangeText={setAgencyName} style={styles.input} /> : null}
+              {account.accountType === "landlord" ? <TextInput placeholder="Public contact or branch details" placeholderTextColor={colors.textMuted} value={contactDetails} onChangeText={setContactDetails} style={styles.input} /> : null}
+              <Pressable onPress={submitFullVerification} disabled={authLoading || authUser?.verified} style={[styles.button, (authLoading || authUser?.verified) && styles.buttonDisabled]}>
+                {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Text style={styles.buttonText}>{authUser?.verified ? "Already verified" : "Submit for review"}</Text>}
+              </Pressable>
             </View>
           ) : null}
 
@@ -89,6 +185,26 @@ export default function VerificationScreen() {
   );
 }
 
+function EvidenceButton({ done, icon, label, onPress }: { done: boolean; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.evidenceButton, done && styles.evidenceButtonDone]}>
+      <Ionicons name={done ? "checkmark-circle" : icon} size={18} color={done ? colors.success : colors.accent} />
+      <Text style={styles.evidenceText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function imageAssetToUpload(asset: ImagePicker.ImagePickerAsset, label: string): AccountMediaFile {
+  const cleanUri = asset.uri.split("?")[0] || "";
+  const extension = cleanUri.split(".").pop()?.toLowerCase() || "jpg";
+  const safeExtension = extension.length > 5 ? "jpg" : extension;
+  return {
+    uri: asset.uri,
+    name: asset.fileName || `${label}-${Date.now()}.${safeExtension}`,
+    type: asset.mimeType || `image/${safeExtension === "jpg" ? "jpeg" : safeExtension}`,
+  };
+}
+
 function Toggle({ label, value, onPress }: { label: string; value: boolean; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={[styles.toggle, value && styles.toggleActive]}>
@@ -109,6 +225,10 @@ const styles = StyleSheet.create({
   kicker: { color: colors.accent, ...typography.label },
   title: { color: colors.text, fontSize: 26, lineHeight: 32, ...typography.display },
   formCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: spacing.sm, ...shadows.soft },
+  actionGrid: { gap: spacing.sm },
+  evidenceButton: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, paddingHorizontal: 12 },
+  evidenceButtonDone: { borderColor: colors.success, backgroundColor: colors.successSoft },
+  evidenceText: { color: colors.text, ...typography.label },
   input: { backgroundColor: colors.background, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, color: colors.text, paddingHorizontal: 12, paddingVertical: 12, ...typography.body },
   textArea: { minHeight: 84, textAlignVertical: "top" },
   toggle: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.background, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12 },

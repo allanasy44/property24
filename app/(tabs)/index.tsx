@@ -25,7 +25,7 @@ export default function HomeScreen() {
     return <TenantHome state={state} visibleActions={visibleActions} userName={authUser?.name} verified={Boolean(authUser?.verified)} />;
   }
 
-  return <RoleDashboard role={account.accountType} state={state} stats={stats} visibleActions={visibleActions} userName={authUser?.name} verified={Boolean(authUser?.verified)} />;
+  return <RoleDashboard role={account.accountType} state={state} stats={stats} visibleActions={visibleActions} userName={authUser?.name} profileStatus={authUser?.profileStatus} verified={Boolean(authUser?.verified)} />;
 }
 
 type DashboardMetric = {
@@ -42,8 +42,9 @@ type DashboardPanel = {
   empty: string;
 };
 
-function RoleDashboard({ role, state, stats, visibleActions, userName, verified }: { role: Exclude<AccountRole, "tenant">; state: RentalPlatformState; stats: ReturnType<typeof useRentalPlatformStats>; visibleActions: typeof quickActions; userName?: string; verified: boolean }) {
+function RoleDashboard({ role, state, stats, visibleActions, userName, profileStatus, verified }: { role: Exclude<AccountRole, "tenant">; state: RentalPlatformState; stats: ReturnType<typeof useRentalPlatformStats>; visibleActions: typeof quickActions; userName?: string; profileStatus?: string; verified: boolean }) {
   const dashboard = getRoleDashboard(role, state, stats);
+  const statusText = verified ? "Verified account" : profileStatus === "account_ready" ? "Basic account" : "Verification pending";
 
   return (
     <Screen>
@@ -51,7 +52,7 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, verified 
         <View style={styles.dashboardHero}>
           <Text style={styles.kicker}>{roleLabel(role)} dashboard</Text>
           <Text style={styles.dashboardTitle}>{userName ? firstName(userName) : roleLabel(role)}</Text>
-          <Text style={styles.dashboardSubcopy}>{verified ? "Verified account" : "Verification pending"}</Text>
+          <Text style={styles.dashboardSubcopy}>{statusText}</Text>
         </View>
 
         <View style={styles.dashboardGrid}>

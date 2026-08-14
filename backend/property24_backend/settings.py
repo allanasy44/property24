@@ -145,9 +145,14 @@ JWT_REFRESH_TOKEN_SECONDS = env_int("JWT_REFRESH_TOKEN_SECONDS", 60 * 60 * 24 * 
 
 REGISTRATION_OTP_TTL_MINUTES = env_int("REGISTRATION_OTP_TTL_MINUTES", 10)
 OTP_DELIVERY_CHANNEL = env_str("OTP_DELIVERY_CHANNEL", "email").lower()
+OTP_SMS_PROVIDER = env_str("OTP_SMS_PROVIDER", "twilio").lower()
 OTP_SMS_WEBHOOK_URL = env_str("OTP_SMS_WEBHOOK_URL", "")
 OTP_SMS_API_KEY = env_str("OTP_SMS_API_KEY", "")
 OTP_SMS_SENDER = env_str("OTP_SMS_SENDER", "Property24")
+TWILIO_ACCOUNT_SID = env_str("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = env_str("TWILIO_AUTH_TOKEN", "")
+TWILIO_FROM_NUMBER = env_str("TWILIO_FROM_NUMBER", "")
+TWILIO_MESSAGING_SERVICE_SID = env_str("TWILIO_MESSAGING_SERVICE_SID", "")
 
 EMAIL_BACKEND = env_str("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend" if DEBUG else "django.core.mail.backends.smtp.EmailBackend")
 EMAIL_HOST = env_str("EMAIL_HOST", "smtp.gmail.com")

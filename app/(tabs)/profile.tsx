@@ -42,7 +42,7 @@ export default function ProfileScreen() {
   const selectedProfilePicture = profilePictureDraft.trim();
   const selectedCoverPhoto = coverPhotoDraft.trim();
   const hiddenCount = account.hiddenSections.length;
-  const verificationLabel = authUser?.verified ? "Verified" : account.onboardingRequirements.length ? `${account.onboardingRequirements.length} pending` : "Ready";
+  const verificationLabel = authUser?.verified ? "Verified" : authUser?.accountOnboardingComplete ? "Basic account" : account.onboardingRequirements.length ? `${account.onboardingRequirements.length} pending` : "Ready";
 
   const saveProfileMedia = async () => {
     setNotice("");

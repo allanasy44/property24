@@ -7,6 +7,7 @@ from .models import (
     Commission,
     Conversation,
     DisputeReport,
+    EmailVerificationOTP,
     LeaseAgreement,
     MaintenanceRequest,
     Message,
@@ -52,10 +53,19 @@ class PropertyAdmin(admin.ModelAdmin):
 
 @admin.register(VerificationRequest)
 class VerificationRequestAdmin(admin.ModelAdmin):
-    list_display = ("user", "role", "status", "phone_verified", "document_type", "country_of_residence", "submitted_at", "reviewed_by")
-    list_filter = ("role", "status", "phone_verified", "document_type", "privacy_notice_accepted", "declaration_accepted", "politically_exposed_person")
+    list_display = ("user", "role", "status", "email_verified", "document_type", "verification_provider", "verification_score", "country_of_residence", "submitted_at", "reviewed_by")
+    list_filter = ("role", "status", "email_verified", "document_type", "verification_provider", "privacy_notice_accepted", "declaration_accepted", "politically_exposed_person")
     search_fields = ("user__username", "user__full_name", "national_id_number", "document_issue_country", "residential_address", "agency_name")
+    readonly_fields = ("id_number_hash", "provider_reference", "verification_provider", "verification_method", "verification_score", "document_retention_until")
 
+
+
+@admin.register(EmailVerificationOTP)
+class EmailVerificationOTPAdmin(admin.ModelAdmin):
+    list_display = ("user", "email", "status", "attempts", "expires_at", "verified_at", "created_at")
+    list_filter = ("status",)
+    search_fields = ("user__username", "user__full_name", "email")
+    readonly_fields = ("code_hash", "created_at", "updated_at", "verified_at")
 
 
 @admin.register(PhoneVerificationOTP)

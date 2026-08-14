@@ -19,16 +19,6 @@ const publicRoles: PublicAccountRole[] = ["tenant", "landlord"];
 
 const introLetters = "PROPERTY24".split("");
 
-type IdDocumentType = "national_id" | "foreign_id" | "passport" | "drivers_license";
-
-const verificationCountries = ["Zimbabwe", "South Africa", "Botswana", "Zambia", "Mozambique", "Other"];
-const idDocumentTypes: { value: IdDocumentType; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { value: "national_id", label: "Zimbabwe National ID", icon: "card-outline" },
-  { value: "foreign_id", label: "Foreign national ID", icon: "id-card-outline" },
-  { value: "passport", label: "Passport", icon: "book-outline" },
-  { value: "drivers_license", label: "Driver's licence", icon: "car-outline" },
-];
-
 const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID?.trim();
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
 const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim();
@@ -39,14 +29,13 @@ const passwordMaxLength = 128;
 const passwordControlCharPattern = /[\x00-\x1F\x7F]/;
 
 export function AuthGate({ children }: AuthGateProps) {
-  const { ready, authUser, authToken, authError, authLoading, account, signIn, registerAccount, googleSignIn, submitVerification, sendVerificationPhoneOtp, verifyVerificationPhoneOtp, extractVerificationId } = useRentalPlatform();
+  const { ready, authUser, authToken, authError, authLoading, account, signIn, registerAccount, googleSignIn, sendVerificationEmailOtp, verifyVerificationEmailOtp, sendVerificationPhoneOtp, verifyVerificationPhoneOtp } = useRentalPlatform();
   const { width } = useWindowDimensions();
   const compact = width < 680;
   const [mode, setMode] = useState<AuthMode>("signin");
   const [accountType, setAccountType] = useState<PublicAccountRole>("tenant");
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -71,7 +60,6 @@ export function AuthGate({ children }: AuthGateProps) {
   const clearAuthForm = () => {
     setName("");
     setIdentifier("");
-    setPhone("");
     setPassword("");
     setConfirmPassword("");
     setShowPassword(false);
@@ -123,7 +111,7 @@ export function AuthGate({ children }: AuthGateProps) {
   const hasRequiredFields = useMemo(() => {
     if (mode === "signin") return Boolean(identifier.trim() && password.length > 0);
     return Boolean(identifier.trim() && password.length > 0 && confirmPassword.length > 0);
-  }, [confirmPassword, identifier, mode, name, password, phone]);
+  }, [confirmPassword, identifier, mode, password]);
 
   const canSubmit = useMemo(() => {
     if (authLoading) return false;
@@ -140,11 +128,11 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   if (authUser && authToken) {
-    const verificationLocked = ["tenant", "landlord", "agent"].includes(authUser.role) && !authUser.verified;
+    const verificationLocked = ["tenant", "landlord", "agent"].includes(authUser.role) && !authUser.accountOnboardingComplete;
     return (
       <>
         {verificationLocked ? (
-          <VerificationGate role={authUser.role} accountName={authUser.name} accountEmail={authUser.email} authError={authError} authLoading={authLoading} submitVerification={submitVerification} sendPhoneOtp={sendVerificationPhoneOtp} verifyPhoneOtp={verifyVerificationPhoneOtp} extractId={extractVerificationId} />
+          <AccountOnboardingGate accountType={authUser.role} accountEmail={authUser.email} accountPhone={authUser.phone} emailVerified={authUser.emailVerified} phoneVerified={authUser.phoneVerified} authError={authError} authLoading={authLoading} sendEmailOtp={sendVerificationEmailOtp} verifyEmailOtp={verifyVerificationEmailOtp} sendPhoneOtp={sendVerificationPhoneOtp} verifyPhoneOtp={verifyVerificationPhoneOtp} />
         ) : children}
         {introVisible ? <PostLoginIntro onDone={() => setIntroVisible(false)} /> : null}
       </>
@@ -317,401 +305,161 @@ export function AuthGate({ children }: AuthGateProps) {
 }
 
 
-function VerificationGate({
-  role,
-  accountName,
+function AccountOnboardingGate({
+  accountType,
   accountEmail,
+  accountPhone,
+  emailVerified: initialEmailVerified,
+  phoneVerified: initialPhoneVerified,
   authError,
   authLoading,
-  submitVerification,
+  sendEmailOtp,
+  verifyEmailOtp,
   sendPhoneOtp,
   verifyPhoneOtp,
-  extractId,
 }: {
-  role: AccountRole;
-  accountName: string;
+  accountType: AccountRole;
   accountEmail: string;
+  accountPhone: string;
+  emailVerified: boolean;
+  phoneVerified: boolean;
   authError: string;
   authLoading: boolean;
-  submitVerification: ReturnType<typeof useRentalPlatform>["submitVerification"];
+  sendEmailOtp: ReturnType<typeof useRentalPlatform>["sendVerificationEmailOtp"];
+  verifyEmailOtp: ReturnType<typeof useRentalPlatform>["verifyVerificationEmailOtp"];
   sendPhoneOtp: ReturnType<typeof useRentalPlatform>["sendVerificationPhoneOtp"];
   verifyPhoneOtp: ReturnType<typeof useRentalPlatform>["verifyVerificationPhoneOtp"];
-  extractId: ReturnType<typeof useRentalPlatform>["extractVerificationId"];
 }) {
-  const [phone, setPhone] = useState("");
-  const [otpChallengeId, setOtpChallengeId] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [otpSecondsLeft, setOtpSecondsLeft] = useState(0);
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [countryOfResidence, setCountryOfResidence] = useState("Zimbabwe");
-  const [otherResidenceCountry, setOtherResidenceCountry] = useState("");
-  const [documentIssueCountry, setDocumentIssueCountry] = useState("Zimbabwe");
-  const [otherDocumentCountry, setOtherDocumentCountry] = useState("");
-  const [documentType, setDocumentType] = useState<IdDocumentType>("national_id");
-  const [idFrontFile, setIdFrontFile] = useState<AccountMediaFile | undefined>();
-  const [idBackFile, setIdBackFile] = useState<AccountMediaFile | undefined>();
-  const [extractedNationalId, setExtractedNationalId] = useState("");
-  const [confirmedNationalId, setConfirmedNationalId] = useState("");
-  const [identityConfirmed, setIdentityConfirmed] = useState(false);
-  const [agencyName, setAgencyName] = useState("");
-  const [agencyRegistration, setAgencyRegistration] = useState("");
-  const [contactDetails, setContactDetails] = useState("");
+  const [emailChallengeId, setEmailChallengeId] = useState("");
+  const [phoneChallengeId, setPhoneChallengeId] = useState("");
+  const [emailOtp, setEmailOtp] = useState("");
+  const [phoneOtp, setPhoneOtp] = useState("");
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [verificationEmail, setVerificationEmail] = useState(accountEmail);
+  const [phone, setPhone] = useState(accountPhone);
+  const [emailVerified, setEmailVerified] = useState(initialEmailVerified);
+  const [phoneVerified, setPhoneVerified] = useState(initialPhoneVerified);
+  const [currentStage, setCurrentStage] = useState(initialEmailVerified ? 1 : 0);
   const [notice, setNotice] = useState("");
   const [localError, setLocalError] = useState("");
-  const [currentStage, setCurrentStage] = useState(0);
 
-  const otpCountdown = `${Math.floor(otpSecondsLeft / 60)}:${String(otpSecondsLeft % 60).padStart(2, "0")}`;
-  const accountDisplayName = displayAccountName(accountName, accountEmail);
-  const setupRequired = role === "landlord" || role === "agent";
-  const residenceCountryValue = countryOfResidence === "Other" ? otherResidenceCountry.trim() : countryOfResidence;
-  const documentCountryValue = documentIssueCountry === "Other" ? otherDocumentCountry.trim() : documentIssueCountry;
-  const selectedDocument = idDocumentTypes.find((item) => item.value === documentType) || idDocumentTypes[0];
-  const isZimbabweNationalId = isZimbabweCountry(documentCountryValue) && documentType === "national_id";
-  const requiresBack = isZimbabweNationalId;
-  const reviewStage = setupRequired ? 8 : 7;
+  const countdown = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
+  const cleanEmail = verificationEmail.trim();
+  const cleanPhone = phone.trim();
+  const accountLabel = accountType === "landlord" ? "Landlord profile" : accountType === "tenant" ? "Tenant profile" : "Account";
 
   useEffect(() => {
-    if (!otpSecondsLeft) return undefined;
-    const timer = setInterval(() => setOtpSecondsLeft((value) => Math.max(0, value - 1)), 1000);
+    setEmailVerified(initialEmailVerified);
+    setPhoneVerified(initialPhoneVerified);
+    if (initialEmailVerified && !initialPhoneVerified) setCurrentStage(1);
+  }, [initialEmailVerified, initialPhoneVerified]);
+
+  useEffect(() => {
+    if (!secondsLeft) return undefined;
+    const timer = setInterval(() => setSecondsLeft((value) => Math.max(0, value - 1)), 1000);
     return () => clearInterval(timer);
-  }, [otpSecondsLeft]);
+  }, [secondsLeft]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return undefined;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (phoneVerified) {
-        setNotice("");
-        setLocalError("");
-        setCurrentStage((stage) => {
-          if (stage <= 2) return 2;
-          return Math.max(2, stage - 1);
-        });
-        return true;
-      }
-      if (currentStage > 0) {
-        setNotice("");
-        setLocalError("");
-        setCurrentStage((stage) => Math.max(0, stage - 1));
-        return true;
-      }
-      return false;
-    });
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => true);
     return () => subscription.remove();
-  }, [currentStage, phoneVerified]);
+  }, []);
 
-  const goBack = () => {
+  const requestEmailOtp = async () => {
     setNotice("");
     setLocalError("");
-    setCurrentStage((stage) => Math.max(phoneVerified ? 2 : 0, stage - 1));
-  };
-
-  const requestOtp = async () => {
-    setNotice("");
-    setLocalError("");
-    if (!phone.trim()) {
-      setLocalError("Enter your phone number.");
+    if (!isValidEmailAddress(cleanEmail)) {
+      setLocalError("Enter a valid email address.");
       return;
     }
     try {
-      const challenge = await sendPhoneOtp(phone);
-      setOtpChallengeId(challenge.challengeId);
-      setOtpSecondsLeft(challenge.expiresInSeconds || 30);
-      setNotice(challenge.message?.trim() ? challenge.message.trim() : "");
+      const challenge = await sendEmailOtp(cleanEmail);
+      setEmailChallengeId(challenge.challengeId);
+      setSecondsLeft(challenge.expiresInSeconds || 30);
+      setNotice(challenge.message || "OTP sent to your email.");
+    } catch {
+      // authError is shown below.
+    }
+  };
+
+  const confirmEmailOtp = async () => {
+    setNotice("");
+    setLocalError("");
+    if (!emailChallengeId || !emailOtp.trim()) {
+      setLocalError("Enter the email OTP.");
+      return;
+    }
+    try {
+      const result = await verifyEmailOtp(emailChallengeId, emailOtp);
+      setEmailVerified(result.emailVerified);
+      setEmailChallengeId("");
+      setEmailOtp("");
+      setSecondsLeft(0);
       setCurrentStage(1);
     } catch {
       // authError is shown below.
     }
   };
 
-  const confirmOtp = async () => {
+  const requestPhoneOtp = async () => {
     setNotice("");
     setLocalError("");
-    if (!otpChallengeId) {
-      setLocalError("Request an OTP first.");
-      return;
-    }
-    if (!otpCode.trim()) {
-      setLocalError("Enter the OTP.");
+    if (!isValidPhoneNumber(cleanPhone)) {
+      setLocalError("Enter a valid phone number with country code.");
       return;
     }
     try {
-      const result = await verifyPhoneOtp(otpChallengeId, otpCode);
+      const challenge = await sendPhoneOtp(cleanPhone);
+      setPhoneChallengeId(challenge.challengeId);
+      setSecondsLeft(challenge.expiresInSeconds || 30);
+      setNotice(challenge.message || "OTP sent to your phone.");
+    } catch {
+      // authError is shown below.
+    }
+  };
+
+  const confirmPhoneOtp = async () => {
+    setNotice("");
+    setLocalError("");
+    if (!phoneChallengeId || !phoneOtp.trim()) {
+      setLocalError("Enter the phone OTP.");
+      return;
+    }
+    try {
+      const result = await verifyPhoneOtp(phoneChallengeId, phoneOtp);
       setPhoneVerified(result.phoneVerified);
-      if (result.phone) setPhone(result.phone);
-      setOtpChallengeId("");
-      setOtpCode("");
-      setOtpSecondsLeft(0);
-      setNotice("");
-      setCurrentStage(2);
-    } catch {
-      // authError is shown below.
-    }
-  };
-
-  const continueDocumentSetup = () => {
-    setNotice("");
-    setLocalError("");
-    if (!residenceCountryValue) {
-      setLocalError("Enter your country of residence.");
-      return;
-    }
-    if (!documentCountryValue) {
-      setLocalError("Enter the country that issued your document.");
-      return;
-    }
-    if (!isZimbabweCountry(documentCountryValue) && documentType === "national_id") {
-      setDocumentType("foreign_id");
-    }
-    setIdFrontFile(undefined);
-    setIdBackFile(undefined);
-    setExtractedNationalId("");
-    setConfirmedNationalId("");
-    setIdentityConfirmed(false);
-    setCurrentStage(3);
-  };
-
-  const captureId = async (side: "front" | "back") => {
-    setNotice("");
-    setLocalError("");
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      setLocalError("Camera permission is required.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.9, allowsEditing: false });
-    const asset = result.assets?.[0];
-    if (result.canceled || !asset) return;
-    const file = imageAssetToVerificationUpload(asset, `id-${side}`);
-    if (side === "front") {
-      setIdFrontFile(file);
-      setCurrentStage(requiresBack ? 4 : 5);
-    } else {
-      setIdBackFile(file);
-      setCurrentStage(5);
-    }
-    setIdentityConfirmed(false);
-    setExtractedNationalId("");
-  };
-
-  const runExtraction = async () => {
-    setNotice("");
-    setLocalError("");
-    if (!idFrontFile || (requiresBack && !idBackFile)) {
-      setLocalError("Capture the required document sides.");
-      return;
-    }
-    if (!requiresBack) {
-      setCurrentStage(6);
-      return;
-    }
-    try {
-      const result = await extractId({ idFrontFile, idBackFile: idBackFile as AccountMediaFile, nationalIdHint: confirmedNationalId });
-      setExtractedNationalId(result.extractedNationalIdNumber);
-      setConfirmedNationalId(result.extractedNationalIdNumber || confirmedNationalId);
-      setIdentityConfirmed(false);
-      setCurrentStage(6);
-    } catch {
-      // authError is shown below.
-    }
-  };
-
-  const confirmIdentity = () => {
-    setNotice("");
-    setLocalError("");
-    const documentNumber = confirmedNationalId.trim();
-    if (!documentNumber) {
-      setLocalError(documentType === "passport" ? "Enter your passport number." : "Enter your ID number.");
-      return;
-    }
-    if (isZimbabweNationalId && !isValidZimbabweNationalId(documentNumber)) {
-      setLocalError("Zimbabwe national ID must match the local format and check letter. Example: 63123456C12.");
-      return;
-    }
-    if (!isZimbabweNationalId && !isValidForeignDocumentNumber(documentNumber)) {
-      setLocalError("Enter a valid document number using letters, numbers, spaces, hyphens, or slashes.");
-      return;
-    }
-    setIdentityConfirmed(true);
-    if (setupRequired) {
-      setCurrentStage(7);
-    } else {
-      submit(true);
-    }
-  };
-
-  const submit = async (identityAlreadyConfirmed = identityConfirmed) => {
-    setNotice("");
-    setLocalError("");
-    if (!phone.trim() || !phoneVerified) {
-      setLocalError("Complete OTP verification before continuing.");
-      return;
-    }
-    if (!residenceCountryValue || !documentCountryValue || !documentType) {
-      setCurrentStage(2);
-      setLocalError("Complete country and document selection.");
-      return;
-    }
-    if (!idFrontFile) {
-      setCurrentStage(3);
-      setLocalError("Capture the identity document.");
-      return;
-    }
-    if (requiresBack && !idBackFile) {
-      setCurrentStage(4);
-      setLocalError("Capture the back of the Zimbabwe national ID.");
-      return;
-    }
-    if (!confirmedNationalId.trim() || !identityAlreadyConfirmed) {
-      setCurrentStage(6);
-      setLocalError("Confirm your document number.");
-      return;
-    }
-    if (role === "landlord" && !agencyName.trim()) {
-      setCurrentStage(7);
-      setLocalError("Enter the estate or company name.");
-      return;
-    }
-    if (role === "agent" && (!agencyName.trim() || !agencyRegistration.trim() || !contactDetails.trim())) {
-      setCurrentStage(7);
-      setLocalError("Complete agency details.");
-      return;
-    }
-    try {
-      await submitVerification({
-        role,
-        name: accountDisplayName,
-        phone: phone.trim(),
-        country_of_residence: residenceCountryValue,
-        privacy_notice_accepted: true,
-        document_issue_country: documentCountryValue,
-        document_type: isZimbabweCountry(documentCountryValue) ? documentType : documentType === "national_id" ? "foreign_id" : documentType,
-        residential_address: "",
-        address_gps_confirmed: false,
-        proof_of_address_confirmed: false,
-        politically_exposed_person: false,
-        declaration_accepted: true,
-        national_id_number: confirmedNationalId.trim(),
-        extracted_national_id_number: extractedNationalId.trim(),
-        phone_verified: phoneVerified,
-        selfie_uploaded: false,
-        identity_confirmed: identityAlreadyConfirmed,
-        idFrontFile,
-        idBackFile,
-        agency_name: agencyName.trim(),
-        estate_agency_registration: agencyRegistration.trim(),
-        contact_details: contactDetails.trim(),
-      });
-      setNotice("");
-      setCurrentStage(reviewStage);
+      setPhoneChallengeId("");
+      setPhoneOtp("");
+      setSecondsLeft(0);
+      setNotice(`${accountLabel} created. Basic features are now available.`);
     } catch {
       // authError is shown below.
     }
   };
 
   const renderStage = () => {
-    if (currentStage === 0) {
+    if (!emailVerified && currentStage === 0) {
       return (
-        <VerificationScreenCard title="OTP verification" icon="phone-portrait-outline">
-          <Field compact icon="call-outline" placeholder="Phone number" value={phone} onChangeText={(value) => { setPhone(value); setPhoneVerified(false); setOtpChallengeId(""); setOtpSecondsLeft(0); }} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" maxLength={32} />
-          <Pressable onPress={requestOtp} disabled={authLoading || Boolean(otpSecondsLeft)} style={[styles.submitButton, (authLoading || Boolean(otpSecondsLeft)) && styles.submitButtonDisabled]}>
-            {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Text style={styles.submitText}>Send OTP</Text>}
-          </Pressable>
-        </VerificationScreenCard>
-      );
-    }
-
-    if (currentStage === 1) {
-      return (
-        <VerificationScreenCard title="Enter OTP" icon="keypad-outline">
-          <Text numberOfLines={1} style={styles.otpSentTo}>{phone}</Text>
-          <View style={styles.otpCountdownBox}><Text style={styles.otpCountdownText}>{otpCountdown}</Text></View>
-          <Field compact icon="keypad-outline" placeholder="Enter OTP" value={otpCode} onChangeText={setOtpCode} keyboardType="number-pad" maxLength={6} />
-          <Pressable onPress={confirmOtp} disabled={authLoading || phoneVerified} style={[styles.submitButton, (authLoading || phoneVerified) && styles.submitButtonDisabled]}>
-            {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Text style={styles.submitText}>Verify</Text>}
-          </Pressable>
-          <Pressable onPress={requestOtp} disabled={authLoading || Boolean(otpSecondsLeft)} style={[styles.stagePrimaryButton, (authLoading || Boolean(otpSecondsLeft)) && styles.stageButtonMuted]}>
-            <Text style={styles.stagePrimaryText}>{otpSecondsLeft ? "Resend after countdown" : "Resend OTP"}</Text>
-          </Pressable>
-        </VerificationScreenCard>
-      );
-    }
-
-    if (currentStage === 2) {
-      return (
-        <VerificationScreenCard title="Document" icon="id-card-outline">
-          <Text style={styles.stageSubtitle}>Choose where you live and the identity document you will place in the camera.</Text>
-          <View style={styles.choiceStack}>
-            {verificationCountries.map((country) => <ChoiceRow key={country} label={country} icon="location-outline" active={countryOfResidence === country} onPress={() => setCountryOfResidence(country)} />)}
-          </View>
-          {countryOfResidence === "Other" ? <Field compact icon="earth-outline" placeholder="Country of residence" value={otherResidenceCountry} onChangeText={setOtherResidenceCountry} maxLength={80} /> : null}
-          <View style={styles.choiceStack}>
-            {verificationCountries.map((country) => <ChoiceRow key={country} label={country} icon="flag-outline" active={documentIssueCountry === country} onPress={() => { setDocumentIssueCountry(country); if (country !== "Zimbabwe" && documentType === "national_id") setDocumentType("foreign_id"); }} />)}
-          </View>
-          {documentIssueCountry === "Other" ? <Field compact icon="earth-outline" placeholder="Document issuing country" value={otherDocumentCountry} onChangeText={setOtherDocumentCountry} maxLength={80} /> : null}
-          <View style={styles.choiceStack}>
-            {idDocumentTypes.map((item) => <ChoiceRow key={item.value} label={item.label} icon={item.icon} active={documentType === item.value} onPress={() => setDocumentType(item.value)} />)}
-          </View>
-          <Pressable onPress={continueDocumentSetup} style={styles.submitButton}><Text style={styles.submitText}>Continue</Text></Pressable>
-        </VerificationScreenCard>
-      );
-    }
-
-    if (currentStage === 3) {
-      return <CaptureScreen title={requiresBack ? "ID front" : selectedDocument.label} icon={selectedDocument.icon} done={Boolean(idFrontFile)} button="Take photo" onPress={() => captureId("front")} />;
-    }
-
-    if (currentStage === 4) {
-      return <CaptureScreen title="ID back" icon="albums-outline" done={Boolean(idBackFile)} button="Take photo" onPress={() => captureId("back")} />;
-    }
-
-    if (currentStage === 5) {
-      return (
-        <VerificationScreenCard title="Document check" icon="scan-outline">
-          <View style={styles.captureStatusRow}>
-            <StatusPill label="Front" done={Boolean(idFrontFile)} />
-            {requiresBack ? <StatusPill label="Back" done={Boolean(idBackFile)} /> : null}
-          </View>
-          <Pressable onPress={runExtraction} disabled={authLoading} style={[styles.submitButton, authLoading && styles.submitButtonDisabled]}>
-            {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Text style={styles.submitText}>Check document</Text>}
-          </Pressable>
-        </VerificationScreenCard>
-      );
-    }
-
-    if (currentStage === 6) {
-      return (
-        <VerificationScreenCard title="Confirm ID" icon="checkmark-done-outline">
-          <View style={styles.extractedBox}>
-            <Text style={styles.extractedLabel}>{isZimbabweNationalId ? "Zimbabwe ID" : selectedDocument.label}</Text>
-            <Text style={styles.extractedValue}>{extractedNationalId || "Enter manually"}</Text>
-          </View>
-          <Field compact icon="card-outline" placeholder={documentType === "passport" ? "Passport number" : "Document number"} value={confirmedNationalId} onChangeText={(value) => { setConfirmedNationalId(value); setIdentityConfirmed(false); }} maxLength={64} />
-          <ComplianceCheck checked={identityConfirmed} onPress={() => setIdentityConfirmed((value) => !value)} label="This document number is correct and belongs to me." />
-          <Pressable onPress={confirmIdentity} style={styles.submitButton}><Text style={styles.submitText}>{setupRequired ? "Confirm" : "Submit"}</Text></Pressable>
-        </VerificationScreenCard>
-      );
-    }
-
-    if (currentStage === 7 && setupRequired) {
-      return (
-        <VerificationScreenCard title={role === "agent" ? "Agency details" : "Estate setup"} icon="business-outline">
-          <Field compact icon="business-outline" placeholder={role === "agent" ? "Agency name" : "Estate or company name"} value={agencyName} onChangeText={setAgencyName} maxLength={160} />
-          {role === "agent" ? <Field compact icon="document-text-outline" placeholder="Agency registration" value={agencyRegistration} onChangeText={setAgencyRegistration} maxLength={120} /> : null}
-          <Field compact icon="call-outline" placeholder={role === "agent" ? "Agency contact details" : "Public contact or branch details"} value={contactDetails} onChangeText={setContactDetails} maxLength={220} />
-          <Pressable onPress={() => submit(true)} disabled={authLoading} style={[styles.submitButton, authLoading && styles.submitButtonDisabled]}>
-            {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Text style={styles.submitText}>Submit</Text>}
+        <VerificationScreenCard title="Email verification" icon="mail-outline">
+          <Field compact icon="mail-outline" placeholder="Email address" value={verificationEmail} onChangeText={setVerificationEmail} keyboardType="email-address" autoCapitalize="none" textContentType="emailAddress" maxLength={254} />
+          {emailChallengeId ? <Field compact icon="keypad-outline" placeholder="Enter OTP" value={emailOtp} onChangeText={setEmailOtp} keyboardType="number-pad" maxLength={6} /> : null}
+          {emailChallengeId ? <View style={styles.otpCountdownBox}><Text style={styles.otpCountdownText}>{countdown}</Text></View> : null}
+          <Pressable onPress={emailChallengeId ? confirmEmailOtp : requestEmailOtp} disabled={authLoading || (!emailChallengeId && Boolean(secondsLeft))} style={[styles.submitButton, (authLoading || (!emailChallengeId && Boolean(secondsLeft))) && styles.submitButtonDisabled]}>
+            {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Text style={styles.submitText}>{emailChallengeId ? "Verify email" : "Send OTP"}</Text>}
           </Pressable>
         </VerificationScreenCard>
       );
     }
 
     return (
-      <VerificationScreenCard title="In review" icon="shield-checkmark-outline">
-        <View style={[styles.captureFrame, styles.captureFrameDone]}>
-          <Ionicons name="time-outline" size={48} color={colors.success} />
-          <Text style={styles.captureFrameText}>Your identity document has been submitted for review.</Text>
-        </View>
-        <Text style={styles.stageSubtitle}>Verified access opens after the administrator approves the ID checks.</Text>
+      <VerificationScreenCard title="Phone verification" icon="phone-portrait-outline">
+        <Field compact icon="call-outline" placeholder="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" maxLength={32} />
+        {phoneChallengeId ? <Field compact icon="keypad-outline" placeholder="Enter OTP" value={phoneOtp} onChangeText={setPhoneOtp} keyboardType="number-pad" maxLength={6} /> : null}
+        {phoneChallengeId ? <View style={styles.otpCountdownBox}><Text style={styles.otpCountdownText}>{countdown}</Text></View> : null}
+        <Pressable onPress={phoneChallengeId ? confirmPhoneOtp : requestPhoneOtp} disabled={authLoading || phoneVerified || (!phoneChallengeId && Boolean(secondsLeft))} style={[styles.submitButton, (authLoading || phoneVerified || (!phoneChallengeId && Boolean(secondsLeft))) && styles.submitButtonDisabled]}>
+          {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Text style={styles.submitText}>{phoneChallengeId ? "Verify phone" : "Send OTP"}</Text>}
+        </Pressable>
       </VerificationScreenCard>
     );
   };
@@ -721,11 +469,6 @@ function VerificationGate({
       <ScrollView contentContainerStyle={styles.verificationContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.verificationPanel}>
           <Text style={[styles.brand, styles.verificationBrandCenter]}>PROPERTY24</Text>
-          {currentStage > (phoneVerified ? 2 : 0) && currentStage < reviewStage ? (
-            <Pressable onPress={goBack} disabled={authLoading} style={styles.stageBackButton}>
-              <Ionicons name="chevron-back" size={18} color="#FFFFFF" />
-            </Pressable>
-          ) : null}
           {renderStage()}
           {notice ? <Text style={styles.noticeText}>{notice}</Text> : null}
           {localError || authError ? <Text style={styles.error}>{localError || authError}</Text> : null}
@@ -735,14 +478,8 @@ function VerificationGate({
   );
 }
 
-function ChoiceRow({ active, icon, label, onPress }: { active: boolean; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={[styles.optionRow, active && styles.optionRowActive]}>
-      <Ionicons name={icon} size={18} color={active ? "#E50914" : "#A3A3A3"} />
-      <Text numberOfLines={1} style={styles.optionRowText}>{label}</Text>
-      <Ionicons name={active ? "radio-button-on" : "radio-button-off"} size={18} color={active ? "#E50914" : "#5F5F5F"} />
-    </Pressable>
-  );
+function isValidPhoneNumber(value: string) {
+  return /^\+?\d{7,15}$/.test(value.replace(/[\s().-]/g, ""));
 }
 
 function ComplianceCheck({ checked, label, onPress }: { checked: boolean; label: string; onPress: () => void }) {
@@ -795,6 +532,10 @@ function displayAccountName(name: string, email: string) {
   if (cleanName && cleanName !== "Property24 user" && cleanName !== cleanEmail) return cleanName;
   const localPart = cleanEmail.split("@")[0]?.replace(/[._-]+/g, " ").trim();
   return localPart || cleanEmail || "Property24 account";
+}
+
+function isValidEmailAddress(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
 
@@ -903,24 +644,8 @@ function roleIcon(role: PublicAccountRole) {
   return "key-outline";
 }
 
-function normalizeDocumentNumber(value: string) {
-  return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-}
-
-function isZimbabweCountry(value: string) {
-  return ["zimbabwe", "zw", "zwe"].includes(value.trim().toLowerCase());
-}
-
-function isValidZimbabweNationalId(value: string) {
-  const normalized = normalizeDocumentNumber(value);
-  if (!/^\d{8,9}[A-Z]\d{2}$/.test(normalized)) return false;
-  const checkLetters = "ABCDEFGHJKLMNPQRSTVWXYZ";
-  const expected = checkLetters[Number(normalized.slice(0, -3)) % checkLetters.length];
-  return normalized.slice(-3, -2) === expected;
-}
-
-function isValidForeignDocumentNumber(value: string) {
-  return /^[A-Za-z0-9][A-Za-z0-9\-/ ]{4,31}$/.test(value.trim());
+function isValidDocumentNumber(value: string) {
+  return /^[A-Za-z0-9][A-Za-z0-9\-/ ]{4,63}$/.test(value.trim());
 }
 
 const styles = StyleSheet.create({

@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -19,6 +21,8 @@ class User(AbstractUser):
     auth_provider = models.CharField(max_length=24, default="password")
     google_subject = models.CharField(max_length=255, blank=True, unique=True, null=True)
     google_email_verified = models.BooleanField(default=False)
+    email_verified = models.BooleanField(default=False)
+    phone_verified = models.BooleanField(default=False)
     profile_picture = models.ImageField(upload_to="accounts/profile-pictures/", blank=True)
     cover_photo = models.ImageField(upload_to="accounts/cover-photos/", blank=True)
     profile_picture_url = models.URLField(blank=True)
@@ -106,6 +110,37 @@ class PhoneVerificationOTP(models.Model):
         return f"Phone OTP for {self.phone} ({self.status})"
 
 
+class EmailVerificationOTP(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        VERIFIED = "verified", "Verified"
+        EXPIRED = "expired", "Expired"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="email_verification_otps")
+    email = models.EmailField(max_length=254)
+    code_hash = models.CharField(max_length=128)
+    sent_to = models.EmailField(max_length=254)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    expires_at = models.DateTimeField()
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "email", "status"], name="rentals_ema_user_id_8bbd91_idx"),
+            models.Index(fields=["email", "status"], name="rentals_ema_email_9f058b_idx"),
+        ]
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    def __str__(self):
+        return f"Email OTP for {self.email} ({self.status})"
+
+
 class SecurityAuditEvent(models.Model):
     class Category(models.TextChoices):
         AUTHENTICATION = "authentication", "Authentication"
@@ -144,15 +179,32 @@ class SecurityAuditEvent(models.Model):
 
 class VerificationRequest(models.Model):
     class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        OCR_COMPLETE = "ocr_complete", "OCR complete"
+        VALIDATION = "validation", "Validation"
+        VERIFIED = "verified", "Verified"
+        MANUAL_REVIEW = "manual_review", "Manual review"
+        FAILED = "failed", "Failed"
+        EXPIRED = "expired", "Expired"
         SUBMITTED = "submitted", "Submitted"
         REVIEWING = "reviewing", "Reviewing"
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
 
+    public_id = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="verification_requests")
     role = models.CharField(max_length=16, choices=User.Roles.choices)
     national_id_number = models.CharField(max_length=64, blank=True)
+    id_number_hash = models.CharField(max_length=128, blank=True, db_index=True)
+    verification_method = models.CharField(max_length=40, default="local_ocr")
+    verification_provider = models.CharField(max_length=80, default="local_ocr")
+    provider_reference = models.CharField(max_length=120, blank=True)
+    verification_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    failure_reason = models.TextField(blank=True)
+    document_retention_until = models.DateTimeField(null=True, blank=True)
     phone_verified = models.BooleanField(default=False)
+    email_verified = models.BooleanField(default=False)
     country_of_residence = models.CharField(max_length=80, blank=True)
     privacy_notice_accepted = models.BooleanField(default=False)
     document_issue_country = models.CharField(max_length=80, blank=True)
@@ -181,7 +233,7 @@ class VerificationRequest(models.Model):
     reviewed_at = models.DateTimeField(null=True, blank=True)
 
     def approve(self, reviewer=None):
-        self.status = self.Status.APPROVED
+        self.status = self.Status.VERIFIED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
         self.user.is_verified = True

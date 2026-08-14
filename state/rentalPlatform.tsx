@@ -73,6 +73,11 @@ export type AccountContext = {
   hiddenSections: string[];
   capabilities: string[];
   onboardingRequirements: string[];
+  isVerified: boolean;
+  emailVerified: boolean;
+  phoneVerified: boolean;
+  accountOnboardingComplete: boolean;
+  fullVerificationRequired: boolean;
 };
 
 export type PaymentItem = {
@@ -241,6 +246,9 @@ export type AuthUser = {
   phone: string;
   role: AccountRole;
   verified: boolean;
+  emailVerified: boolean;
+  phoneVerified: boolean;
+  accountOnboardingComplete: boolean;
   profileStatus: string;
   authProvider: string;
   googleEmailVerified: boolean;
@@ -281,11 +289,20 @@ export type RegistrationOtpChallenge = {
   message?: string;
 };
 
+export type VerificationEmailOtpChallenge = {
+  otpRequired: boolean;
+  challengeId: string;
+  email: string;
+  deliveryChannel: "email" | "provider_required";
+  expiresInSeconds: number;
+  message?: string;
+};
+
 export type VerificationPhoneOtpChallenge = {
   otpRequired: boolean;
   challengeId: string;
   phone: string;
-  deliveryChannel: "email" | "sms" | "provider_required";
+  deliveryChannel: "sms" | "provider_required";
   expiresInSeconds: number;
   message?: string;
 };
@@ -311,6 +328,7 @@ export type VerificationSubmissionPayload = {
   declaration_accepted?: boolean;
   national_id_number: string;
   phone_verified: boolean;
+  email_verified?: boolean;
   selfie_uploaded: boolean;
   identity_confirmed?: boolean;
   extracted_national_id_number?: string;
@@ -319,6 +337,7 @@ export type VerificationSubmissionPayload = {
   livenessFile?: AccountMediaFile;
   selfieFile?: AccountMediaFile;
   proofOfAddressFile?: AccountMediaFile;
+  ownershipOrAuthorizationFile?: AccountMediaFile;
   estate_agency_registration?: string;
   agency_name?: string;
   contact_details?: string;
@@ -384,21 +403,21 @@ const API_TOKEN_STORAGE_KEY = "property24-zimbabwe-api-token";
 const API_BASE_URL = resolveApiBaseUrl();
 const defaultAccountRole: AccountRole = "tenant";
 
-export const accountContexts: Record<AccountRole, Omit<AccountContext, "accountType" | "hiddenSections">> = {
+export const accountContexts: Record<AccountRole, Omit<AccountContext, "accountType" | "hiddenSections" | "isVerified" | "emailVerified" | "phoneVerified" | "accountOnboardingComplete" | "fullVerificationRequired">> = {
   tenant: {
     visibleSections: ["index", "inbox", "profile", "payments", "maintenance", "leases", "verification"],
     capabilities: ["search_properties", "save_properties", "submit_tenant_verification", "apply_for_rentals", "pay_rent", "view_rental_history", "report_maintenance", "sign_leases", "message_landlord_or_agent"],
-    onboardingRequirements: ["phone_verification", "national_id_verification", "selfie_verification"],
+    onboardingRequirements: ["email_verification", "phone_verification"],
   },
   landlord: {
     visibleSections: ["index", "listings", "inbox", "profile", "payments", "maintenance", "leases", "analytics", "verification"],
     capabilities: ["add_properties", "upload_property_media", "create_agents", "submit_landlord_verification", "approve_tenants", "receive_rent", "manage_maintenance", "view_landlord_reports", "message_tenants"],
-    onboardingRequirements: ["phone_verification", "country_and_document_selection", "id_front_capture", "id_back_capture", "identity_confirmation"],
+    onboardingRequirements: ["email_verification", "phone_verification"],
   },
   agent: {
     visibleSections: ["index", "listings", "inbox", "profile", "operations"],
     capabilities: ["list_properties", "submit_agent_verification", "schedule_viewings", "manage_landlords", "track_applications", "track_commissions", "message_clients"],
-    onboardingRequirements: ["phone_verification", "national_id_verification", "agency_information", "estate_agency_registration"],
+    onboardingRequirements: ["email_verification", "phone_verification"],
   },
   admin: {
     visibleSections: ["index", "profile", "verification", "operations", "payments", "analytics"],
@@ -630,9 +649,11 @@ type RentalPlatformContextValue = {
   googleSignIn: (idToken: string, accountType?: PublicAccountRole, details?: { name?: string; phone?: string }) => Promise<void>;
   signOut: () => Promise<void>;
   submitVerification: (payload: VerificationSubmissionPayload) => Promise<void>;
+  sendVerificationEmailOtp: (email: string) => Promise<VerificationEmailOtpChallenge>;
+  verifyVerificationEmailOtp: (challengeId: string, otp: string) => Promise<{ emailVerified: boolean; email: string }>;
   sendVerificationPhoneOtp: (phone: string) => Promise<VerificationPhoneOtpChallenge>;
   verifyVerificationPhoneOtp: (challengeId: string, otp: string) => Promise<{ phoneVerified: boolean; phone: string }>;
-  extractVerificationId: (payload: { idFrontFile: AccountMediaFile; idBackFile: AccountMediaFile; nationalIdHint?: string }) => Promise<VerificationIdExtraction>;
+  extractVerificationId: (payload: { idFrontFile: AccountMediaFile; idBackFile: AccountMediaFile }) => Promise<VerificationIdExtraction>;
   updateAccountProfile: (payload: AccountProfileUpdatePayload) => Promise<void>;
   createLandlordAgent: (payload: LandlordAgentInput) => Promise<AuthUser>;
   reviewVerification: (verificationId: string, status: "approved" | "rejected" | "reviewing") => Promise<void>;
@@ -695,9 +716,27 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
   const value = useMemo<RentalPlatformContextValue>(
     () => {
       const baseAccount = accountContexts[accountRole];
+      const isVerified = Boolean(authUser?.verified);
+      const emailVerified = Boolean(authUser?.emailVerified);
+      const phoneVerified = Boolean(authUser?.phoneVerified);
+      const accountOnboardingComplete = Boolean(isVerified || authUser?.accountOnboardingComplete);
+      const onboardingRequirements = authUser
+        ? baseAccount.onboardingRequirements.filter((requirement) => {
+            if (accountOnboardingComplete) return false;
+            if (requirement === "email_verification") return !emailVerified;
+            if (requirement === "phone_verification") return !phoneVerified;
+            return true;
+          })
+        : baseAccount.onboardingRequirements;
       const account: AccountContext = {
         accountType: accountRole,
         ...baseAccount,
+        onboardingRequirements,
+        isVerified,
+        emailVerified,
+        phoneVerified,
+        accountOnboardingComplete,
+        fullVerificationRequired: Boolean(authUser && ["tenant", "landlord"].includes(accountRole) && accountOnboardingComplete && !isVerified),
         hiddenSections: allSections.filter((section) => !baseAccount.visibleSections.includes(section)),
       };
 
@@ -813,6 +852,41 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
             setAuthLoading(false);
           }
         },
+        sendVerificationEmailOtp: async (email) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            const response = await postProtected("verifications/email-otp/", authToken, { email: email.trim() });
+            return {
+              otpRequired: Boolean(response.otp_required),
+              challengeId: String(response.challenge_id || ""),
+              email: response.email || "",
+              deliveryChannel: response.delivery_channel === "email" ? "email" : "provider_required",
+              expiresInSeconds: Number(response.expires_in_seconds) || 30,
+              message: response.message || "",
+            };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Email OTP could not be sent";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        verifyVerificationEmailOtp: async (challengeId, otp) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            const response = await postProtected("verifications/email-otp/verify/", authToken, { challenge_id: challengeId, otp: otp.trim() });
+            return { emailVerified: Boolean(response.email_verified), email: response.email || "" };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Email OTP verification failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
         sendVerificationPhoneOtp: async (phone) => {
           setAuthLoading(true);
           setAuthError("");
@@ -822,7 +896,7 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
               otpRequired: Boolean(response.otp_required),
               challengeId: String(response.challenge_id || ""),
               phone: response.phone || phone.trim(),
-              deliveryChannel: response.delivery_channel === "email" ? "email" : response.delivery_channel === "sms" ? "sms" : "provider_required",
+              deliveryChannel: response.delivery_channel === "sms" ? "sms" : "provider_required",
               expiresInSeconds: Number(response.expires_in_seconds) || 30,
               message: response.message || "",
             };
@@ -839,6 +913,12 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
           setAuthError("");
           try {
             const response = await postProtected("verifications/phone-otp/verify/", authToken, { challenge_id: challengeId, otp: otp.trim() });
+            if (response.user) {
+              const nextUser = mapAuthUser(response.user, response.account);
+              setAuthUser(nextUser);
+              setAccountRole(nextUser.role);
+              await AsyncStorage.setItem(ACCOUNT_ROLE_STORAGE_KEY, nextUser.role);
+            }
             return { phoneVerified: Boolean(response.phone_verified), phone: response.phone || "" };
           } catch (error) {
             const message = error instanceof Error ? error.message : "Phone OTP verification failed";
@@ -855,7 +935,6 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
             const formData = new FormData();
             formData.append("id_front_document", payload.idFrontFile as unknown as Blob);
             formData.append("id_back_document", payload.idBackFile as unknown as Blob);
-            if (payload.nationalIdHint?.trim()) formData.append("national_id_number", payload.nationalIdHint.trim());
             const response = await postProtected("verifications/id-extract/", authToken, formData);
             return {
               extractedNationalIdNumber: response.extracted_national_id_number || "",
@@ -1212,6 +1291,7 @@ function buildVerificationFormData(payload: VerificationSubmissionPayload) {
   if (payload.declaration_accepted !== undefined) formData.append("declaration_accepted", String(payload.declaration_accepted));
   formData.append("national_id_number", payload.national_id_number);
   formData.append("phone_verified", String(payload.phone_verified));
+  if (payload.email_verified !== undefined) formData.append("email_verified", String(payload.email_verified));
   formData.append("selfie_uploaded", String(payload.selfie_uploaded));
   if (payload.identity_confirmed !== undefined) formData.append("identity_confirmed", String(payload.identity_confirmed));
   if (payload.extracted_national_id_number) formData.append("extracted_national_id_number", payload.extracted_national_id_number);
@@ -1223,6 +1303,7 @@ function buildVerificationFormData(payload: VerificationSubmissionPayload) {
   if (payload.livenessFile) formData.append("liveness_document", payload.livenessFile as unknown as Blob);
   if (payload.selfieFile) formData.append("selfie_document", payload.selfieFile as unknown as Blob);
   if (payload.proofOfAddressFile) formData.append("proof_of_address_document", payload.proofOfAddressFile as unknown as Blob);
+  if (payload.ownershipOrAuthorizationFile) formData.append("ownership_or_authorization_document", payload.ownershipOrAuthorizationFile as unknown as Blob);
   return formData;
 }
 
@@ -1343,7 +1424,10 @@ function mapAuthUser(user: any, account?: any): AuthUser {
     phone: user?.phone || "",
     role,
     verified: Boolean(user?.verified ?? account?.is_verified),
-    profileStatus: user?.profile_status || (user?.verified || account?.is_verified ? "verified" : "verification_required"),
+    emailVerified: Boolean(user?.email_verified ?? account?.email_verified),
+    phoneVerified: Boolean(user?.phone_verified ?? account?.phone_verified),
+    accountOnboardingComplete: Boolean(user?.account_onboarding_complete ?? account?.account_onboarding_complete),
+    profileStatus: user?.profile_status || (user?.verified || account?.is_verified ? "verified" : user?.account_onboarding_complete || account?.account_onboarding_complete ? "account_ready" : "onboarding_required"),
     authProvider: user?.auth_provider || "password",
     googleEmailVerified: Boolean(user?.google_email_verified),
     profilePicture: resolveMediaUrl(user?.profile_picture),

@@ -1,21 +1,24 @@
 import json
+from io import BytesIO
 from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 from django.test import override_settings
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.test import Client, TestCase, TransactionTestCase
+from PIL import Image
 
 from .auth import issue_token_pair
-from .views import hash_otp
+from .views import hash_otp, normalize_phone
 from property24_backend.asgi import application
 
-from .models import AIAnalysis, Application, CallSession, Conversation, DisputeReport, LeaseAgreement, MaintenanceRequest, Message, Payment, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, SecurityAuditEvent, VerificationRequest, Viewing
+from .models import AIAnalysis, Application, CallSession, Conversation, DisputeReport, EmailVerificationOTP, LeaseAgreement, MaintenanceRequest, Message, Payment, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, SecurityAuditEvent, VerificationRequest, Viewing
 
 
 class RentalApiTests(TestCase):
@@ -51,6 +54,9 @@ class RentalApiTests(TestCase):
         return self.client.patch(path, data=json.dumps(payload), content_type="application/json", **(self.auth_header(user) if user else {}))
 
     def mark_phone_otp_verified(self, user, phone):
+        user.phone = phone
+        user.phone_verified = True
+        user.save(update_fields=["phone", "phone_verified"])
         return PhoneVerificationOTP.objects.create(
             user=user,
             phone=phone,
@@ -60,6 +66,24 @@ class RentalApiTests(TestCase):
             verified_at=timezone.now(),
             expires_at=timezone.now() + timedelta(minutes=10),
         )
+
+    def mark_email_otp_verified(self, user):
+        return EmailVerificationOTP.objects.create(
+            user=user,
+            email=user.email.lower(),
+            code_hash="verified-in-test",
+            sent_to=user.email.lower(),
+            status=EmailVerificationOTP.Status.VERIFIED,
+            verified_at=timezone.now(),
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+
+    def identity_image_upload(self, name="identity.jpg"):
+        image = Image.new("RGB", (720, 480), "white")
+        output = BytesIO()
+        image.save(output, format="JPEG")
+        output.seek(0)
+        return SimpleUploadedFile(name, output.read(), content_type="image/jpeg")
 
     def test_property_search_filters_by_city_rent_bedrooms_and_verified(self):
         response = self.client.get("/api/properties/?city=Harare&rent_max=500&bedrooms_min=2&verified_only=true")
@@ -122,8 +146,7 @@ class RentalApiTests(TestCase):
         self.assertEqual(payload["user"]["role"], "landlord")
         self.assertIn("add_properties", payload["account"]["capabilities"])
         self.assertNotIn("proof_of_ownership_or_authorization", payload["account"]["onboarding"]["requirements"])
-        self.assertIn("id_front_capture", payload["account"]["onboarding"]["requirements"])
-        self.assertIn("identity_confirmation", payload["account"]["onboarding"]["requirements"])
+        self.assertEqual(payload["account"]["onboarding"]["requirements"], ["email_verification", "phone_verification"])
         self.assertTrue(payload["requires_sign_in"])
         self.assertNotIn("tokens", payload)
         self.assertTrue(get_user_model().objects.filter(username="new-landlord").exists())
@@ -279,41 +302,168 @@ class RentalApiTests(TestCase):
         self.assertFalse(get_user_model().objects.filter(username="duplicate-phone").exists())
         self.assertFalse(get_user_model().objects.filter(username="+263771000000").exists())
 
-    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
-    def test_verification_phone_otp_endpoint_sends_and_verifies_code(self):
-        self.tenant.email = "tenant@example.com"
+    @override_settings(OTP_DELIVERY_CHANNEL="email", EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_verification_email_otp_endpoint_sends_and_verifies_code(self):
+        self.tenant.email = "old-tenant@example.com"
         self.tenant.save(update_fields=["email"])
-        phone = "+263778123456"
-        send_response = self.post_json("/api/verifications/phone-otp/", {"phone": phone}, user=self.tenant)
+        send_response = self.post_json("/api/verifications/email-otp/", {"email": "typed-tenant@example.com"}, user=self.tenant)
         self.assertEqual(send_response.status_code, 201)
         self.assertEqual(send_response.json()["delivery_channel"], "email")
         self.assertNotIn("dev_otp", send_response.json())
         self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["typed-tenant@example.com"])
         challenge_id = send_response.json()["challenge_id"]
         self.assertEqual(send_response.json()["expires_in_seconds"], 30)
-        challenge = PhoneVerificationOTP.objects.get(pk=challenge_id)
-        self.assertEqual(challenge.phone, phone)
+        challenge = EmailVerificationOTP.objects.get(pk=challenge_id)
+        self.assertEqual(challenge.email, "typed-tenant@example.com")
+        self.assertEqual(challenge.sent_to, "typed-tenant@example.com")
         self.assertLessEqual((challenge.expires_at - timezone.now()).total_seconds(), 30)
         self.assertGreater((challenge.expires_at - timezone.now()).total_seconds(), 0)
 
         challenge.code_hash = hash_otp("123456")
         challenge.save(update_fields=["code_hash"])
-        verify_response = self.post_json("/api/verifications/phone-otp/verify/", {"challenge_id": challenge_id, "otp": "123456"}, user=self.tenant)
+        verify_response = self.post_json("/api/verifications/email-otp/verify/", {"challenge_id": challenge_id, "otp": "123456"}, user=self.tenant)
 
         self.assertEqual(verify_response.status_code, 200)
-        self.assertTrue(verify_response.json()["phone_verified"])
+        self.assertTrue(verify_response.json()["email_verified"])
         challenge.refresh_from_db()
-        self.assertEqual(challenge.status, PhoneVerificationOTP.Status.VERIFIED)
+        self.tenant.refresh_from_db()
+        self.assertEqual(challenge.status, EmailVerificationOTP.Status.VERIFIED)
+        self.assertEqual(self.tenant.email, "typed-tenant@example.com")
+        self.assertTrue(self.tenant.email_verified)
 
-    def test_verification_id_extract_returns_detected_id_for_confirmation(self):
-        response = self.post_json(
+    @override_settings(OTP_DELIVERY_CHANNEL="email", EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_verification_email_otp_rejects_email_owned_by_another_account(self):
+        User = get_user_model()
+        User.objects.create_user(username="email-owner", email="owner@example.com", password="secret12345")
+        send_response = self.post_json("/api/verifications/email-otp/", {"email": "owner@example.com"}, user=self.tenant)
+        self.assertEqual(send_response.status_code, 400)
+        self.assertIn("email", send_response.json()["error"])
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_identity_verification_submission_uses_secure_document_concept(self):
+        User = get_user_model()
+        tenant = User.objects.create_user(username="identity-tenant", email="identity@example.com", password="secret12345", full_name="Identity Tenant", role=User.Roles.TENANT, is_verified=False)
+        phone = "+263779000004"
+        self.mark_email_otp_verified(tenant)
+        self.mark_phone_otp_verified(tenant, phone)
+        response = self.client.post(
+            "/api/verifications/",
+            data={
+                "role": "tenant",
+                "name": "Identity Tenant",
+                "phone": phone,
+                "national_id_number": "63-000000L64",
+                "phone_verified": "true",
+                "email_verified": "true",
+                "privacy_notice_accepted": "true",
+                "document_type": "identity_document",
+                "id_front_document": self.identity_image_upload("front.jpg"),
+                "id_back_document": self.identity_image_upload("back.jpg"),
+                "identity_confirmed": "true",
+                "declaration_accepted": "true",
+            },
+            **self.auth_header(tenant),
+        )
+
+        self.assertEqual(response.status_code, 201, response.json())
+        payload = response.json()
+        self.assertEqual(payload["status"], VerificationRequest.Status.MANUAL_REVIEW)
+        self.assertEqual(payload["verification_provider"], "manual_capture")
+        self.assertTrue(payload["id_front_document_uploaded"])
+        self.assertTrue(payload["id_back_document_uploaded"])
+        self.assertNotIn("id_front_document", payload)
+        self.assertNotIn("id_back_document", payload)
+        verification = VerificationRequest.objects.get(user=tenant)
+        self.assertTrue(verification.id_number_hash)
+        self.assertIn("*", verification.national_id_number)
+        self.assertNotEqual(verification.national_id_number, "63-000000L64")
+        tenant.refresh_from_db()
+        self.assertFalse(tenant.is_verified)
+
+        other = User.objects.create_user(username="identity-duplicate", email="identity-duplicate@example.com", password="secret12345", full_name="Identity Duplicate", role=User.Roles.TENANT, is_verified=False)
+        self.mark_email_otp_verified(other)
+        duplicate = self.client.post(
+            "/api/verifications/",
+            data={
+                "role": "tenant",
+                "name": "Identity Duplicate",
+                "phone": phone,
+                "national_id_number": "63-000000L64",
+                "phone_verified": "true",
+                "email_verified": "true",
+                "privacy_notice_accepted": "true",
+                "document_type": "identity_document",
+                "id_front_document": self.identity_image_upload("front-duplicate.jpg"),
+                "id_back_document": self.identity_image_upload("back-duplicate.jpg"),
+                "identity_confirmed": "true",
+                "declaration_accepted": "true",
+            },
+            **self.auth_header(other),
+        )
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertTrue(any("identity document" in error for error in duplicate.json()["errors"]))
+
+    def test_normalize_phone_accepts_zimbabwe_local_and_e164_forms(self):
+        self.assertEqual(normalize_phone("0775845535"), "+263775845535")
+        self.assertEqual(normalize_phone("+2630775845535"), "+263775845535")
+        self.assertEqual(normalize_phone("2630775845535"), "+263775845535")
+        self.assertEqual(normalize_phone("+27115550123"), "+27115550123")
+
+    @override_settings(
+        OTP_DELIVERY_CHANNEL="sms",
+        OTP_SMS_PROVIDER="twilio",
+        TWILIO_ACCOUNT_SID="AC123456789",
+        TWILIO_AUTH_TOKEN="twilio-token",
+        TWILIO_FROM_NUMBER="+15005550006",
+        TWILIO_MESSAGING_SERVICE_SID="",
+    )
+    @patch("rentals.views.urlrequest.urlopen")
+    def test_verification_phone_otp_can_use_twilio_trial_sms(self, mock_urlopen):
+        class Response:
+            status = 201
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        mock_urlopen.return_value = Response()
+        phone = "+263778123456"
+        response = self.post_json("/api/verifications/phone-otp/", {"phone": phone}, user=self.tenant)
+
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertEqual(response.json()["delivery_channel"], "sms")
+        self.assertEqual(response.json()["message"], "OTP sent to your phone")
+        self.assertNotIn("dev_otp", response.json())
+        request = mock_urlopen.call_args.args[0]
+        self.assertIn("api.twilio.com", request.full_url)
+        self.assertIn(b"To=%2B263778123456", request.data)
+        self.assertIn(b"From=%2B15005550006", request.data)
+        challenge = PhoneVerificationOTP.objects.get(pk=response.json()["challenge_id"])
+        challenge.code_hash = hash_otp("654321")
+        challenge.save(update_fields=["code_hash"])
+        verify_response = self.post_json("/api/verifications/phone-otp/verify/", {"challenge_id": challenge.id, "otp": "654321"}, user=self.tenant)
+        self.assertEqual(verify_response.status_code, 200, verify_response.json())
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.phone, phone)
+        self.assertTrue(self.tenant.phone_verified)
+
+    def test_verification_id_extract_requires_manual_entry_without_ocr(self):
+        response = self.client.post(
             "/api/verifications/id-extract/",
-            {"id_front_uploaded": True, "id_back_uploaded": True, "national_id_number": "63-000000L63"},
-            user=self.tenant,
+            data={
+                "national_id_number": "63-000000L63",
+                "id_front_document": self.identity_image_upload("extract-front.jpg"),
+                "id_back_document": self.identity_image_upload("extract-back.jpg"),
+            },
+            **self.auth_header(self.tenant),
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["extracted_national_id_number"], "63-000000L63")
+        self.assertEqual(response.json()["extracted_national_id_number"], "")
+        self.assertEqual(response.json()["confidence"], "manual_entry_required")
         self.assertTrue(response.json()["requires_confirmation"])
 
     def test_verified_landlord_can_create_agent_account(self):
@@ -384,7 +534,7 @@ class RentalApiTests(TestCase):
         self.assertTrue(payload["user"]["google_email_verified"])
         self.assertFalse(payload["user"]["verified"])
         self.assertIn("apply_for_rentals", payload["account"]["capabilities"])
-        self.assertIn("national_id_verification", payload["account"]["onboarding"]["requirements"])
+        self.assertIn("email_verification", payload["account"]["onboarding"]["requirements"])
         self.assertIn("tokens", payload)
 
     @override_settings(GOOGLE_SIGN_IN_ENABLED=True, GOOGLE_CLIENT_IDS=["web-client-id.apps.googleusercontent.com"])
@@ -505,30 +655,31 @@ class RentalApiTests(TestCase):
             {"body": "Can I view this house?"},
             user=unverified_tenant,
         )
+        unverified_tenant.email = "locked-tenant@example.com"
+        unverified_tenant.save(update_fields=["email"])
+        self.mark_email_otp_verified(unverified_tenant)
         self.mark_phone_otp_verified(unverified_tenant, "+263779000002")
-        allowed = self.post_json(
+        allowed = self.client.post(
             "/api/verifications/",
-            {
+            data={
                 "role": "tenant",
                 "name": "Jane Smith",
                 "phone": "+263779000002",
                 "national_id_number": "63-000000L64",
                 "extracted_national_id_number": "63-000000L64",
-                "phone_verified": True,
-                "country_of_residence": "Zimbabwe",
-                "privacy_notice_accepted": True,
-                "document_issue_country": "Zimbabwe",
-                "document_type": "national_id",
+                "phone_verified": "true",
+                "email_verified": "true",
+                "privacy_notice_accepted": "true",
+                "document_type": "identity_document",
                 "residential_address": "12 Borrowdale Road, Harare",
-                "address_gps_confirmed": True,
-                "proof_of_address_confirmed": True,
-                "declaration_accepted": True,
-                "id_front_uploaded": True,
-                "id_back_uploaded": True,
-                "identity_confirmed": True,
-                "liveness_uploaded": True,
+                "address_gps_confirmed": "true",
+                "proof_of_address_confirmed": "true",
+                "declaration_accepted": "true",
+                "id_front_document": self.identity_image_upload("locked-front.jpg"),
+                "id_back_document": self.identity_image_upload("locked-back.jpg"),
+                "identity_confirmed": "true",
             },
-            user=unverified_tenant,
+            **self.auth_header(unverified_tenant),
         )
 
         self.assertEqual(blocked.status_code, 403)
@@ -539,91 +690,99 @@ class RentalApiTests(TestCase):
         phone = "+263779000001"
         incomplete = self.post_json(
             "/api/verifications/",
-            {"role": "landlord", "name": "John Doe", "phone": phone, "national_id_number": "63-000000L63", "phone_verified": True},
+            {"role": "landlord", "name": "John Doe", "phone": phone, "national_id_number": "63-000000L63", "phone_verified": False},
             user=self.landlord,
         )
+        self.landlord.email = "landlord@example.com"
+        self.landlord.save(update_fields=["email"])
+        self.mark_email_otp_verified(self.landlord)
         self.mark_phone_otp_verified(self.landlord, phone)
-        complete = self.post_json(
+        complete = self.client.post(
             "/api/verifications/",
-            {
+            data={
                 "role": "landlord",
                 "name": "John Doe",
                 "phone": phone,
                 "national_id_number": "63-000000L63",
                 "extracted_national_id_number": "63-000000L63",
-                "phone_verified": True,
-                "country_of_residence": "Zimbabwe",
-                "privacy_notice_accepted": True,
-                "document_issue_country": "Zimbabwe",
-                "document_type": "national_id",
+                "phone_verified": "true",
+                "email_verified": "true",
+                "privacy_notice_accepted": "true",
+                "document_type": "identity_document",
                 "residential_address": "12 Borrowdale Road, Harare",
-                "address_gps_confirmed": True,
-                "proof_of_address_confirmed": True,
-                "declaration_accepted": True,
-                "id_front_uploaded": True,
-                "id_back_uploaded": True,
-                "identity_confirmed": True,
-                "liveness_uploaded": True,
+                "address_gps_confirmed": "true",
+                "proof_of_address_confirmed": "true",
+                "declaration_accepted": "true",
+                "id_front_document": self.identity_image_upload("landlord-front.jpg"),
+                "id_back_document": self.identity_image_upload("landlord-back.jpg"),
+                "ownership_or_authorization_document": self.identity_image_upload("landlord-ownership.jpg"),
+                "identity_confirmed": "true",
             },
-            user=self.landlord,
+            **self.auth_header(self.landlord),
         )
 
         self.assertEqual(incomplete.status_code, 400)
         self.assertTrue(any("id_front_document" in error for error in incomplete.json()["errors"]))
-        self.assertTrue(any("phone_verified" in error for error in incomplete.json()["errors"]))
+        self.assertTrue(any("email_verified" in error for error in incomplete.json()["errors"]))
         self.assertFalse(any("proof_of_ownership_or_authorization" in error for error in incomplete.json()["errors"]))
         self.assertEqual(complete.status_code, 201, complete.json())
-        self.assertEqual(complete.json()["status"], VerificationRequest.Status.SUBMITTED)
+        self.assertEqual(complete.json()["status"], VerificationRequest.Status.MANUAL_REVIEW)
         self.assertTrue(complete.json()["identity_confirmed"])
 
-    def test_zimbabwe_national_id_must_match_local_format(self):
+    def test_identity_document_number_must_have_valid_format(self):
         phone = "+263779000003"
-        self.mark_phone_otp_verified(self.tenant, phone)
-        response = self.post_json(
+        self.tenant.email = "tenant@example.com"
+        self.tenant.save(update_fields=["email"])
+        self.mark_email_otp_verified(self.tenant)
+        response = self.client.post(
             "/api/verifications/",
-            {
+            data={
                 "role": "tenant",
                 "name": "Jane Smith",
                 "phone": phone,
-                "national_id_number": "63-000000A63",
-                "phone_verified": True,
-                "country_of_residence": "Zimbabwe",
-                "document_issue_country": "Zimbabwe",
-                "document_type": "national_id",
-                "id_front_uploaded": True,
-                "id_back_uploaded": True,
-                "identity_confirmed": True,
+                "national_id_number": "!!",
+                "phone_verified": "false",
+                "email_verified": "true",
+                "document_type": "identity_document",
+                "id_front_document": self.identity_image_upload("invalid-front.jpg"),
+                "id_back_document": self.identity_image_upload("invalid-back.jpg"),
+                "identity_confirmed": "true",
             },
-            user=self.tenant,
+            **self.auth_header(self.tenant),
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertTrue(any("Zimbabwe national ID" in error for error in response.json()["errors"]))
+        self.assertTrue(any("document number" in error for error in response.json()["errors"]))
 
-    def test_foreign_renter_can_verify_with_passport(self):
+    def test_renter_can_verify_with_identity_document(self):
         User = get_user_model()
         foreign_tenant = User.objects.create_user(username="foreign-tenant", password="secret12345", role=User.Roles.TENANT, is_verified=False)
         phone = "+27115550123"
+        foreign_tenant.email = "foreign@example.com"
+        foreign_tenant.save(update_fields=["email"])
+        self.mark_email_otp_verified(foreign_tenant)
         self.mark_phone_otp_verified(foreign_tenant, phone)
-        response = self.post_json(
+        response = self.client.post(
             "/api/verifications/",
-            {
+            data={
                 "role": "tenant",
                 "name": "Nomsa Dlamini",
                 "phone": phone,
-                "country_of_residence": "South Africa",
-                "document_issue_country": "South Africa",
-                "document_type": "passport",
+                "document_type": "identity_document",
                 "national_id_number": "A12345678",
-                "phone_verified": True,
-                "id_front_uploaded": True,
-                "identity_confirmed": True,
+                "phone_verified": "true",
+                "email_verified": "true",
+                "id_front_document": self.identity_image_upload("identity-front.jpg"),
+                "id_back_document": self.identity_image_upload("identity-back.jpg"),
+                "identity_confirmed": "true",
+                "privacy_notice_accepted": "true",
+                "declaration_accepted": "true",
             },
-            user=foreign_tenant,
+            **self.auth_header(foreign_tenant),
         )
 
         self.assertEqual(response.status_code, 201, response.json())
-        self.assertEqual(response.json()["document_type"], "passport")
+        self.assertEqual(response.json()["document_type"], "identity_document")
 
     def test_least_privilege_scopes_tenant_records_to_self(self):
         User = get_user_model()
