@@ -12,6 +12,7 @@ from .models import (
     Message,
     Payment,
     PendingRegistrationOTP,
+    PhoneVerificationOTP,
     Property,
     PropertyPhoto,
     PropertyVideo,
@@ -51,10 +52,18 @@ class PropertyAdmin(admin.ModelAdmin):
 
 @admin.register(VerificationRequest)
 class VerificationRequestAdmin(admin.ModelAdmin):
-    list_display = ("user", "role", "status", "phone_verified", "submitted_at", "reviewed_by")
-    list_filter = ("role", "status", "phone_verified")
-    search_fields = ("user__username", "user__full_name", "national_id_number", "agency_name")
+    list_display = ("user", "role", "status", "phone_verified", "document_type", "country_of_residence", "submitted_at", "reviewed_by")
+    list_filter = ("role", "status", "phone_verified", "document_type", "privacy_notice_accepted", "declaration_accepted", "politically_exposed_person")
+    search_fields = ("user__username", "user__full_name", "national_id_number", "document_issue_country", "residential_address", "agency_name")
 
+
+
+@admin.register(PhoneVerificationOTP)
+class PhoneVerificationOTPAdmin(admin.ModelAdmin):
+    list_display = ("user", "phone", "status", "attempts", "expires_at", "verified_at", "created_at")
+    list_filter = ("status",)
+    search_fields = ("user__username", "user__full_name", "phone")
+    readonly_fields = ("code_hash", "created_at", "updated_at", "verified_at")
 
 
 @admin.register(PendingRegistrationOTP)

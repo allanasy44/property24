@@ -65,7 +65,7 @@ export type LiveEvent = {
 };
 
 export type AccountRole = "tenant" | "landlord" | "agent" | "admin";
-export type PublicAccountRole = Exclude<AccountRole, "admin">;
+export type PublicAccountRole = Extract<AccountRole, "tenant" | "landlord">;
 
 export type AccountContext = {
   accountType: AccountRole;
@@ -263,6 +263,13 @@ export type RegisterAccountPayload = {
   password: string;
 };
 
+export type LandlordAgentInput = {
+  name: string;
+  email: string;
+  phone: string;
+  password?: string;
+};
+
 export type RegistrationOtpChallenge = {
   otpRequired: boolean;
   challengeId: string;
@@ -274,14 +281,44 @@ export type RegistrationOtpChallenge = {
   message?: string;
 };
 
+export type VerificationPhoneOtpChallenge = {
+  otpRequired: boolean;
+  challengeId: string;
+  phone: string;
+  deliveryChannel: "email" | "sms" | "provider_required";
+  expiresInSeconds: number;
+  message?: string;
+};
+
+export type VerificationIdExtraction = {
+  extractedNationalIdNumber: string;
+  confidence: string;
+  requiresConfirmation: boolean;
+};
+
 export type VerificationSubmissionPayload = {
   role: AccountRole;
+  name?: string;
+  phone?: string;
+  country_of_residence?: string;
+  privacy_notice_accepted?: boolean;
+  document_issue_country?: string;
+  document_type?: string;
+  residential_address?: string;
+  address_gps_confirmed?: boolean;
+  proof_of_address_confirmed?: boolean;
+  politically_exposed_person?: boolean;
+  declaration_accepted?: boolean;
   national_id_number: string;
   phone_verified: boolean;
   selfie_uploaded: boolean;
-  ownership_or_authorization_document_url?: string;
-  proof_of_ownership_reference?: string;
-  authorization_reference?: string;
+  identity_confirmed?: boolean;
+  extracted_national_id_number?: string;
+  idFrontFile?: AccountMediaFile;
+  idBackFile?: AccountMediaFile;
+  livenessFile?: AccountMediaFile;
+  selfieFile?: AccountMediaFile;
+  proofOfAddressFile?: AccountMediaFile;
   estate_agency_registration?: string;
   agency_name?: string;
   contact_details?: string;
@@ -355,8 +392,8 @@ export const accountContexts: Record<AccountRole, Omit<AccountContext, "accountT
   },
   landlord: {
     visibleSections: ["index", "listings", "inbox", "profile", "payments", "maintenance", "leases", "analytics", "verification"],
-    capabilities: ["add_properties", "upload_property_media", "submit_landlord_verification", "approve_tenants", "receive_rent", "manage_maintenance", "view_landlord_reports", "message_tenants"],
-    onboardingRequirements: ["phone_verification", "national_id_verification", "selfie_verification", "proof_of_ownership_or_authorization"],
+    capabilities: ["add_properties", "upload_property_media", "create_agents", "submit_landlord_verification", "approve_tenants", "receive_rent", "manage_maintenance", "view_landlord_reports", "message_tenants"],
+    onboardingRequirements: ["phone_verification", "country_and_document_selection", "id_front_capture", "id_back_capture", "identity_confirmation"],
   },
   agent: {
     visibleSections: ["index", "listings", "inbox", "profile", "operations"],
@@ -590,10 +627,14 @@ type RentalPlatformContextValue = {
   chatWebSocketUrl: string;
   signIn: (payload: SignInPayload) => Promise<void>;
   registerAccount: (payload: RegisterAccountPayload) => Promise<void>;
-  googleSignIn: (idToken: string, accountType: PublicAccountRole) => Promise<void>;
+  googleSignIn: (idToken: string, accountType?: PublicAccountRole, details?: { name?: string; phone?: string }) => Promise<void>;
   signOut: () => Promise<void>;
   submitVerification: (payload: VerificationSubmissionPayload) => Promise<void>;
+  sendVerificationPhoneOtp: (phone: string) => Promise<VerificationPhoneOtpChallenge>;
+  verifyVerificationPhoneOtp: (challengeId: string, otp: string) => Promise<{ phoneVerified: boolean; phone: string }>;
+  extractVerificationId: (payload: { idFrontFile: AccountMediaFile; idBackFile: AccountMediaFile; nationalIdHint?: string }) => Promise<VerificationIdExtraction>;
   updateAccountProfile: (payload: AccountProfileUpdatePayload) => Promise<void>;
+  createLandlordAgent: (payload: LandlordAgentInput) => Promise<AuthUser>;
   reviewVerification: (verificationId: string, status: "approved" | "rejected" | "reviewing") => Promise<void>;
   canAccessSection: (section: string) => boolean;
   hasCapability: (capability: string) => boolean;
@@ -698,10 +739,13 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
               phone: payload.phone.trim(),
               password: payload.password,
             });
-            if (!response.tokens || !response.user) {
+            if (!response.user) {
               throw new Error("Account creation failed");
             }
-            await applyAuthPayload(response, { dispatch, setAccountRole, setAuthUser, setAuthToken });
+            await AsyncStorage.multiRemove([API_TOKEN_STORAGE_KEY, ACCOUNT_ROLE_STORAGE_KEY]);
+            setAuthToken(null);
+            setAuthUser(null);
+            setAccountRole(defaultAccountRole);
           } catch (error) {
             const message = error instanceof Error ? error.message : "Account creation failed";
             setAuthError(message);
@@ -710,11 +754,15 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
             setAuthLoading(false);
           }
         },
-        googleSignIn: async (idToken, selectedAccountType) => {
+        googleSignIn: async (idToken, selectedAccountType, details) => {
           setAuthLoading(true);
           setAuthError("");
           try {
-            const response = await postAuth("auth/google/", { id_token: idToken, account_type: selectedAccountType });
+            const payload: Record<string, string> = { id_token: idToken };
+            if (selectedAccountType) payload.account_type = selectedAccountType;
+            if (details?.name?.trim()) payload.name = details.name.trim();
+            if (details?.phone?.trim()) payload.phone = details.phone.trim();
+            const response = await postAuth("auth/google/", payload);
             await applyAuthPayload(response, { dispatch, setAccountRole, setAuthUser, setAuthToken });
           } catch (error) {
             const message = error instanceof Error ? error.message : "Google sign-in failed";
@@ -747,10 +795,75 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
           setAuthLoading(true);
           setAuthError("");
           try {
-            await postProtected("verifications/", authToken, payload);
-            await refreshRentalPlatform(dispatch, authToken);
+            const requestPayload = payload.selfieFile || payload.idFrontFile || payload.idBackFile || payload.livenessFile ? buildVerificationFormData(payload) : payload;
+            await postProtected("verifications/", authToken, requestPayload);
+            if (API_BASE_URL && authToken) {
+              const me = await fetchJson(`${API_BASE_URL}/auth/me/`, authToken);
+              const nextUser = mapAuthUser(me.user, me.account);
+              setAuthUser(nextUser);
+              setAccountRole(nextUser.role);
+              await AsyncStorage.setItem(ACCOUNT_ROLE_STORAGE_KEY, nextUser.role);
+            }
+            refreshRentalPlatform(dispatch, authToken).catch(() => undefined);
           } catch (error) {
             const message = error instanceof Error ? error.message : "Verification submission failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        sendVerificationPhoneOtp: async (phone) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            const response = await postProtected("verifications/phone-otp/", authToken, { phone: phone.trim() });
+            return {
+              otpRequired: Boolean(response.otp_required),
+              challengeId: String(response.challenge_id || ""),
+              phone: response.phone || phone.trim(),
+              deliveryChannel: response.delivery_channel === "email" ? "email" : response.delivery_channel === "sms" ? "sms" : "provider_required",
+              expiresInSeconds: Number(response.expires_in_seconds) || 30,
+              message: response.message || "",
+            };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Phone OTP could not be sent";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        verifyVerificationPhoneOtp: async (challengeId, otp) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            const response = await postProtected("verifications/phone-otp/verify/", authToken, { challenge_id: challengeId, otp: otp.trim() });
+            return { phoneVerified: Boolean(response.phone_verified), phone: response.phone || "" };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Phone OTP verification failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        extractVerificationId: async (payload) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            const formData = new FormData();
+            formData.append("id_front_document", payload.idFrontFile as unknown as Blob);
+            formData.append("id_back_document", payload.idBackFile as unknown as Blob);
+            if (payload.nationalIdHint?.trim()) formData.append("national_id_number", payload.nationalIdHint.trim());
+            const response = await postProtected("verifications/id-extract/", authToken, formData);
+            return {
+              extractedNationalIdNumber: response.extracted_national_id_number || "",
+              confidence: response.confidence || "manual_review_required",
+              requiresConfirmation: Boolean(response.requires_confirmation),
+            };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "ID extraction failed";
             setAuthError(message);
             throw error;
           } finally {
@@ -776,6 +889,27 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
             await refreshRentalPlatform(dispatch, authToken);
           } catch (error) {
             const message = error instanceof Error ? error.message : "Profile update failed";
+            setAuthError(message);
+            throw error;
+          } finally {
+            setAuthLoading(false);
+          }
+        },
+        createLandlordAgent: async (payload) => {
+          setAuthLoading(true);
+          setAuthError("");
+          try {
+            const response = await postProtected("landlord/agents/", authToken, {
+              name: payload.name.trim(),
+              email: payload.email.trim(),
+              username: payload.email.trim(),
+              phone: payload.phone.trim(),
+              password: payload.password?.trim() || undefined,
+            });
+            await refreshRentalPlatform(dispatch, authToken);
+            return mapAuthUser(response.user);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Agent account could not be created";
             setAuthError(message);
             throw error;
           } finally {
@@ -1053,13 +1187,43 @@ async function postAuth(endpoint: string, payload: Record<string, unknown>) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || "Authentication request failed");
+  const body = await readApiResponseBody(response);
+  if (!response.ok) throw new Error(formatApiError(body, "Authentication request failed", response));
   return body;
 }
 
 async function postProtected(endpoint: string, token: string | null, payload: Record<string, unknown> | FormData) {
   return protectedRequest(endpoint, token, "POST", payload);
+}
+
+function buildVerificationFormData(payload: VerificationSubmissionPayload) {
+  const formData = new FormData();
+  formData.append("role", payload.role);
+  if (payload.name) formData.append("name", payload.name);
+  if (payload.phone) formData.append("phone", payload.phone);
+  if (payload.country_of_residence) formData.append("country_of_residence", payload.country_of_residence);
+  if (payload.privacy_notice_accepted !== undefined) formData.append("privacy_notice_accepted", String(payload.privacy_notice_accepted));
+  if (payload.document_issue_country) formData.append("document_issue_country", payload.document_issue_country);
+  if (payload.document_type) formData.append("document_type", payload.document_type);
+  if (payload.residential_address) formData.append("residential_address", payload.residential_address);
+  if (payload.address_gps_confirmed !== undefined) formData.append("address_gps_confirmed", String(payload.address_gps_confirmed));
+  if (payload.proof_of_address_confirmed !== undefined) formData.append("proof_of_address_confirmed", String(payload.proof_of_address_confirmed));
+  if (payload.politically_exposed_person !== undefined) formData.append("politically_exposed_person", String(payload.politically_exposed_person));
+  if (payload.declaration_accepted !== undefined) formData.append("declaration_accepted", String(payload.declaration_accepted));
+  formData.append("national_id_number", payload.national_id_number);
+  formData.append("phone_verified", String(payload.phone_verified));
+  formData.append("selfie_uploaded", String(payload.selfie_uploaded));
+  if (payload.identity_confirmed !== undefined) formData.append("identity_confirmed", String(payload.identity_confirmed));
+  if (payload.extracted_national_id_number) formData.append("extracted_national_id_number", payload.extracted_national_id_number);
+  if (payload.estate_agency_registration) formData.append("estate_agency_registration", payload.estate_agency_registration);
+  if (payload.agency_name) formData.append("agency_name", payload.agency_name);
+  if (payload.contact_details) formData.append("contact_details", payload.contact_details);
+  if (payload.idFrontFile) formData.append("id_front_document", payload.idFrontFile as unknown as Blob);
+  if (payload.idBackFile) formData.append("id_back_document", payload.idBackFile as unknown as Blob);
+  if (payload.livenessFile) formData.append("liveness_document", payload.livenessFile as unknown as Blob);
+  if (payload.selfieFile) formData.append("selfie_document", payload.selfieFile as unknown as Blob);
+  if (payload.proofOfAddressFile) formData.append("proof_of_address_document", payload.proofOfAddressFile as unknown as Blob);
+  return formData;
 }
 
 function buildAccountProfileFormData(payload: AccountProfileUpdatePayload) {
@@ -1103,9 +1267,32 @@ async function protectedRequest(endpoint: string, token: string | null, method: 
     headers,
     body: requestBody,
   });
-  const responseBody = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(responseBody.errors?.join("\n") || responseBody.error || "Protected request failed");
+  const responseBody = await readApiResponseBody(response);
+  if (!response.ok) throw new Error(formatApiError(responseBody, "Protected request failed", response));
   return responseBody;
+}
+
+async function readApiResponseBody(response: Response) {
+  const text = await response.text().catch(() => "");
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 220) };
+  }
+}
+
+function formatApiError(responseBody: any, fallback: string, response?: Response) {
+  const errors = responseBody?.errors;
+  if (Array.isArray(errors)) return errors.join("\n");
+  if (errors && typeof errors === "object") {
+    const values = Object.values(errors).flat().filter(Boolean).map(String);
+    if (values.length) return values.join("\n");
+  }
+  if (responseBody?.error) return responseBody.error;
+  if (responseBody?.raw) return `${fallback}: ${response?.status || ""} ${response?.statusText || ""}. ${responseBody.raw}`.trim();
+  if (response) return `${fallback}: ${response.status} ${response.statusText}`.trim();
+  return fallback;
 }
 
 async function refreshRentalPlatform(dispatch: Dispatch<RentalPlatformAction>, token: string | null) {

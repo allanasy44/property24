@@ -75,6 +75,37 @@ class PendingRegistrationOTP(models.Model):
         return f"OTP for {self.phone} ({self.status})"
 
 
+class PhoneVerificationOTP(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        VERIFIED = "verified", "Verified"
+        EXPIRED = "expired", "Expired"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="phone_verification_otps")
+    phone = models.CharField(max_length=32)
+    code_hash = models.CharField(max_length=128)
+    sent_to = models.CharField(max_length=32)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    expires_at = models.DateTimeField()
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "phone", "status"], name="rentals_pho_user_id_7aa62e_idx"),
+            models.Index(fields=["phone", "status"], name="rentals_pho_phone_14590b_idx"),
+        ]
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    def __str__(self):
+        return f"Phone OTP for {self.phone} ({self.status})"
+
+
 class SecurityAuditEvent(models.Model):
     class Category(models.TextChoices):
         AUTHENTICATION = "authentication", "Authentication"
@@ -122,6 +153,21 @@ class VerificationRequest(models.Model):
     role = models.CharField(max_length=16, choices=User.Roles.choices)
     national_id_number = models.CharField(max_length=64, blank=True)
     phone_verified = models.BooleanField(default=False)
+    country_of_residence = models.CharField(max_length=80, blank=True)
+    privacy_notice_accepted = models.BooleanField(default=False)
+    document_issue_country = models.CharField(max_length=80, blank=True)
+    document_type = models.CharField(max_length=40, blank=True)
+    residential_address = models.TextField(blank=True)
+    address_gps_confirmed = models.BooleanField(default=False)
+    proof_of_address_document = models.FileField(upload_to="verification/address/", blank=True)
+    proof_of_address_confirmed = models.BooleanField(default=False)
+    politically_exposed_person = models.BooleanField(default=False)
+    declaration_accepted = models.BooleanField(default=False)
+    id_front_document = models.FileField(upload_to="verification/id-front/", blank=True)
+    id_back_document = models.FileField(upload_to="verification/id-back/", blank=True)
+    extracted_national_id_number = models.CharField(max_length=64, blank=True)
+    identity_confirmed = models.BooleanField(default=False)
+    liveness_document = models.FileField(upload_to="verification/liveness/", blank=True)
     selfie_document = models.FileField(upload_to="verification/selfies/", blank=True)
     ownership_or_authorization_document = models.FileField(upload_to="verification/ownership/", blank=True)
     estate_agency_registration = models.CharField(max_length=120, blank=True)

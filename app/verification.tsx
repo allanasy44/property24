@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AccessGuard } from "../components/AccessGuard";
 import { Screen } from "../components/Screen";
 import { SectionHeader } from "../components/SectionHeader";
@@ -9,43 +9,9 @@ import { colors, radius, shadows, spacing, typography } from "../constants/theme
 import { AccountRole, useRentalPlatform } from "../state/rentalPlatform";
 
 export default function VerificationScreen() {
-  const { state, account, authError, authLoading, submitVerification, reviewVerification, hasCapability } = useRentalPlatform();
+  const { state, account, authError, authLoading, reviewVerification, hasCapability } = useRentalPlatform();
   const isAdmin = hasCapability("verify_users");
-  const [nationalId, setNationalId] = useState("");
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [selfieUploaded, setSelfieUploaded] = useState(false);
-  const [ownershipProof, setOwnershipProof] = useState("");
-  const [agencyRegistration, setAgencyRegistration] = useState("");
-  const [agencyName, setAgencyName] = useState("");
-  const [contactDetails, setContactDetails] = useState("");
   const [notice, setNotice] = useState("");
-
-  const submit = async () => {
-    setNotice("");
-    if (isAdmin) return;
-    try {
-      await submitVerification({
-        role: account.accountType,
-        national_id_number: nationalId.trim(),
-        phone_verified: phoneVerified,
-        selfie_uploaded: selfieUploaded,
-        proof_of_ownership_reference: ownershipProof.trim(),
-        estate_agency_registration: agencyRegistration.trim(),
-        agency_name: agencyName.trim(),
-        contact_details: contactDetails.trim(),
-      });
-      setNotice("Verification submitted for administrator review.");
-      setNationalId("");
-      setPhoneVerified(false);
-      setSelfieUploaded(false);
-      setOwnershipProof("");
-      setAgencyRegistration("");
-      setAgencyName("");
-      setContactDetails("");
-    } catch {
-      // The provider exposes authError from the account service.
-    }
-  };
 
   const review = async (id: string, status: "approved" | "rejected") => {
     setNotice("");
@@ -68,23 +34,7 @@ export default function VerificationScreen() {
 
           {!isAdmin ? (
             <View style={styles.formCard}>
-              <SectionHeader title={`${roleLabel(account.accountType)} verification`} subtitle="Submitted for review before privileges are trusted." />
-              <TextInput value={nationalId} onChangeText={setNationalId} placeholder="National ID number" placeholderTextColor={colors.textMuted} style={styles.input} />
-              <Toggle label="Phone OTP confirmed" value={phoneVerified} onPress={() => setPhoneVerified((value) => !value)} />
-              <Toggle label="Selfie evidence uploaded" value={selfieUploaded} onPress={() => setSelfieUploaded((value) => !value)} />
-              {account.accountType === "landlord" ? (
-                <TextInput value={ownershipProof} onChangeText={setOwnershipProof} placeholder="Ownership / authorization reference" placeholderTextColor={colors.textMuted} style={styles.input} />
-              ) : null}
-              {account.accountType === "agent" ? (
-                <>
-                  <TextInput value={agencyRegistration} onChangeText={setAgencyRegistration} placeholder="Estate agency registration" placeholderTextColor={colors.textMuted} style={styles.input} />
-                  <TextInput value={agencyName} onChangeText={setAgencyName} placeholder="Agency name" placeholderTextColor={colors.textMuted} style={styles.input} />
-                  <TextInput value={contactDetails} onChangeText={setContactDetails} placeholder="Agency contact details" placeholderTextColor={colors.textMuted} style={[styles.input, styles.textArea]} multiline />
-                </>
-              ) : null}
-              <Pressable onPress={submit} disabled={authLoading} style={[styles.button, authLoading && styles.buttonDisabled]}>
-                {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Text style={styles.buttonText}>Submit verification</Text>}
-              </Pressable>
+              <SectionHeader title={`${roleLabel(account.accountType)} verification`} subtitle="Verification is completed immediately after sign-in using phone OTP, ID front/back capture, extracted ID confirmation, and liveness." />
             </View>
           ) : null}
 

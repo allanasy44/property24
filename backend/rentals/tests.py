@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -11,9 +12,10 @@ from channels.testing import WebsocketCommunicator
 from django.test import Client, TestCase, TransactionTestCase
 
 from .auth import issue_token_pair
+from .views import hash_otp
 from property24_backend.asgi import application
 
-from .models import AIAnalysis, Application, CallSession, Conversation, DisputeReport, LeaseAgreement, MaintenanceRequest, Message, Payment, PendingRegistrationOTP, Property, PropertyComment, SecurityAuditEvent, VerificationRequest, Viewing
+from .models import AIAnalysis, Application, CallSession, Conversation, DisputeReport, LeaseAgreement, MaintenanceRequest, Message, Payment, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, SecurityAuditEvent, VerificationRequest, Viewing
 
 
 class RentalApiTests(TestCase):
@@ -21,7 +23,7 @@ class RentalApiTests(TestCase):
         User = get_user_model()
         self.client = Client()
         self.landlord = User.objects.create_user(username="landlord", password="secret12345", full_name="John Doe", phone="0771111111", role=User.Roles.LANDLORD, is_verified=True)
-        self.tenant = User.objects.create_user(username="tenant", password="secret12345", full_name="Jane Smith", role=User.Roles.TENANT)
+        self.tenant = User.objects.create_user(username="tenant", password="secret12345", full_name="Jane Smith", role=User.Roles.TENANT, is_verified=True)
         self.agent = User.objects.create_user(username="agent", password="secret12345", full_name="Tariro Moyo", role=User.Roles.AGENT, is_verified=True)
         self.admin = User.objects.create_user(username="admin", password="secret12345", full_name="Admin", role=User.Roles.ADMIN, is_verified=True)
         self.property = Property.objects.create(
@@ -47,6 +49,17 @@ class RentalApiTests(TestCase):
 
     def patch_json(self, path, payload, user=None):
         return self.client.patch(path, data=json.dumps(payload), content_type="application/json", **(self.auth_header(user) if user else {}))
+
+    def mark_phone_otp_verified(self, user, phone):
+        return PhoneVerificationOTP.objects.create(
+            user=user,
+            phone=phone,
+            code_hash="verified-in-test",
+            sent_to=phone,
+            status=PhoneVerificationOTP.Status.VERIFIED,
+            verified_at=timezone.now(),
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
 
     def test_property_search_filters_by_city_rent_bedrooms_and_verified(self):
         response = self.client.get("/api/properties/?city=Harare&rent_max=500&bedrooms_min=2&verified_only=true")
@@ -97,7 +110,7 @@ class RentalApiTests(TestCase):
             {
                 "username": "new-landlord",
                 "email": "new-landlord@property24.test",
-                "password": "secret12345",
+                "password": "CorrectHorseRental2026",
                 "name": "New Landlord",
                 "account_type": "landlord",
                 "phone": "+263771123456",
@@ -108,10 +121,130 @@ class RentalApiTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["user"]["role"], "landlord")
         self.assertIn("add_properties", payload["account"]["capabilities"])
-        self.assertIn("proof_of_ownership_or_authorization", payload["account"]["onboarding"]["requirements"])
-        self.assertIn("tokens", payload)
+        self.assertNotIn("proof_of_ownership_or_authorization", payload["account"]["onboarding"]["requirements"])
+        self.assertIn("id_front_capture", payload["account"]["onboarding"]["requirements"])
+        self.assertIn("identity_confirmation", payload["account"]["onboarding"]["requirements"])
+        self.assertTrue(payload["requires_sign_in"])
+        self.assertNotIn("tokens", payload)
         self.assertTrue(get_user_model().objects.filter(username="new-landlord").exists())
         self.assertFalse(PendingRegistrationOTP.objects.filter(username="new-landlord").exists())
+
+    def test_public_registration_rejects_weak_passwords(self):
+        response = self.post_json(
+            "/api/auth/register/",
+            {
+                "username": "weak-password",
+                "email": "weak-password@property24.test",
+                "password": "short123",
+                "name": "Weak Password",
+                "account_type": "tenant",
+                "phone": "+263771555555",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Password", response.json()["error"])
+        self.assertFalse(get_user_model().objects.filter(username="weak-password").exists())
+
+    def test_public_registration_accepts_printable_symbols_in_password(self):
+        password = "Safe<script>';--2026"
+        response = self.post_json(
+            "/api/auth/register/",
+            {
+                "username": "symbol-password",
+                "email": "symbol-password@property24.test",
+                "password": password,
+                "name": "Symbol Password",
+                "account_type": "tenant",
+                "phone": "+263771777777",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        user = get_user_model().objects.get(username="symbol-password")
+        self.assertTrue(user.password.startswith("argon2$"))
+        self.assertTrue(user.check_password(password))
+
+    def test_public_registration_rejects_password_control_characters(self):
+        response = self.post_json(
+            "/api/auth/register/",
+            {
+                "username": "control-password",
+                "email": "control-password@property24.test",
+                "password": "CorrectHorse\nRental2026",
+                "name": "Control Password",
+                "account_type": "tenant",
+                "phone": "+263771888888",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("control characters", response.json()["error"])
+
+    def test_public_registration_rejects_invalid_identity_fields(self):
+        bad_email = self.post_json(
+            "/api/auth/register/",
+            {
+                "username": "bad-email",
+                "email": "not-an-email",
+                "password": "CorrectHorseRental2030",
+                "name": "Bad Email",
+                "account_type": "tenant",
+                "phone": "+263771999999",
+            },
+        )
+        bad_phone = self.post_json(
+            "/api/auth/register/",
+            {
+                "username": "bad-phone",
+                "email": "bad-phone@property24.test",
+                "password": "CorrectHorseRental2031",
+                "name": "Bad Phone",
+                "account_type": "tenant",
+                "phone": "+263abc",
+            },
+        )
+
+        self.assertEqual(bad_email.status_code, 400)
+        self.assertIn("valid email", bad_email.json()["error"])
+        self.assertEqual(bad_phone.status_code, 400)
+        self.assertIn("Phone number", bad_phone.json()["error"])
+
+    def test_public_registration_rejects_oversized_password(self):
+        response = self.post_json(
+            "/api/auth/register/",
+            {
+                "username": "long-password",
+                "email": "long-password@property24.test",
+                "password": "A" * 129,
+                "name": "Long Password",
+                "account_type": "tenant",
+                "phone": "+263772111111",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("128", response.json()["error"])
+
+    def test_public_registration_stores_argon2_password_hash(self):
+        response = self.post_json(
+            "/api/auth/register/",
+            {
+                "username": "argon2-user",
+                "email": "argon2-user@property24.test",
+                "password": "CorrectHorseRental2029",
+                "name": "Argon Two",
+                "account_type": "tenant",
+                "phone": "+263771666666",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        user = get_user_model().objects.get(username="argon2-user")
+        self.assertTrue(user.password.startswith("argon2$"))
+        self.assertNotIn("CorrectHorseRental2029", user.password)
+        self.assertTrue(user.check_password("CorrectHorseRental2029"))
+        self.assertNotIn("tokens", response.json())
 
     def test_public_registration_rejects_duplicate_phone_before_account_creation(self):
         User = get_user_model()
@@ -122,7 +255,7 @@ class RentalApiTests(TestCase):
             {
                 "username": "duplicate-phone",
                 "email": "duplicate-phone@property24.test",
-                "password": "secret12345",
+                "password": "CorrectHorseRental2026",
                 "name": "Duplicate Phone",
                 "account_type": "tenant",
                 "phone": "+263771000000",
@@ -133,7 +266,7 @@ class RentalApiTests(TestCase):
             {
                 "username": "+263771000000",
                 "email": "duplicate-username-phone@property24.test",
-                "password": "secret12345",
+                "password": "CorrectHorseRental2027",
                 "name": "Duplicate Username Phone",
                 "account_type": "tenant",
                 "phone": "+263772000000",
@@ -146,15 +279,94 @@ class RentalApiTests(TestCase):
         self.assertFalse(get_user_model().objects.filter(username="duplicate-phone").exists())
         self.assertFalse(get_user_model().objects.filter(username="+263771000000").exists())
 
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_verification_phone_otp_endpoint_sends_and_verifies_code(self):
+        self.tenant.email = "tenant@example.com"
+        self.tenant.save(update_fields=["email"])
+        phone = "+263778123456"
+        send_response = self.post_json("/api/verifications/phone-otp/", {"phone": phone}, user=self.tenant)
+        self.assertEqual(send_response.status_code, 201)
+        self.assertEqual(send_response.json()["delivery_channel"], "email")
+        self.assertNotIn("dev_otp", send_response.json())
+        self.assertEqual(len(mail.outbox), 1)
+        challenge_id = send_response.json()["challenge_id"]
+        self.assertEqual(send_response.json()["expires_in_seconds"], 30)
+        challenge = PhoneVerificationOTP.objects.get(pk=challenge_id)
+        self.assertEqual(challenge.phone, phone)
+        self.assertLessEqual((challenge.expires_at - timezone.now()).total_seconds(), 30)
+        self.assertGreater((challenge.expires_at - timezone.now()).total_seconds(), 0)
+
+        challenge.code_hash = hash_otp("123456")
+        challenge.save(update_fields=["code_hash"])
+        verify_response = self.post_json("/api/verifications/phone-otp/verify/", {"challenge_id": challenge_id, "otp": "123456"}, user=self.tenant)
+
+        self.assertEqual(verify_response.status_code, 200)
+        self.assertTrue(verify_response.json()["phone_verified"])
+        challenge.refresh_from_db()
+        self.assertEqual(challenge.status, PhoneVerificationOTP.Status.VERIFIED)
+
+    def test_verification_id_extract_returns_detected_id_for_confirmation(self):
+        response = self.post_json(
+            "/api/verifications/id-extract/",
+            {"id_front_uploaded": True, "id_back_uploaded": True, "national_id_number": "63-000000L63"},
+            user=self.tenant,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["extracted_national_id_number"], "63-000000L63")
+        self.assertTrue(response.json()["requires_confirmation"])
+
+    def test_verified_landlord_can_create_agent_account(self):
+        response = self.post_json(
+            "/api/landlord/agents/",
+            {
+                "email": "landlord-agent@property24.test",
+                "name": "Landlord Agent",
+                "phone": "+263774444444",
+                "password": "CorrectHorseAgent2033",
+            },
+            user=self.landlord,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["user"]["role"], "agent")
+        self.assertFalse(payload["user"]["verified"])
+        self.assertTrue(get_user_model().objects.filter(email="landlord-agent@property24.test", role="agent").exists())
+
+    def test_unverified_landlord_cannot_create_agent_account(self):
+        User = get_user_model()
+        unverified = User.objects.create_user(username="unverified-owner", password="secret12345", role=User.Roles.LANDLORD, is_verified=False)
+
+        response = self.post_json(
+            "/api/landlord/agents/",
+            {"email": "blocked-agent@property24.test", "name": "Blocked Agent", "phone": "+263775555555", "password": "CorrectHorseAgent2034"},
+            user=unverified,
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(User.objects.filter(email="blocked-agent@property24.test").exists())
+
+    def test_public_registration_rejects_agent_accounts(self):
+        response = self.post_json(
+            "/api/auth/register/",
+            {"username": "public-agent", "email": "public-agent@property24.test", "password": "CorrectHorseRental2032", "account_type": "agent"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("tenant or landlord", response.json()["error"])
+
     def test_public_registration_rejects_admin_accounts(self):
         response = self.post_json(
             "/api/auth/register/",
-            {"username": "public-admin", "email": "public-admin@property24.test", "password": "secret12345", "account_type": "admin", "phone": "+263774000000"},
+            {"username": "public-admin", "email": "public-admin@property24.test", "password": "CorrectHorseRental2028", "account_type": "admin", "phone": "+263774000000"},
         )
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("Public registration", response.json()["error"])
 
+    @override_settings(GOOGLE_SIGN_IN_ENABLED=True, GOOGLE_CLIENT_IDS=["web-client-id.apps.googleusercontent.com"])
+    @patch("rentals.views.verify_google_id_token")
     def test_google_auth_creates_role_scoped_account_without_platform_verification(self, verify_google_id_token):
         verify_google_id_token.return_value = {
             "sub": "google-user-123",
@@ -163,7 +375,7 @@ class RentalApiTests(TestCase):
             "name": "Google Tenant",
         }
 
-        response = self.post_json("/api/auth/google/", {"id_token": "verified-google-token", "account_type": "tenant"})
+        response = self.post_json("/api/auth/google/", {"id_token": "verified-google-token", "account_type": "tenant", "phone": "+263779123456"})
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -174,6 +386,67 @@ class RentalApiTests(TestCase):
         self.assertIn("apply_for_rentals", payload["account"]["capabilities"])
         self.assertIn("national_id_verification", payload["account"]["onboarding"]["requirements"])
         self.assertIn("tokens", payload)
+
+    @override_settings(GOOGLE_SIGN_IN_ENABLED=True, GOOGLE_CLIENT_IDS=["web-client-id.apps.googleusercontent.com"])
+    @patch("rentals.views.verify_google_id_token")
+    def test_google_auth_new_account_can_start_without_phone_before_verification(self, verify_google_id_token):
+        verify_google_id_token.return_value = {
+            "sub": "google-no-phone-123",
+            "email": "google-no-phone@property24.test",
+            "email_verified": True,
+            "name": "Google No Phone",
+        }
+
+        response = self.post_json("/api/auth/google/", {"id_token": "verified-google-token", "account_type": "tenant"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["user"]["verified"])
+        self.assertTrue(payload["account"]["onboarding"]["required"])
+
+    @override_settings(GOOGLE_SIGN_IN_ENABLED=True, GOOGLE_CLIENT_IDS=["web-client-id.apps.googleusercontent.com"])
+    @patch("rentals.views.verify_google_id_token")
+    def test_google_auth_new_account_rejects_duplicate_phone(self, verify_google_id_token):
+        verify_google_id_token.return_value = {
+            "sub": "google-duplicate-phone-123",
+            "email": "google-duplicate-phone@property24.test",
+            "email_verified": True,
+            "name": "Google Duplicate Phone",
+        }
+
+        response = self.post_json("/api/auth/google/", {"id_token": "verified-google-token", "account_type": "tenant", "phone": "0771111111"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("phone number", response.json()["error"])
+
+    @override_settings(GOOGLE_SIGN_IN_ENABLED=True, GOOGLE_CLIENT_IDS=["web-client-id.apps.googleusercontent.com"])
+    @patch("rentals.views.verify_google_id_token")
+    def test_google_auth_existing_account_signs_in_without_role_selection(self, verify_google_id_token):
+        User = get_user_model()
+        User.objects.create_user(
+            username="google-landlord",
+            email="google-landlord@property24.test",
+            password="secret12345",
+            full_name="Google Landlord",
+            role=User.Roles.LANDLORD,
+            auth_provider="google",
+            google_subject="google-landlord-123",
+            google_email_verified=True,
+        )
+        verify_google_id_token.return_value = {
+            "sub": "google-landlord-123",
+            "email": "google-landlord@property24.test",
+            "email_verified": True,
+            "name": "Google Landlord",
+        }
+
+        response = self.post_json("/api/auth/google/", {"id_token": "verified-google-token"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["user"]["role"], "landlord")
+        self.assertEqual(payload["account"]["account_type"], "landlord")
+        self.assertIn("add_properties", payload["account"]["capabilities"])
 
     @override_settings(GOOGLE_SIGN_IN_ENABLED=True, GOOGLE_CLIENT_IDS=["web-client-id.apps.googleusercontent.com"])
     @patch("rentals.views.verify_google_id_token")
@@ -188,7 +461,7 @@ class RentalApiTests(TestCase):
         response = self.post_json("/api/auth/google/", {"id_token": "verified-google-token", "account_type": "admin"})
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("tenant, landlord, or agent", response.json()["error"])
+        self.assertIn("tenant or landlord", response.json()["error"])
 
     def test_auth_me_returns_role_specific_hidden_sections(self):
         login = self.post_json("/api/auth/login/", {"username": "landlord", "password": "secret12345"})
@@ -224,28 +497,133 @@ class RentalApiTests(TestCase):
         self.assertEqual(users_response.status_code, 403)
         self.assertEqual(property_response.status_code, 403)
 
-    def test_verification_submission_requires_role_specific_evidence(self):
+    def test_unverified_account_is_locked_to_verification_flow(self):
+        User = get_user_model()
+        unverified_tenant = User.objects.create_user(username="locked-tenant", password="secret12345", role=User.Roles.TENANT, is_verified=False)
+        blocked = self.post_json(
+            f"/api/properties/{self.property.id}/comments/",
+            {"body": "Can I view this house?"},
+            user=unverified_tenant,
+        )
+        self.mark_phone_otp_verified(unverified_tenant, "+263779000002")
+        allowed = self.post_json(
+            "/api/verifications/",
+            {
+                "role": "tenant",
+                "name": "Jane Smith",
+                "phone": "+263779000002",
+                "national_id_number": "63-000000L64",
+                "extracted_national_id_number": "63-000000L64",
+                "phone_verified": True,
+                "country_of_residence": "Zimbabwe",
+                "privacy_notice_accepted": True,
+                "document_issue_country": "Zimbabwe",
+                "document_type": "national_id",
+                "residential_address": "12 Borrowdale Road, Harare",
+                "address_gps_confirmed": True,
+                "proof_of_address_confirmed": True,
+                "declaration_accepted": True,
+                "id_front_uploaded": True,
+                "id_back_uploaded": True,
+                "identity_confirmed": True,
+                "liveness_uploaded": True,
+            },
+            user=unverified_tenant,
+        )
+
+        self.assertEqual(blocked.status_code, 403)
+        self.assertIn("verification", blocked.json()["error"].lower())
+        self.assertEqual(allowed.status_code, 201, allowed.json())
+
+    def test_verification_submission_requires_id_otp_and_document_evidence(self):
+        phone = "+263779000001"
         incomplete = self.post_json(
             "/api/verifications/",
-            {"role": "landlord", "national_id_number": "63-000000A63", "phone_verified": True, "selfie_uploaded": True},
+            {"role": "landlord", "name": "John Doe", "phone": phone, "national_id_number": "63-000000L63", "phone_verified": True},
             user=self.landlord,
         )
+        self.mark_phone_otp_verified(self.landlord, phone)
         complete = self.post_json(
             "/api/verifications/",
             {
                 "role": "landlord",
-                "national_id_number": "63-000000A63",
+                "name": "John Doe",
+                "phone": phone,
+                "national_id_number": "63-000000L63",
+                "extracted_national_id_number": "63-000000L63",
                 "phone_verified": True,
-                "selfie_uploaded": True,
-                "proof_of_ownership_reference": "deed-verified-by-admin",
+                "country_of_residence": "Zimbabwe",
+                "privacy_notice_accepted": True,
+                "document_issue_country": "Zimbabwe",
+                "document_type": "national_id",
+                "residential_address": "12 Borrowdale Road, Harare",
+                "address_gps_confirmed": True,
+                "proof_of_address_confirmed": True,
+                "declaration_accepted": True,
+                "id_front_uploaded": True,
+                "id_back_uploaded": True,
+                "identity_confirmed": True,
+                "liveness_uploaded": True,
             },
             user=self.landlord,
         )
 
         self.assertEqual(incomplete.status_code, 400)
-        self.assertTrue(any("proof_of_ownership_or_authorization" in error for error in incomplete.json()["errors"]))
-        self.assertEqual(complete.status_code, 201)
+        self.assertTrue(any("id_front_document" in error for error in incomplete.json()["errors"]))
+        self.assertTrue(any("phone_verified" in error for error in incomplete.json()["errors"]))
+        self.assertFalse(any("proof_of_ownership_or_authorization" in error for error in incomplete.json()["errors"]))
+        self.assertEqual(complete.status_code, 201, complete.json())
         self.assertEqual(complete.json()["status"], VerificationRequest.Status.SUBMITTED)
+        self.assertTrue(complete.json()["identity_confirmed"])
+
+    def test_zimbabwe_national_id_must_match_local_format(self):
+        phone = "+263779000003"
+        self.mark_phone_otp_verified(self.tenant, phone)
+        response = self.post_json(
+            "/api/verifications/",
+            {
+                "role": "tenant",
+                "name": "Jane Smith",
+                "phone": phone,
+                "national_id_number": "63-000000A63",
+                "phone_verified": True,
+                "country_of_residence": "Zimbabwe",
+                "document_issue_country": "Zimbabwe",
+                "document_type": "national_id",
+                "id_front_uploaded": True,
+                "id_back_uploaded": True,
+                "identity_confirmed": True,
+            },
+            user=self.tenant,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(any("Zimbabwe national ID" in error for error in response.json()["errors"]))
+
+    def test_foreign_renter_can_verify_with_passport(self):
+        User = get_user_model()
+        foreign_tenant = User.objects.create_user(username="foreign-tenant", password="secret12345", role=User.Roles.TENANT, is_verified=False)
+        phone = "+27115550123"
+        self.mark_phone_otp_verified(foreign_tenant, phone)
+        response = self.post_json(
+            "/api/verifications/",
+            {
+                "role": "tenant",
+                "name": "Nomsa Dlamini",
+                "phone": phone,
+                "country_of_residence": "South Africa",
+                "document_issue_country": "South Africa",
+                "document_type": "passport",
+                "national_id_number": "A12345678",
+                "phone_verified": True,
+                "id_front_uploaded": True,
+                "identity_confirmed": True,
+            },
+            user=foreign_tenant,
+        )
+
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertEqual(response.json()["document_type"], "passport")
 
     def test_least_privilege_scopes_tenant_records_to_self(self):
         User = get_user_model()
@@ -597,7 +975,7 @@ class RentalWebSocketTests(TransactionTestCase):
     def setUp(self):
         User = get_user_model()
         self.landlord = User.objects.create_user(username="ws-landlord", password="secret12345", full_name="John Doe", role=User.Roles.LANDLORD, is_verified=True)
-        self.tenant = User.objects.create_user(username="ws-tenant", password="secret12345", full_name="Jane Smith", role=User.Roles.TENANT)
+        self.tenant = User.objects.create_user(username="ws-tenant", password="secret12345", full_name="Jane Smith", role=User.Roles.TENANT, is_verified=True)
         self.agent = User.objects.create_user(username="ws-agent", password="secret12345", full_name="Tariro Moyo", role=User.Roles.AGENT, is_verified=True)
         self.property = Property.objects.create(
             owner=self.landlord,

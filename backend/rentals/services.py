@@ -193,8 +193,7 @@ def make_receipt_number():
 
 
 def default_checks_for_role(role):
+    base_checks = ["Phone OTP verification", "ID front capture", "ID back capture", "Extracted ID confirmation", "Liveness check"]
     if role == "agent":
-        return ["Estate agency registration", "National ID verification", "Agency information", "Contact details"]
-    if role == "tenant":
-        return ["National ID verification", "Selfie verification", "Phone verification"]
-    return ["National ID verification", "Selfie verification", "Proof of ownership or authorization to let", "Phone verification"]
+        return base_checks + ["Estate agency registration", "Agency information", "Contact details"]
+    return base_checks

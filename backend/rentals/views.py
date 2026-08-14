@@ -10,7 +10,10 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
+from django.core.validators import validate_email as validate_email_value
 from django.db import IntegrityError
 from django.db import connection
 from django.db.models import Count, Q, Sum
@@ -34,6 +37,7 @@ from .models import (
     Message,
     Payment,
     PendingRegistrationOTP,
+    PhoneVerificationOTP,
     Property,
     PropertyComment,
     PropertyPhoto,
@@ -59,7 +63,21 @@ from .object_storage import object_storage_status
 
 User = get_user_model()
 
-PUBLIC_ACCOUNT_ROLES = {User.Roles.TENANT, User.Roles.LANDLORD, User.Roles.AGENT}
+PUBLIC_ACCOUNT_ROLES = {User.Roles.TENANT, User.Roles.LANDLORD}
+VERIFICATION_REQUIRED_ROLES = {User.Roles.TENANT, User.Roles.LANDLORD, User.Roles.AGENT}
+VERIFICATION_ALLOWED_PATH_SUFFIXES = ("/auth/me/", "/auth/profile/", "/verifications/", "/verifications/phone-otp/", "/verifications/phone-otp/verify/", "/verifications/id-extract/")
+PASSWORD_MIN_LENGTH = 15
+PASSWORD_MAX_LENGTH = 128
+USERNAME_MAX_LENGTH = 150
+EMAIL_MAX_LENGTH = 254
+NAME_MAX_LENGTH = 160
+PHONE_MAX_LENGTH = 16
+CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+PHONE_RE = re.compile(r"^\+?\d{7,15}$")
+ACCEPTED_ID_DOCUMENT_TYPES = {"national_id", "foreign_id", "passport", "drivers_license"}
+ZIMBABWE_NATIONAL_ID_RE = re.compile(r"^\d{8,9}[A-Za-z]\d{2}$")
+GENERIC_DOCUMENT_NUMBER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9\-/ ]{4,31}$")
+ZIMBABWE_NATIONAL_ID_CHECK_LETTERS = "ABCDEFGHJKLMNPQRSTVWXYZ"
 
 ROLE_CAPABILITIES = {
     User.Roles.TENANT: [
@@ -111,7 +129,7 @@ ROLE_VISIBLE_SECTIONS = {
 
 ROLE_ONBOARDING_REQUIREMENTS = {
     User.Roles.TENANT: ["phone_verification", "national_id_verification", "selfie_verification"],
-    User.Roles.LANDLORD: ["phone_verification", "national_id_verification", "selfie_verification", "proof_of_ownership_or_authorization"],
+    User.Roles.LANDLORD: ["phone_verification", "country_and_document_selection", "id_front_capture", "id_back_capture", "identity_confirmation"],
     User.Roles.AGENT: ["phone_verification", "national_id_verification", "agency_information", "estate_agency_registration"],
     User.Roles.ADMIN: [],
 }
@@ -150,10 +168,21 @@ def current_user(request):
     return user, error
 
 
+def verification_access_allowed(request):
+    path = request.path.rstrip("/") + "/"
+    return any(path.endswith(suffix) for suffix in VERIFICATION_ALLOWED_PATH_SUFFIXES)
+
+
 def require_authenticated(request):
     user, error = current_user(request)
     if error:
         return None, json_error(error, status=401)
+    if request.method != "OPTIONS" and user.role in VERIFICATION_REQUIRED_ROLES and not user.is_verified and not verification_access_allowed(request):
+        return None, json_error(
+            "Account verification is required before using this feature",
+            status=403,
+            errors={"verification_required": True, "next_endpoint": "/api/verifications/"},
+        )
     return user, None
 
 
@@ -368,7 +397,7 @@ def auth_register(request):
     if error:
         return json_error(error)
 
-    return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user), "tokens": issue_token_pair(user)}, status=201)
+    return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user), "requires_sign_in": True}, status=201)
 
 
 @csrf_exempt
@@ -431,6 +460,55 @@ def auth_google(request):
     return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user), "tokens": issue_token_pair(user)})
 
 
+
+@csrf_exempt
+@require_http_methods(["GET", "POST", "OPTIONS"])
+def landlord_agents_collection(request):
+    acting_user, auth_response = require_roles(request, {User.Roles.LANDLORD})
+    if auth_response:
+        return auth_response
+    if not acting_user.is_verified:
+        return json_error("Landlord verification is required before creating agents", status=403)
+
+    if request.method == "GET":
+        agents = User.objects.filter(role=User.Roles.AGENT).order_by("full_name", "email")
+        return JsonResponse({"results": [serialize_user(agent) for agent in agents]})
+
+    data = request_data(request)
+    if data is None:
+        return json_error("Invalid request body")
+
+    email = normalize_email(data.get("email"))
+    username = str(data.get("username") or email).strip()
+    full_name = str(data.get("name") or data.get("full_name") or "").strip()
+    phone = normalize_phone(data.get("phone"))
+    password = data.get("password") or get_random_string(24)
+    for error in (
+        validate_text_field(username, "Username", USERNAME_MAX_LENGTH, required=True),
+        validate_email_field(email, required=True),
+        validate_text_field(full_name, "Full name", NAME_MAX_LENGTH, required=True),
+        validate_phone_field(phone, required=True),
+        validate_account_password(password),
+    ):
+        if error:
+            return json_error(error)
+    if User.objects.filter(Q(email__iexact=email) | Q(username__iexact=username) | Q(phone__in=phone_lookup_values(phone))).exists():
+        return json_error("An account with these details already exists")
+
+    try:
+        agent = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            full_name=full_name,
+            phone=phone,
+            role=User.Roles.AGENT,
+            is_verified=False,
+        )
+    except IntegrityError:
+        return json_error("An account with these details already exists")
+    return JsonResponse({"user": serialize_user(agent), "temporary_password_created": not bool(data.get("password"))}, status=201)
+
 @csrf_exempt
 @require_http_methods(["GET", "POST", "OPTIONS"])
 def users_collection(request):
@@ -453,7 +531,7 @@ def users_collection(request):
     if not username:
         return json_error("username or email is required")
 
-    user, error = create_public_account(data)
+    user, error = create_public_account(data, require_password=False)
     if error:
         return json_error(error)
     return JsonResponse(serialize_user(user), status=201)
@@ -1052,6 +1130,101 @@ def maintenance_detail(request, maintenance_id):
 
 
 @csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def verification_phone_otp(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    data = request_data(request)
+    if data is None:
+        return json_error("Invalid request body")
+    phone = normalize_phone(data.get("phone"))
+    phone_error = validate_phone_field(phone, required=True)
+    if phone_error:
+        return json_error(phone_error)
+    if User.objects.exclude(pk=acting_user.pk).filter(phone_identity_query(phone)).exists():
+        return json_error("An account with this phone number already exists")
+
+    PhoneVerificationOTP.objects.filter(user=acting_user, phone=phone, status=PhoneVerificationOTP.Status.PENDING).update(status=PhoneVerificationOTP.Status.EXPIRED)
+    otp_code = get_random_string(6, allowed_chars="0123456789")
+    challenge = PhoneVerificationOTP.objects.create(
+        user=acting_user,
+        phone=phone,
+        code_hash=hash_otp(otp_code),
+        sent_to=phone,
+        expires_at=timezone.now() + timedelta(seconds=30),
+    )
+    email_sent = send_verification_otp_email(acting_user, otp_code)
+    return JsonResponse(
+        {
+            "otp_required": True,
+            "challenge_id": str(challenge.id),
+            "phone": phone,
+            "delivery_channel": "email" if email_sent else "configured_provider_required",
+            "expires_in_seconds": 30,
+            "message": "OTP sent to your email" if email_sent else "",
+        },
+        status=201,
+    )
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def verification_phone_otp_verify(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    data = request_data(request)
+    if data is None:
+        return json_error("Invalid request body")
+    challenge_id = data.get("challenge_id")
+    code = str(data.get("otp") or data.get("code") or "").strip()
+    if not challenge_id or not code:
+        return json_error("challenge_id and otp are required")
+    challenge = PhoneVerificationOTP.objects.filter(pk=challenge_id, user=acting_user, status=PhoneVerificationOTP.Status.PENDING).first()
+    if not challenge:
+        return json_error("OTP challenge was not found or has already been used", status=404)
+    if challenge.is_expired:
+        challenge.status = PhoneVerificationOTP.Status.EXPIRED
+        challenge.save(update_fields=["status"])
+        return json_error("OTP has expired")
+    if challenge.attempts >= 5:
+        challenge.status = PhoneVerificationOTP.Status.EXPIRED
+        challenge.save(update_fields=["status"])
+        return json_error("Too many OTP attempts")
+    if challenge.code_hash != hash_otp(code):
+        challenge.attempts += 1
+        challenge.save(update_fields=["attempts"])
+        return json_error("Invalid OTP")
+    challenge.status = PhoneVerificationOTP.Status.VERIFIED
+    challenge.verified_at = timezone.now()
+    challenge.save(update_fields=["status", "verified_at"])
+    return JsonResponse({"phone_verified": True, "phone": challenge.phone})
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def verification_id_extract(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    data = request_data(request)
+    if data is None:
+        return json_error("Invalid request body")
+    files = request.FILES if hasattr(request, "FILES") else {}
+    if not (files.get("id_front_document") or data.get("id_front_uploaded") or data.get("id_front_document_url")):
+        return json_error("ID front image is required")
+    if not (files.get("id_back_document") or data.get("id_back_uploaded") or data.get("id_back_document_url")):
+        return json_error("ID back image is required")
+    extracted = extract_national_id_number(data, files)
+    return JsonResponse({
+        "extracted_national_id_number": extracted,
+        "confidence": "local" if extracted else "manual_review_required",
+        "requires_confirmation": True,
+    })
+
+
+@csrf_exempt
 @require_http_methods(["GET", "POST", "OPTIONS"])
 def verifications_collection(request):
     acting_user, auth_response = require_authenticated(request)
@@ -1073,16 +1246,43 @@ def verifications_collection(request):
     requested_role = data.get("role", user.role)
     if not is_admin(acting_user) and requested_role != user.role:
         return forbidden()
-    verification_errors = validate_verification_submission(request, data, requested_role)
+    verification_errors = validate_verification_submission(request, data, requested_role, user)
     if verification_errors:
         return json_error("Verification submission is incomplete", errors=verification_errors)
+    profile_updates = []
+    full_name = str(data.get("name") or data.get("full_name") or "").strip()
+    phone = normalize_phone(data.get("phone"))
+    if full_name and user.full_name != full_name:
+        user.full_name = full_name
+        profile_updates.append("full_name")
+    if phone and user.phone != phone:
+        if User.objects.exclude(pk=user.pk).filter(phone_identity_query(phone)).exists():
+            return json_error("An account with this phone number already exists")
+        user.phone = phone
+        profile_updates.append("phone")
+    if profile_updates:
+        user.save(update_fields=profile_updates)
     verification = VerificationRequest.objects.create(
         user=user,
         role=requested_role,
         national_id_number=data.get("national_id_number", ""),
         phone_verified=to_bool(data.get("phone_verified")),
+        country_of_residence=data.get("country_of_residence", ""),
+        privacy_notice_accepted=to_bool(data.get("privacy_notice_accepted")),
+        document_issue_country=data.get("document_issue_country", ""),
+        document_type=data.get("document_type", ""),
+        residential_address=data.get("residential_address", ""),
+        address_gps_confirmed=to_bool(data.get("address_gps_confirmed")),
+        proof_of_address_document=request.FILES.get("proof_of_address_document") if hasattr(request, "FILES") else None,
+        proof_of_address_confirmed=to_bool(data.get("proof_of_address_confirmed")),
+        politically_exposed_person=to_bool(data.get("politically_exposed_person")),
+        declaration_accepted=to_bool(data.get("declaration_accepted")),
+        id_front_document=request.FILES.get("id_front_document") if hasattr(request, "FILES") else None,
+        id_back_document=request.FILES.get("id_back_document") if hasattr(request, "FILES") else None,
+        extracted_national_id_number=data.get("extracted_national_id_number", ""),
+        identity_confirmed=to_bool(data.get("identity_confirmed")),
+        liveness_document=request.FILES.get("liveness_document") if hasattr(request, "FILES") else None,
         selfie_document=request.FILES.get("selfie_document") if hasattr(request, "FILES") else None,
-        ownership_or_authorization_document=request.FILES.get("ownership_or_authorization_document") if hasattr(request, "FILES") else None,
         estate_agency_registration=data.get("estate_agency_registration", ""),
         agency_name=data.get("agency_name", ""),
         contact_details=data.get("contact_details", ""),
@@ -1612,27 +1812,49 @@ def validate_listing_participants(owner, agent, listing_status):
     return None
 
 
-def validate_verification_submission(request, data, role):
+def validate_verification_submission(request, data, role, user):
     errors = []
     files = request.FILES if hasattr(request, "FILES") else {}
     has_selfie = bool(files.get("selfie_document") or data.get("selfie_document_url") or to_bool(data.get("selfie_uploaded")))
 
-    if not data.get("national_id_number"):
-        errors.append("national_id_number is required")
-    if not to_bool(data.get("phone_verified")):
-        errors.append("phone_verified must be true after phone OTP confirmation")
-    if not has_selfie:
-        errors.append("selfie_document or selfie_uploaded confirmation is required")
-
-    if role == User.Roles.LANDLORD:
-        has_ownership = bool(
-            files.get("ownership_or_authorization_document")
-            or data.get("ownership_or_authorization_document_url")
-            or data.get("proof_of_ownership_reference")
-            or data.get("authorization_reference")
-        )
-        if not has_ownership:
-            errors.append("proof_of_ownership_or_authorization is required for landlord verification")
+    full_name = str(data.get("name") or data.get("full_name") or "").strip()
+    phone = normalize_phone(data.get("phone"))
+    for error in (
+        validate_text_field(full_name, "Full name", NAME_MAX_LENGTH, required=True),
+        validate_phone_field(phone, required=True),
+    ):
+        if error:
+            errors.append(error)
+    country_of_residence = str(data.get("country_of_residence") or "").strip()
+    document_issue_country = str(data.get("document_issue_country") or "").strip()
+    document_type = str(data.get("document_type") or "").strip()
+    national_id_number = str(data.get("national_id_number") or "").strip()
+    extracted_id_number = str(data.get("extracted_national_id_number") or "").strip()
+    has_id_front = bool(files.get("id_front_document") or data.get("id_front_document_url") or to_bool(data.get("id_front_uploaded")))
+    has_id_back = bool(files.get("id_back_document") or data.get("id_back_document_url") or to_bool(data.get("id_back_uploaded")))
+    if not country_of_residence:
+        errors.append("country_of_residence is required")
+    if not document_issue_country:
+        errors.append("document_issue_country is required")
+    if document_type not in ACCEPTED_ID_DOCUMENT_TYPES:
+        errors.append("document_type must be national_id, foreign_id, passport, or drivers_license")
+    if not national_id_number:
+        errors.append("document number is required")
+    elif is_zimbabwe_country(document_issue_country) and document_type == "national_id":
+        if not is_valid_zimbabwe_national_id(national_id_number):
+            errors.append("Zimbabwe national ID must match the local format and check letter, for example 63123456C12")
+    elif not is_valid_generic_document_number(national_id_number):
+        errors.append("document number format is invalid")
+    if not has_id_front:
+        errors.append("id_front_document is required")
+    if is_zimbabwe_country(document_issue_country) and document_type == "national_id" and not has_id_back:
+        errors.append("id_back_document is required for Zimbabwe national ID verification")
+    if extracted_id_number and national_id_number and normalize_identity_number(extracted_id_number) != normalize_identity_number(national_id_number):
+        errors.append("confirmed document number must match extracted document number")
+    if not to_bool(data.get("identity_confirmed")):
+        errors.append("identity_confirmed must be true after confirming the document information")
+    if not to_bool(data.get("phone_verified")) or not phone_otp_verified(user, phone):
+        errors.append("phone_verified must be completed using OTP")
 
     if role == User.Roles.AGENT:
         if not data.get("estate_agency_registration"):
@@ -1711,18 +1933,128 @@ def make_receipt_number():
 
 
 def default_checks_for_role(role):
+    base_checks = ["Phone OTP", "Country and document type", "Identity document", "Document number confirmation"]
+    if role == User.Roles.LANDLORD:
+        return base_checks + ["Estate setup"]
     if role == User.Roles.AGENT:
-        return ["Estate agency registration", "National ID verification", "Agency information", "Contact details"]
-    if role == User.Roles.TENANT:
-        return ["National ID verification", "Selfie verification", "Phone verification"]
-    return ["National ID verification", "Selfie verification", "Proof of ownership or authorization to let", "Phone verification"]
+        return base_checks + ["Estate agency registration", "Agency information", "Contact details"]
+    return base_checks
 
 
 
+def phone_otp_verified(user, phone):
+    if not user or not phone:
+        return False
+    return PhoneVerificationOTP.objects.filter(user_id=user.id, phone=phone, status=PhoneVerificationOTP.Status.VERIFIED).exists()
+
+
+def send_verification_otp_email(user, code):
+    email = str(getattr(user, "email", "") or "").strip()
+    if not email:
+        return False
+    try:
+        validate_email_otp_provider()
+        sent = send_mail(
+            "Your Property24 verification OTP",
+            f"Your Property24 verification OTP is {code}. It expires in 30 seconds.",
+            settings.DEFAULT_FROM_EMAIL,
+            [email],
+            fail_silently=False,
+        )
+        return sent >= 1
+    except Exception:
+        return False
+
+
+def send_phone_otp(phone, code):
+    webhook_url = getattr(settings, "OTP_SMS_WEBHOOK_URL", "")
+    if not webhook_url:
+        return False
+    payload = json.dumps({"to": phone, "message": f"Your Property24 verification code is {code}", "sender": getattr(settings, "OTP_SMS_SENDER", "Property24")}).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    api_key = getattr(settings, "OTP_SMS_API_KEY", "")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        req = urlrequest.Request(webhook_url, data=payload, headers=headers, method="POST")
+        with urlrequest.urlopen(req, timeout=8) as response:
+            return 200 <= response.status < 300
+    except (OSError, urlerror.URLError):
+        return False
+
+
+def extract_national_id_number(data, files):
+    candidates = [
+        data.get("national_id_number"),
+        data.get("extracted_national_id_number"),
+        data.get("id_number_hint"),
+    ]
+    for upload in (files.get("id_front_document"), files.get("id_back_document")):
+        if not upload:
+            continue
+        candidates.append(getattr(upload, "name", ""))
+        try:
+            position = upload.tell()
+            sample = upload.read(262144)
+            upload.seek(position)
+            candidates.append(sample.decode("utf-8", errors="ignore"))
+        except (OSError, AttributeError, UnicodeDecodeError):
+            pass
+    pattern = re.compile(r"\b\d{2}-?\d{5,8}[A-Z]\d{2}\b", re.IGNORECASE)
+    for candidate in candidates:
+        value = str(candidate or "")
+        match = pattern.search(value)
+        if match:
+            return match.group(0).upper()
+    return ""
+
+
+def normalize_identity_number(value):
+    return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+
+
+def is_zimbabwe_country(value):
+    return str(value or "").strip().lower() in {"zimbabwe", "zw", "zwe"}
+
+
+def is_valid_zimbabwe_national_id(value):
+    normalized = normalize_identity_number(value)
+    match = ZIMBABWE_NATIONAL_ID_RE.fullmatch(normalized)
+    if not match:
+        return False
+    numeric_body = normalized[:-3]
+    check_letter = normalized[-3]
+    return check_letter == ZIMBABWE_NATIONAL_ID_CHECK_LETTERS[int(numeric_body) % len(ZIMBABWE_NATIONAL_ID_CHECK_LETTERS)]
+
+
+def is_valid_generic_document_number(value):
+    return bool(GENERIC_DOCUMENT_NUMBER_RE.fullmatch(str(value or "").strip()))
 
 
 def normalize_phone(value):
-    return re.sub(r"[\s()-.]", "", str(value or "").strip())
+    return re.sub(r"[\s().-]", "", str(value or "").strip())
+
+
+def phone_lookup_values(phone):
+    normalized = normalize_phone(phone)
+    if not normalized:
+        return []
+    values = {normalized}
+    if normalized.startswith("+"):
+        values.add(normalized[1:])
+    else:
+        values.add(f"+{normalized}")
+    return list(values)
+
+
+def phone_identity_query(phone):
+    values = phone_lookup_values(phone)
+    if not values:
+        return Q(pk__isnull=True)
+    query = Q(phone__in=values)
+    for value in values:
+        query |= Q(username__iexact=value) | Q(email__iexact=value)
+    return query
 
 
 def normalize_email(value):
@@ -1731,6 +2063,60 @@ def normalize_email(value):
 
 def hash_otp(code):
     return hashlib.sha256(f"{settings.SECRET_KEY}:{str(code).strip()}".encode("utf-8")).hexdigest()
+
+
+def contains_control_chars(value):
+    return bool(CONTROL_CHAR_RE.search(str(value or "")))
+
+
+def validate_text_field(value, field_name, max_length, required=False):
+    text_value = str(value or "").strip()
+    if required and not text_value:
+        return f"{field_name} is required"
+    if len(text_value) > max_length:
+        return f"{field_name} must be {max_length} characters or fewer"
+    if contains_control_chars(text_value):
+        return f"{field_name} cannot contain control characters"
+    return ""
+
+
+def validate_email_field(email, required=False):
+    error = validate_text_field(email, "Email address", EMAIL_MAX_LENGTH, required=required)
+    if error or not email:
+        return error
+    try:
+        validate_email_value(email)
+    except ValidationError:
+        return "Enter a valid email address"
+    return ""
+
+
+def validate_phone_field(phone, required=False):
+    error = validate_text_field(phone, "Phone number", PHONE_MAX_LENGTH, required=required)
+    if error or not phone:
+        return error
+    if not PHONE_RE.fullmatch(phone):
+        return "Phone number must use 7 to 15 digits and may start with +"
+    return ""
+
+
+def validate_account_password(password):
+    raw_password = str(password or "")
+    if not raw_password:
+        return "Password is required"
+    if len(raw_password) < PASSWORD_MIN_LENGTH:
+        return f"Password must be at least {PASSWORD_MIN_LENGTH} characters"
+    if len(raw_password) > PASSWORD_MAX_LENGTH:
+        return f"Password must be {PASSWORD_MAX_LENGTH} characters or fewer"
+    if not raw_password.strip():
+        return "Password must include at least one non-space character"
+    if not raw_password.isprintable():
+        return "Password cannot contain control characters"
+    try:
+        validate_password(raw_password)
+    except ValidationError as exc:
+        return " ".join(str(message) for message in exc.messages)
+    return ""
 
 
 def mask_phone(phone):
@@ -1761,22 +2147,25 @@ def validate_public_registration_payload(data):
     role = normalise_choice(role, User.Roles, role)
 
     if role not in PUBLIC_ACCOUNT_ROLES:
-        return None, "Public registration only supports tenant, landlord, or agent accounts"
-    if not email:
-        return None, "Email address is required so an OTP can be sent before account creation"
-    if not phone:
-        return None, "Phone number is required for one-account-per-number checks"
-    if not username:
-        return None, "username, email, or phone is required"
-    if not password:
-        return None, "Password is required"
+        return None, "Public registration only supports tenant or landlord accounts"
+    for error in (
+        validate_text_field(username, "Username", USERNAME_MAX_LENGTH, required=True),
+        validate_email_field(email, required=True),
+        validate_phone_field(phone, required=True),
+        validate_text_field(data.get("name") or data.get("full_name", ""), "Full name", NAME_MAX_LENGTH),
+    ):
+        if error:
+            return None, error
+    password_error = validate_account_password(password)
+    if password_error:
+        return None, password_error
     if email and User.objects.filter(email__iexact=email).exists():
         return None, "An account with this email already exists"
     if User.objects.filter(username__iexact=username).exists():
         return None, "An account with this username already exists"
-    if User.objects.filter(Q(phone=phone) | Q(username__iexact=phone) | Q(email__iexact=phone)).exists():
+    if User.objects.filter(phone_identity_query(phone)).exists():
         return None, "An account with this phone number already exists"
-    if normalize_phone(username) and User.objects.filter(phone=normalize_phone(username)).exists():
+    if normalize_phone(username) and User.objects.filter(phone_identity_query(username)).exists():
         return None, "An account with this username or phone number already exists"
 
     return {
@@ -1869,7 +2258,7 @@ def create_public_account_from_otp(challenge):
         return None, "An account with these details already exists"
     return user, ""
 
-def create_public_account(data):
+def create_public_account(data, require_password=True):
     username = str(data.get("username") or data.get("email") or data.get("phone") or "").strip()
     if not username:
         return None, "username, email, or phone is required"
@@ -1877,25 +2266,41 @@ def create_public_account(data):
     role = data.get("account_type") or data.get("role") or User.Roles.TENANT
     role = normalise_choice(role, User.Roles, role)
     if role not in PUBLIC_ACCOUNT_ROLES:
-        return None, "Public registration only supports tenant, landlord, or agent accounts"
+        return None, "Public registration only supports tenant or landlord accounts"
 
     email = normalize_email(data.get("email"))
     phone = normalize_phone(data.get("phone"))
+    full_name = str(data.get("name") or data.get("full_name", "")).strip()
+    password = data.get("password") or ""
+    for error in (
+        validate_text_field(username, "Username", USERNAME_MAX_LENGTH, required=True),
+        validate_email_field(email, required=require_password),
+        validate_phone_field(phone, required=False),
+        validate_text_field(full_name, "Full name", NAME_MAX_LENGTH),
+    ):
+        if error:
+            return None, error
+    if require_password:
+        password_error = validate_account_password(password)
+        if password_error:
+            return None, password_error
+    elif password and validate_account_password(password):
+        return None, validate_account_password(password)
     if email and User.objects.filter(email__iexact=email).exists():
         return None, "An account with this email already exists"
     if User.objects.filter(username__iexact=username).exists():
         return None, "An account with this username already exists"
-    if phone and User.objects.filter(Q(phone=phone) | Q(username__iexact=phone) | Q(email__iexact=phone)).exists():
+    if phone and User.objects.filter(phone_identity_query(phone)).exists():
         return None, "An account with this phone number already exists"
-    if normalize_phone(username) and User.objects.filter(phone=normalize_phone(username)).exists():
+    if normalize_phone(username) and User.objects.filter(phone_identity_query(username)).exists():
         return None, "An account with this username or phone number already exists"
 
     try:
         user = User.objects.create_user(
             username=username,
             email=email,
-            password=data.get("password") or get_random_string(32),
-            full_name=data.get("name") or data.get("full_name", ""),
+            password=password or get_random_string(32),
+            full_name=full_name,
             phone=phone,
             role=role,
             is_verified=False,
@@ -1909,22 +2314,37 @@ def create_public_account(data):
 
 
 def create_google_account(claims, data):
-    role = data.get("account_type") or data.get("role") or User.Roles.TENANT
-    role = normalise_choice(role, User.Roles, role)
-    if role not in PUBLIC_ACCOUNT_ROLES:
-        return None, "Google registration only supports tenant, landlord, or agent accounts"
+    requested_role = data.get("account_type") or data.get("role")
+    role = normalise_choice(requested_role, User.Roles, requested_role) if requested_role else None
+    if requested_role and role not in PUBLIC_ACCOUNT_ROLES:
+        return None, "Google registration only supports tenant or landlord accounts"
 
     subject = claims["sub"]
     email = claims.get("email", "")
     email_verified = bool(claims.get("email_verified"))
-    name = claims.get("name") or data.get("name") or email
+    name = data.get("name") or claims.get("name") or email
     picture = claims.get("picture", "")
+    phone = normalize_phone(data.get("phone"))
+
+    for error in (
+        validate_email_field(email, required=False),
+        validate_text_field(name, "Full name", NAME_MAX_LENGTH),
+    ):
+        if error:
+            return None, error
 
     user = User.objects.filter(google_subject=subject).first()
     if user is None and email:
         user = User.objects.filter(email__iexact=email).first()
 
     if user is None:
+        if not role:
+            return None, "Choose an account type before creating a Google account"
+        phone_error = validate_phone_field(phone, required=False)
+        if phone_error:
+            return None, phone_error
+        if phone and User.objects.filter(phone_identity_query(phone)).exists():
+            return None, "An account with this phone number already exists"
         try:
             return (
                 User.objects.create_user(
@@ -1932,7 +2352,7 @@ def create_google_account(claims, data):
                     email=email,
                     password=get_random_string(32),
                     full_name=name,
-                    phone=data.get("phone", ""),
+                    phone=phone,
                     role=role,
                     is_verified=False,
                     auth_provider="google",
@@ -1947,7 +2367,7 @@ def create_google_account(claims, data):
         except IntegrityError:
             return None, "A Google account with these details already exists"
 
-    if data.get("account_type") and user.role != role:
+    if requested_role and user.role != role:
         return None, "This Google account is already linked to a different account type"
 
     changed_fields = []
@@ -2203,6 +2623,21 @@ def serialize_verification(verification):
         "role": verification.role,
         "checks": verification.checks,
         "phone_verified": verification.phone_verified,
+        "country_of_residence": verification.country_of_residence,
+        "privacy_notice_accepted": verification.privacy_notice_accepted,
+        "document_issue_country": verification.document_issue_country,
+        "document_type": verification.document_type,
+        "residential_address": verification.residential_address,
+        "address_gps_confirmed": verification.address_gps_confirmed,
+        "proof_of_address_document": verification.proof_of_address_document.url if verification.proof_of_address_document else "",
+        "proof_of_address_confirmed": verification.proof_of_address_confirmed,
+        "politically_exposed_person": verification.politically_exposed_person,
+        "declaration_accepted": verification.declaration_accepted,
+        "id_front_document": verification.id_front_document.url if verification.id_front_document else "",
+        "id_back_document": verification.id_back_document.url if verification.id_back_document else "",
+        "extracted_national_id_number": verification.extracted_national_id_number,
+        "identity_confirmed": verification.identity_confirmed,
+        "liveness_document": verification.liveness_document.url if verification.liveness_document else "",
         "selfie_document": verification.selfie_document.url if verification.selfie_document else "",
         "ownership_or_authorization_document": verification.ownership_or_authorization_document.url if verification.ownership_or_authorization_document else "",
         "estate_agency_registration": verification.estate_agency_registration,

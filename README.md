@@ -38,7 +38,7 @@ To hydrate the mobile app from Django:
 EXPO_PUBLIC_API_URL=http://127.0.0.1:8011/api npm run web
 ```
 
-For Google sign-in, set `EXPO_PUBLIC_GOOGLE_CLIENT_ID` for web and `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` / `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` for native builds.
+For Google sign-in, create OAuth client IDs in Google Cloud Console, then start Expo with `EXPO_PUBLIC_GOOGLE_CLIENT_ID`, and with `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` / `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` for native builds. Put the same client IDs in backend `GOOGLE_CLIENT_IDS` and keep `GOOGLE_SIGN_IN_ENABLED=true`.
 
 Backend:
 
@@ -99,7 +99,7 @@ python3 manage.py makemigrations --check --dry-run
 ## Notes
 
 - When `OBJECT_STORAGE_PROVIDER=minio`, Django file fields use the MinIO bucket configured in `backend/.env`.
-- Google sign-in must send a verified Google ID token to the backend. Use `EXPO_PUBLIC_GOOGLE_CLIENT_ID` on the frontend, and put the same client ID in backend `GOOGLE_CLIENT_IDS`.
+- Google sign-in uses Expo AuthSession to get a Google ID token, then sends it to `POST /api/auth/google/`. The backend verifies the token audience against `GOOGLE_CLIENT_IDS`, creates only tenant/landlord/agent accounts, and returns normal JWT tokens. Register these redirect URIs in Google if your client type requires them: `property24zimbabwe://auth/google` for development builds and the Expo `exp://.../--/auth/google` URI shown by AuthSession/Metro for Expo Go testing.
 - `GET /api/health/` reports database, object storage, AI provider, and map provider status.
 - The mobile data layer hydrates from the Django API and does not inject demo listings, payments, leases, or conversations.
 - Payment provider callbacks for EcoCash, ZIPIT, bank transfer reconciliation, and cards are still modeled as recorded payment events; production provider integrations should be added behind those endpoints before launch.

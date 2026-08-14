@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useState } from "react";
 import { useRentalPlatform } from "../../state/rentalPlatform";
 import { colors, radius, shadows, spacing, typography } from "../../constants/theme";
@@ -11,8 +11,17 @@ import { AccessGuard } from "../../components/AccessGuard";
 const propertyTypes = ["House", "Flat", "Cottage", "Student accommodation", "Commercial property"];
 
 export default function ListingsScreen() {
-  const { state, addProperty, hasCapability } = useRentalPlatform();
+  const { state, addProperty, authUser, authLoading, authError, createLandlordAgent, hasCapability } = useRentalPlatform();
   const canCreateListing = hasCapability("add_properties") || hasCapability("list_properties");
+  const canCreateAgents = authUser?.role === "landlord" && Boolean(authUser?.verified) && hasCapability("create_agents");
+  const workspaceLabel = authUser?.role === "agent" ? "Agent listing workspace" : "Landlord workspace";
+  const workspaceSubtitle = authUser?.role === "agent"
+    ? "Manage assigned listings with the access your landlord has given you."
+    : "Manage verified rentals, listing media, and agents from one landlord account.";
+  const [agentForm, setAgentForm] = useState({ name: "", email: "", phone: "", password: "" });
+  const [agentNotice, setAgentNotice] = useState("");
+  const [agentError, setAgentError] = useState("");
+
   const [form, setForm] = useState({
     title: "",
     address: "",
@@ -36,6 +45,33 @@ export default function ListingsScreen() {
     photoLabel: "",
     description: "",
   });
+
+  const submitAgent = async () => {
+    setAgentNotice("");
+    setAgentError("");
+    if (!canCreateAgents) return;
+    if (!agentForm.name.trim() || !agentForm.email.trim() || !agentForm.phone.trim() || !agentForm.password.trim()) {
+      setAgentError("Enter the agent name, email, phone, and password.");
+      return;
+    }
+    if (agentForm.password.length < 15) {
+      setAgentError("Agent password must be at least 15 characters.");
+      return;
+    }
+
+    try {
+      const agent = await createLandlordAgent({
+        name: agentForm.name,
+        email: agentForm.email,
+        phone: agentForm.phone,
+        password: agentForm.password,
+      });
+      setAgentForm({ name: "", email: "", phone: "", password: "" });
+      setAgentNotice(`${agent.name} was created as an agent. They must verify before appearing on listings.`);
+    } catch (error) {
+      setAgentError(error instanceof Error ? error.message : "Agent account could not be created.");
+    }
+  };
 
   const submit = () => {
     if (!canCreateListing || !form.title.trim() || !form.address.trim()) return;
@@ -95,15 +131,43 @@ export default function ListingsScreen() {
       <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.eyebrow}>Landlord and agent workspace</Text>
+          <Text style={styles.eyebrow}>{workspaceLabel}</Text>
           <Text style={styles.title}>Listings</Text>
-          <Text style={styles.subtitle}>Publish homes only after ownership, authorization, and media checks are ready.</Text>
+          <Text style={styles.subtitle}>{workspaceSubtitle}</Text>
           <View style={styles.summaryRow}>
             <SummaryTile icon="home-outline" value={`${state.properties.length}`} label="Properties" />
             <SummaryTile icon="shield-checkmark-outline" value={`${state.properties.filter((item) => item.verified).length}`} label="Verified" />
             <SummaryTile icon="image-outline" value="MinIO" label="Media store" />
           </View>
         </View>
+
+        {canCreateAgents ? (
+          <View style={styles.agentCard}>
+            <View style={styles.formTitleRow}>
+              <View style={styles.formTitleCopy}>
+                <Text style={styles.formTitle}>Create agent</Text>
+                <Text style={styles.formSubtitle}>Agents are invited from this landlord account and cannot self-register.</Text>
+              </View>
+              <View style={styles.formIcon}>
+                <Ionicons name="person-add-outline" size={18} color={colors.accent} />
+              </View>
+            </View>
+            <View style={styles.agentGrid}>
+              <Input label="Full name" value={agentForm.name} onChangeText={(value) => setAgentForm((current) => ({ ...current, name: value }))} />
+              <Input label="Email" value={agentForm.email} onChangeText={(value) => setAgentForm((current) => ({ ...current, email: value }))} keyboardType="email-address" autoCapitalize="none" />
+            </View>
+            <View style={styles.agentGrid}>
+              <Input label="Phone" value={agentForm.phone} onChangeText={(value) => setAgentForm((current) => ({ ...current, phone: value }))} keyboardType="phone-pad" />
+              <Input label="Temporary password" value={agentForm.password} onChangeText={(value) => setAgentForm((current) => ({ ...current, password: value }))} secureTextEntry autoCapitalize="none" />
+            </View>
+            {agentNotice ? <Text style={styles.agentNotice}>{agentNotice}</Text> : null}
+            {agentError || authError ? <Text style={styles.agentError}>{agentError || authError}</Text> : null}
+            <Pressable onPress={submitAgent} disabled={authLoading} style={[styles.button, authLoading && styles.buttonDisabled]}>
+              {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Ionicons name="person-add-outline" size={18} color={colors.accentText} />}
+              <Text style={styles.buttonText}>{authLoading ? "Creating..." : "Create agent"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {canCreateListing ? (
           <View style={styles.formCard}>
@@ -177,7 +241,7 @@ export default function ListingsScreen() {
   );
 }
 
-function Input({ label, multiline, keyboardType, value, onChangeText }: { label: string; multiline?: boolean; keyboardType?: "default" | "number-pad"; value: string; onChangeText: (value: string) => void }) {
+function Input({ autoCapitalize, label, multiline, keyboardType, secureTextEntry, value, onChangeText }: { autoCapitalize?: "none" | "sentences" | "words" | "characters"; label: string; multiline?: boolean; keyboardType?: "default" | "number-pad" | "email-address" | "phone-pad"; secureTextEntry?: boolean; value: string; onChangeText: (value: string) => void }) {
   return (
     <View style={{ flex: 1, gap: 6 }}>
       <Text style={styles.inputLabel}>{label}</Text>
@@ -185,7 +249,9 @@ function Input({ label, multiline, keyboardType, value, onChangeText }: { label:
         value={value}
         onChangeText={onChangeText}
         multiline={multiline}
+        autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
+        secureTextEntry={secureTextEntry}
         style={[styles.input, multiline && styles.textArea]}
         placeholderTextColor={colors.textMuted}
       />
@@ -241,7 +307,12 @@ const styles = StyleSheet.create({
   summaryValue: { color: colors.text, fontSize: 17, ...typography.title },
   summaryLabel: { color: colors.textMuted, fontSize: 10, textTransform: "uppercase", ...typography.label },
   formCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.sm, ...shadows.card },
+  agentCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, borderWidth: 1, borderColor: "rgba(229,9,20,0.34)", padding: spacing.md, gap: spacing.sm, ...shadows.card },
+  agentGrid: { flexDirection: "row", gap: spacing.sm },
+  agentNotice: { color: colors.success, fontSize: 12, lineHeight: 18, ...typography.label },
+  agentError: { color: colors.warning, fontSize: 12, lineHeight: 18, ...typography.label },
   formTitleRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md, marginBottom: 2 },
+  formTitleCopy: { flex: 1, minWidth: 0 },
   formTitle: { color: colors.text, fontSize: 17, ...typography.title },
   formSubtitle: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 2, ...typography.body },
   formIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.accentSoft },
@@ -266,6 +337,7 @@ const styles = StyleSheet.create({
   },
   textArea: { minHeight: 96, textAlignVertical: "top" },
   button: { minHeight: 44, flexDirection: "row", gap: 8, backgroundColor: colors.accent, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", paddingVertical: 12 },
+  buttonDisabled: { opacity: 0.55 },
   buttonText: { color: colors.accentText, ...typography.button },
   listStack: { gap: spacing.md },
   emptyCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.lg, gap: 8, ...shadows.soft },
