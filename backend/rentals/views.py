@@ -88,6 +88,7 @@ IDENTITY_IMAGE_MIN_HEIGHT = 300
 IDENTITY_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 IDENTITY_ACTIVE_STATUSES = {"pending", "processing", "ocr_complete", "validation", "verified", "manual_review", "submitted", "reviewing", "approved"}
 GENERIC_DOCUMENT_NUMBER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 /-]{4,63}$")
+MAX_PROPERTY_PHOTOS = 10
 
 ROLE_CAPABILITIES = {
     User.Roles.TENANT: [
@@ -317,7 +318,7 @@ def auth_login(request):
         candidate_query = Q(email__iexact=username)
         normalized_phone = normalize_phone(username)
         if normalized_phone:
-            candidate_query |= Q(phone=normalized_phone)
+            candidate_query |= phone_identity_query(normalized_phone)
         candidate = User.objects.filter(candidate_query).first()
         if candidate and candidate.check_password(password):
             user = candidate
@@ -601,6 +602,9 @@ def properties_collection(request):
     else:
         owner = get_object_or_404(User, pk=data.get("owner_id"))
         agent = User.objects.filter(pk=data.get("agent_id")).first() if data.get("agent_id") else None
+    if len(data.get("photos") or []) > MAX_PROPERTY_PHOTOS:
+        return json_error(f"A property can have a maximum of {MAX_PROPERTY_PHOTOS} photos", status=400)
+
     listing_status = data.get("listing_status", Property.ListingStatus.PENDING_VERIFICATION) if is_admin(acting_user) else Property.ListingStatus.PENDING_VERIFICATION
     validation_error = validate_listing_participants(owner, agent, listing_status)
     if validation_error:
@@ -755,6 +759,8 @@ def property_photos_collection(request, property_id):
     if not can_manage_property(acting_user, prop):
         return forbidden()
     data = request_data(request)
+    if prop.photos.count() >= MAX_PROPERTY_PHOTOS:
+        return json_error(f"A property can have a maximum of {MAX_PROPERTY_PHOTOS} photos", status=400)
     photo = PropertyPhoto.objects.create(
         property=prop,
         image=request.FILES.get("image") if hasattr(request, "FILES") else None,
@@ -2046,7 +2052,8 @@ def apply_property_updates(prop, data, owner, agent):
 
 
 def create_property_media(prop, data):
-    for index, value in enumerate(data.get("photos") or []):
+    photos = list(data.get("photos") or [])[:MAX_PROPERTY_PHOTOS]
+    for index, value in enumerate(photos):
         if isinstance(value, dict):
             PropertyPhoto.objects.create(property=prop, caption=value.get("caption", ""), sort_order=value.get("sort_order", index))
         else:
@@ -2313,6 +2320,12 @@ def phone_lookup_values(phone):
         values.add(normalized[1:])
     else:
         values.add(f"+{normalized}")
+    if normalized.startswith("+263") and len(normalized) > 4:
+        subscriber = normalized[4:]
+        values.add(f"0{subscriber}")
+        values.add(f"263{subscriber}")
+        values.add(f"+2630{subscriber}")
+        values.add(f"2630{subscriber}")
     return list(values)
 
 

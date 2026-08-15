@@ -3,7 +3,6 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo
 import * as Contacts from "expo-contacts";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import * as Location from "expo-location";
 import { Link, useLocalSearchParams, type Href } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ImageBackground, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -21,6 +20,8 @@ type ListingThread = {
   contactRole: string;
   supplierId?: string;
   profilePicture?: string;
+  gps?: string;
+  address?: string;
   preview: string;
   time: string;
   unread: boolean;
@@ -411,15 +412,14 @@ export default function InboxScreen() {
     }
 
     if (action === "location") {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (!permission.granted) {
-        setError("Location permission is required to share your viewing pin.");
+      const coordinates = listingCoordinates(selectedThread.gps);
+      if (!coordinates) {
+        setError("This listing does not have a saved map pin yet. Add GPS on the listing first.");
         return;
       }
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const { latitude, longitude } = position.coords;
-      const mapsUrl = `https://www.openstreetmap.org/?mlat=${latitude.toFixed(6)}&mlon=${longitude.toFixed(6)}#map=17/${latitude.toFixed(6)}/${longitude.toFixed(6)}`;
-      await sendAttachmentMessage(`[Location] Viewing pin for ${selectedThread.title}: ${mapsUrl}`, { type: "location", url: mapsUrl, name: "Viewing location" });
+      const [latitude, longitude] = coordinates;
+      const mapsUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=17/${latitude}/${longitude}`;
+      await sendAttachmentMessage(`[Location] ${selectedThread.title} map pin: ${mapsUrl}`, { type: "location", url: mapsUrl, name: selectedThread.address || "Listing location" });
       return;
     }
 
@@ -895,6 +895,8 @@ function buildListingThreads(properties: Property[], conversations: Conversation
         contactRole,
         supplierId: property.supplierId || property.agentId || property.ownerId,
         profilePicture,
+        gps: property.gps,
+        address: `${property.address}, ${property.suburb}, ${property.city}`,
         preview: conversation?.preview || `${contactRole} · ${property.price}`,
         time: conversation?.time || "Listing",
         unread: Boolean(conversation?.lastMessageSenderId && String(conversation.lastMessageSenderId) !== String(authUserId || "")),
@@ -916,6 +918,8 @@ function buildListingThreads(properties: Property[], conversations: Conversation
       contactRole: "Listing contact",
       supplierId: otherParticipantId(conversation),
       profilePicture: otherParticipantPicture(conversation),
+      gps: undefined,
+      address: undefined,
       preview: conversation.preview,
       time: conversation.time,
       unread: Boolean(conversation.lastMessageSenderId && String(conversation.lastMessageSenderId) !== String(authUserId || "")),
@@ -929,6 +933,13 @@ function buildListingThreads(properties: Property[], conversations: Conversation
     if (a.hasConversation !== b.hasConversation) return a.hasConversation ? -1 : 1;
     return b.sortScore - a.sortScore || a.contactName.localeCompare(b.contactName);
   });
+}
+
+function listingCoordinates(gps?: string): [string, string] | null {
+  const [latitude, longitude] = String(gps || "").split(",").map((part) => part.trim());
+  if (!latitude || !longitude) return null;
+  if (Number.isNaN(Number(latitude)) || Number.isNaN(Number(longitude))) return null;
+  return [Number(latitude).toFixed(6), Number(longitude).toFixed(6)];
 }
 
 function otherParticipantName(conversation?: ConversationItem) {

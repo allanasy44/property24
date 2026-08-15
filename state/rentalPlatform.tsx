@@ -370,6 +370,8 @@ export type MessageAttachmentInput = {
 type PropertyInput = Omit<Property, "id" | "verified" | "photos" | "listingViews" | "savedCount" | "applicationsCount"> & {
   verified?: boolean;
   photos?: string[];
+  photoFiles?: AccountMediaFile[];
+  videoFiles?: AccountMediaFile[];
   listingViews?: number;
   savedCount?: number;
   applicationsCount?: number;
@@ -656,10 +658,11 @@ type RentalPlatformContextValue = {
   extractVerificationId: (payload: { idFrontFile: AccountMediaFile; idBackFile: AccountMediaFile }) => Promise<VerificationIdExtraction>;
   updateAccountProfile: (payload: AccountProfileUpdatePayload) => Promise<void>;
   createLandlordAgent: (payload: LandlordAgentInput) => Promise<AuthUser>;
+  fetchLandlordAgents: () => Promise<AuthUser[]>;
   reviewVerification: (verificationId: string, status: "approved" | "rejected" | "reviewing") => Promise<void>;
   canAccessSection: (section: string) => boolean;
   hasCapability: (capability: string) => boolean;
-  addProperty: (payload: PropertyInput) => void;
+  addProperty: (payload: PropertyInput) => Promise<Property | void>;
   addPayment: (payload: PaymentInput) => void;
   addMaintenance: (payload: MaintenanceInput) => void;
   addLease: (payload: LeaseInput) => void;
@@ -995,6 +998,17 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
             setAuthLoading(false);
           }
         },
+        fetchLandlordAgents: async () => {
+          if (!API_BASE_URL || !authToken) return [];
+          try {
+            const response = await fetchJson(`${API_BASE_URL}/landlord/agents/`, authToken);
+            return (response.results || []).map((item: any) => mapAuthUser(item));
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Agents could not be loaded";
+            setAuthError(message);
+            throw error;
+          }
+        },
         reviewVerification: async (verificationId, status) => {
           setAuthLoading(true);
           setAuthError("");
@@ -1011,7 +1025,31 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
         },
         canAccessSection: (section) => account.visibleSections.includes(section),
         hasCapability: (capability) => account.capabilities.includes(capability),
-        addProperty: (payload) => dispatch({ type: "addProperty", payload }),
+        addProperty: async (payload) => {
+          if (API_BASE_URL && authToken) {
+            setAuthLoading(true);
+            setAuthError("");
+            try {
+              const created = mapApiProperty(await postProtected("properties/", authToken, buildPropertyApiPayload(payload)));
+              const photos = (payload.photoFiles || []).slice(0, 10);
+              for (let index = 0; index < photos.length; index += 1) {
+                await postProtected(`properties/${created.id}/photos/`, authToken, buildPropertyPhotoFormData(photos[index], index));
+              }
+              for (const video of payload.videoFiles || []) {
+                await postProtected(`properties/${created.id}/videos/`, authToken, buildPropertyVideoFormData(video));
+              }
+              await refreshRentalPlatform(dispatch, authToken);
+              return created;
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Property could not be saved";
+              setAuthError(message);
+              throw error;
+            } finally {
+              setAuthLoading(false);
+            }
+          }
+          dispatch({ type: "addProperty", payload });
+        },
         addPayment: (payload) => {
           if (API_BASE_URL && authToken && payload.propertyId) {
             void postProtected("payments/", authToken, {
@@ -1328,6 +1366,54 @@ function buildMessageFormData(body: string, attachment: MessageAttachmentInput) 
   if (attachment.url) formData.append("attachment_url", attachment.url);
   if (attachment.file) formData.append("attachment", attachment.file as unknown as Blob);
   return formData;
+}
+
+function buildPropertyApiPayload(payload: PropertyInput) {
+  const [latitude, longitude] = parseGpsCoordinates(payload.gps);
+  return {
+    title: payload.title,
+    address: payload.address,
+    city: payload.city,
+    suburb: payload.suburb,
+    monthly_rent: cleanMoney(payload.price),
+    deposit_required: cleanMoney(payload.deposit),
+    property_type: payload.type,
+    bedrooms: payload.bedrooms,
+    bathrooms: payload.bathrooms,
+    furnished: payload.furnished.toLowerCase().includes("furnished") && !payload.furnished.toLowerCase().includes("unfurnished"),
+    parking: payload.parking,
+    solar_power: payload.solarPower,
+    water_availability: payload.water,
+    borehole: payload.borehole,
+    pet_friendly: payload.petFriendly,
+    has_360_tour: payload.tourAvailable,
+    description: payload.description,
+    agent_id: payload.agentId || undefined,
+    latitude,
+    longitude,
+  };
+}
+
+function buildPropertyPhotoFormData(file: AccountMediaFile, sortOrder: number) {
+  const formData = new FormData();
+  formData.append("image", file as unknown as Blob);
+  formData.append("caption", file.name || "Property photo");
+  formData.append("sort_order", String(sortOrder));
+  return formData;
+}
+
+function buildPropertyVideoFormData(file: AccountMediaFile) {
+  const formData = new FormData();
+  formData.append("video", file as unknown as Blob);
+  formData.append("caption", file.name || "Property video");
+  return formData;
+}
+
+function parseGpsCoordinates(value: string): [string | undefined, string | undefined] {
+  const [latitude, longitude] = String(value || "").split(",").map((part) => part.trim());
+  if (!latitude || !longitude) return [undefined, undefined];
+  if (Number.isNaN(Number(latitude)) || Number.isNaN(Number(longitude))) return [undefined, undefined];
+  return [latitude, longitude];
 }
 
 async function protectedRequest(endpoint: string, token: string | null, method: "POST" | "PATCH" | "DELETE", payload?: Record<string, unknown> | FormData): Promise<any> {

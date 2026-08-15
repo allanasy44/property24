@@ -15,10 +15,10 @@ from django.test import Client, TestCase, TransactionTestCase
 from PIL import Image
 
 from .auth import issue_token_pair
-from .views import hash_otp, normalize_phone
+from .views import hash_otp, normalize_phone, phone_lookup_values
 from property24_backend.asgi import application
 
-from .models import AIAnalysis, Application, CallSession, Conversation, DisputeReport, EmailVerificationOTP, LeaseAgreement, MaintenanceRequest, Message, Payment, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, SecurityAuditEvent, VerificationRequest, Viewing
+from .models import AIAnalysis, Application, CallSession, Conversation, DisputeReport, EmailVerificationOTP, LeaseAgreement, MaintenanceRequest, Message, Payment, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, PropertyPhoto, SecurityAuditEvent, VerificationRequest, Viewing
 
 
 class RentalApiTests(TestCase):
@@ -409,6 +409,9 @@ class RentalApiTests(TestCase):
         self.assertEqual(normalize_phone("+2630775845535"), "+263775845535")
         self.assertEqual(normalize_phone("2630775845535"), "+263775845535")
         self.assertEqual(normalize_phone("+27115550123"), "+27115550123")
+        lookup_values = set(phone_lookup_values("+2630775845535"))
+        self.assertIn("+263775845535", lookup_values)
+        self.assertIn("0775845535", lookup_values)
 
     @override_settings(
         OTP_DELIVERY_CHANNEL="sms",
@@ -1068,6 +1071,39 @@ class RentalApiTests(TestCase):
         self.assertEqual(photo_response.status_code, 201)
         self.assertEqual(video_response.status_code, 201)
         self.assertEqual(save_response.json()["saved_count"], 1)
+
+    def test_landlord_can_assign_agent_when_creating_listing(self):
+        response = self.post_json(
+            "/api/properties/",
+            {
+                "agent_id": self.agent.id,
+                "title": "Mount Pleasant flat",
+                "address": "22 Kingfisher Road",
+                "city": "Harare",
+                "suburb": "Mount Pleasant",
+                "monthly_rent": "650",
+                "deposit_required": "650",
+                "bedrooms": 2,
+                "bathrooms": 1,
+                "property_type": "flat",
+                "latitude": "-17.770000",
+                "longitude": "31.050000",
+            },
+            user=self.landlord,
+        )
+
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertEqual(response.json()["agent"]["id"], self.agent.id)
+        self.assertEqual(response.json()["gps"], "-17.770000, 31.050000")
+
+    def test_property_photo_upload_is_limited_to_ten(self):
+        for index in range(10):
+            PropertyPhoto.objects.create(property=self.property, caption=f"Photo {index}", sort_order=index)
+
+        response = self.post_json(f"/api/properties/{self.property.id}/photos/", {"caption": "Overflow"}, user=self.landlord)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("maximum of 10 photos", response.json()["error"])
 
         Payment.objects.create(
             tenant=self.tenant,

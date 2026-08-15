@@ -1,26 +1,35 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { useState } from "react";
-import { useRentalPlatform } from "../../state/rentalPlatform";
-import { colors, radius, shadows, spacing, typography } from "../../constants/theme";
-import { PropertyCard } from "../../components/PropertyCard";
-import { SectionHeader } from "../../components/SectionHeader";
-import { Screen } from "../../components/Screen";
 import { AccessGuard } from "../../components/AccessGuard";
+import { PropertyCard } from "../../components/PropertyCard";
+import { Screen } from "../../components/Screen";
+import { SectionHeader } from "../../components/SectionHeader";
+import { colors, radius, shadows, spacing, typography } from "../../constants/theme";
+import { AccountMediaFile, AuthUser, useRentalPlatform } from "../../state/rentalPlatform";
 
 const propertyTypes = ["House", "Flat", "Cottage", "Student accommodation", "Commercial property"];
+const maxPhotos = 10;
 
 export default function ListingsScreen() {
-  const { state, addProperty, authUser, authLoading, authError, createLandlordAgent, hasCapability } = useRentalPlatform();
+  const { state, addProperty, authUser, authLoading, authError, createLandlordAgent, fetchLandlordAgents, hasCapability } = useRentalPlatform();
   const canCreateListing = hasCapability("add_properties") || hasCapability("list_properties");
   const canCreateAgents = authUser?.role === "landlord" && Boolean(authUser?.verified) && hasCapability("create_agents");
   const workspaceLabel = authUser?.role === "agent" ? "Agent listing workspace" : "Landlord workspace";
   const workspaceSubtitle = authUser?.role === "agent"
     ? "Manage assigned listings with the access your landlord has given you."
-    : "Manage verified rentals, listing media, and agents from one landlord account.";
+    : "Manage rentals, listing media, map pins, and assigned agents from one landlord account.";
   const [agentForm, setAgentForm] = useState({ name: "", email: "", phone: "", password: "" });
+  const [agents, setAgents] = useState<AuthUser[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
   const [agentNotice, setAgentNotice] = useState("");
   const [agentError, setAgentError] = useState("");
+  const [listingNotice, setListingNotice] = useState("");
+  const [listingError, setListingError] = useState("");
+  const [photoFiles, setPhotoFiles] = useState<AccountMediaFile[]>([]);
+  const [videoFiles, setVideoFiles] = useState<AccountMediaFile[]>([]);
 
   const [form, setForm] = useState({
     title: "",
@@ -39,12 +48,42 @@ export default function ListingsScreen() {
     water: "",
     borehole: false,
     gps: "",
-    videoCount: "",
     tourAvailable: false,
     petFriendly: false,
-    photoLabel: "",
     description: "",
   });
+
+  const assignableAgents = useMemo(() => {
+    const fromProperties = state.properties
+      .filter((property) => property.agentId && property.agentName)
+      .map((property) => ({
+        id: String(property.agentId),
+        name: property.agentName || "Agent",
+        email: "",
+        phone: "",
+        role: "agent" as const,
+        verified: Boolean(property.agentVerified),
+        emailVerified: false,
+        phoneVerified: false,
+        accountOnboardingComplete: false,
+        profileStatus: property.agentVerified ? "verified" : "onboarding_required",
+        authProvider: "password",
+        googleEmailVerified: false,
+        profilePicture: property.agentProfilePicture,
+        coverPhoto: property.agentCoverPhoto,
+        bio: property.agentBio || "",
+        lastSeenAt: property.agentLastSeenAt,
+      }));
+    const merged = [...agents, ...fromProperties];
+    return merged.filter((agent, index, all) => all.findIndex((item) => item.id === agent.id) === index);
+  }, [agents, state.properties]);
+
+  useEffect(() => {
+    if (!canCreateAgents) return;
+    fetchLandlordAgents()
+      .then(setAgents)
+      .catch(() => undefined);
+  }, [canCreateAgents, fetchLandlordAgents]);
 
   const submitAgent = async () => {
     setAgentNotice("");
@@ -67,174 +106,282 @@ export default function ListingsScreen() {
         password: agentForm.password,
       });
       setAgentForm({ name: "", email: "", phone: "", password: "" });
-      setAgentNotice(`${agent.name} was created as an agent. They must verify before appearing on listings.`);
+      setAgents((current) => [agent, ...current.filter((item) => item.id !== agent.id)]);
+      setSelectedAgentId(agent.id);
+      setAgentNotice(`${agent.name} was created as an agent and selected for assignment.`);
     } catch (error) {
       setAgentError(error instanceof Error ? error.message : "Agent account could not be created.");
     }
   };
 
-  const submit = () => {
-    if (!canCreateListing || !form.title.trim() || !form.address.trim()) return;
+  const pickPhotos = async () => {
+    setListingError("");
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setListingError("Photo library permission is required to upload house pictures.");
+      return;
+    }
+    const remaining = Math.max(0, maxPhotos - photoFiles.length);
+    if (!remaining) {
+      setListingError(`A listing can have a maximum of ${maxPhotos} photos.`);
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: remaining, quality: 0.86 });
+    if (result.canceled) return;
+    setPhotoFiles((current) => [...current, ...result.assets.slice(0, remaining).map((asset) => imageAssetToUpload(asset, "property-photo"))].slice(0, maxPhotos));
+  };
 
-    addProperty({
-      title: form.title.trim(),
-      address: form.address.trim(),
-      city: form.city.trim() || "Harare",
-      suburb: form.suburb.trim() || "Central",
-      price: formatRent(form.price),
-      deposit: formatMoney(form.deposit) || "Deposit required",
-      type: form.type.trim() || "House",
-      bedrooms: Number(form.bedrooms) || 0,
-      bathrooms: Number(form.bathrooms) || 0,
-      furnished: form.furnished.trim() || "Unfurnished",
-      parking: form.parking.trim() || "Parking available",
-      power: form.power.trim() || "Grid",
-      solarPower: form.solarPower,
-      water: form.water.trim() || "Available",
-      borehole: form.borehole,
-      gps: form.gps.trim() || "Unknown",
-      videoCount: Number(form.videoCount) || 0,
-      tourAvailable: form.tourAvailable,
-      petFriendly: form.petFriendly,
-      description: form.description.trim() || "Newly added property",
-      photos: [form.photoLabel.trim() || `${form.type} photo`],
-      verified: false,
-    });
+  const pickVideos = async () => {
+    setListingError("");
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setListingError("Photo library permission is required to upload house videos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["videos"], allowsMultipleSelection: true, quality: 0.8, videoMaxDuration: 90 });
+    if (result.canceled) return;
+    setVideoFiles((current) => [...current, ...result.assets.map((asset) => imageAssetToUpload(asset, "property-video"))]);
+  };
 
-    setForm({
-      title: "",
-      address: "",
-      city: "",
-      suburb: "",
-      price: "",
-      deposit: "",
-      type: "House",
-      bedrooms: "",
-      bathrooms: "",
-      furnished: "Unfurnished",
-      parking: "",
-      power: "",
-      solarPower: false,
-      water: "",
-      borehole: false,
-      gps: "",
-      videoCount: "",
-      tourAvailable: false,
-      petFriendly: false,
-      photoLabel: "",
-      description: "",
-    });
+  const captureGps = async () => {
+    setListingNotice("");
+    setListingError("");
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (!permission.granted) {
+      setListingError("Location permission is required to save the house map pin.");
+      return;
+    }
+    try {
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const gps = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
+      setForm((current) => ({ ...current, gps }));
+      setListingNotice("GPS map pin added to this listing.");
+    } catch {
+      setListingError("GPS could not be captured. Make sure location is enabled on the phone.");
+    }
+  };
+
+  const submit = async () => {
+    setListingNotice("");
+    setListingError("");
+    if (!canCreateListing || !form.title.trim() || !form.address.trim()) {
+      setListingError("Enter at least the title and address.");
+      return;
+    }
+    if (photoFiles.length > maxPhotos) {
+      setListingError(`A listing can have a maximum of ${maxPhotos} photos.`);
+      return;
+    }
+
+    try {
+      await addProperty({
+        title: form.title.trim(),
+        address: form.address.trim(),
+        city: form.city.trim() || "Harare",
+        suburb: form.suburb.trim() || "Central",
+        price: formatRent(form.price),
+        deposit: formatMoney(form.deposit) || "Deposit required",
+        type: form.type.trim() || "House",
+        bedrooms: Number(form.bedrooms) || 0,
+        bathrooms: Number(form.bathrooms) || 0,
+        furnished: form.furnished.trim() || "Unfurnished",
+        parking: form.parking.trim() || "Parking available",
+        power: form.power.trim() || "Grid",
+        solarPower: form.solarPower,
+        water: form.water.trim() || "Available",
+        borehole: form.borehole,
+        gps: form.gps.trim() || "Unknown",
+        videoCount: videoFiles.length,
+        tourAvailable: form.tourAvailable,
+        petFriendly: form.petFriendly,
+        description: form.description.trim() || "Newly added property",
+        photos: photoFiles.map((file) => file.uri),
+        photoFiles,
+        videoFiles,
+        agentId: selectedAgentId || undefined,
+        verified: false,
+      });
+
+      setForm({
+        title: "",
+        address: "",
+        city: "",
+        suburb: "",
+        price: "",
+        deposit: "",
+        type: "House",
+        bedrooms: "",
+        bathrooms: "",
+        furnished: "Unfurnished",
+        parking: "",
+        power: "",
+        solarPower: false,
+        water: "",
+        borehole: false,
+        gps: "",
+        tourAvailable: false,
+        petFriendly: false,
+        description: "",
+      });
+      setPhotoFiles([]);
+      setVideoFiles([]);
+      setSelectedAgentId("");
+      setListingNotice("Property saved with media. It will appear publicly after verification.");
+    } catch (error) {
+      setListingError(error instanceof Error ? error.message : "Property could not be saved.");
+    }
   };
 
   return (
     <AccessGuard section="listings" roles={["landlord", "agent"]}>
       <Screen>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.eyebrow}>{workspaceLabel}</Text>
-          <Text style={styles.title}>Listings</Text>
-          <Text style={styles.subtitle}>{workspaceSubtitle}</Text>
-          <View style={styles.summaryRow}>
-            <SummaryTile icon="home-outline" value={`${state.properties.length}`} label="Properties" />
-            <SummaryTile icon="shield-checkmark-outline" value={`${state.properties.filter((item) => item.verified).length}`} label="Verified" />
-            <SummaryTile icon="image-outline" value="MinIO" label="Media store" />
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <Text style={styles.eyebrow}>{workspaceLabel}</Text>
+            <Text style={styles.title}>Listings</Text>
+            <Text style={styles.subtitle}>{workspaceSubtitle}</Text>
+            <View style={styles.summaryRow}>
+              <SummaryTile icon="home-outline" value={`${state.properties.length}`} label="Properties" />
+              <SummaryTile icon="shield-checkmark-outline" value={`${state.properties.filter((item) => item.verified).length}`} label="Verified" />
+              <SummaryTile icon="image-outline" value="10" label="Max photos" />
+            </View>
           </View>
-        </View>
 
-        {canCreateAgents ? (
-          <View style={styles.agentCard}>
-            <View style={styles.formTitleRow}>
-              <View style={styles.formTitleCopy}>
-                <Text style={styles.formTitle}>Create agent</Text>
-                <Text style={styles.formSubtitle}>Agents are invited from this landlord account and cannot self-register.</Text>
+          {canCreateAgents ? (
+            <View style={styles.agentCard}>
+              <View style={styles.formTitleRow}>
+                <View style={styles.formTitleCopy}>
+                  <Text style={styles.formTitle}>Create agent</Text>
+                  <Text style={styles.formSubtitle}>Agents are created by the landlord and can be assigned to manage selected houses.</Text>
+                </View>
+                <View style={styles.formIcon}>
+                  <Ionicons name="person-add-outline" size={18} color={colors.accent} />
+                </View>
               </View>
-              <View style={styles.formIcon}>
-                <Ionicons name="person-add-outline" size={18} color={colors.accent} />
+              <View style={styles.agentGrid}>
+                <Input label="Full name" value={agentForm.name} onChangeText={(value) => setAgentForm((current) => ({ ...current, name: value }))} />
+                <Input label="Email" value={agentForm.email} onChangeText={(value) => setAgentForm((current) => ({ ...current, email: value }))} keyboardType="email-address" autoCapitalize="none" />
               </View>
-            </View>
-            <View style={styles.agentGrid}>
-              <Input label="Full name" value={agentForm.name} onChangeText={(value) => setAgentForm((current) => ({ ...current, name: value }))} />
-              <Input label="Email" value={agentForm.email} onChangeText={(value) => setAgentForm((current) => ({ ...current, email: value }))} keyboardType="email-address" autoCapitalize="none" />
-            </View>
-            <View style={styles.agentGrid}>
-              <Input label="Phone" value={agentForm.phone} onChangeText={(value) => setAgentForm((current) => ({ ...current, phone: value }))} keyboardType="phone-pad" />
-              <Input label="Temporary password" value={agentForm.password} onChangeText={(value) => setAgentForm((current) => ({ ...current, password: value }))} secureTextEntry autoCapitalize="none" />
-            </View>
-            {agentNotice ? <Text style={styles.agentNotice}>{agentNotice}</Text> : null}
-            {agentError || authError ? <Text style={styles.agentError}>{agentError || authError}</Text> : null}
-            <Pressable onPress={submitAgent} disabled={authLoading} style={[styles.button, authLoading && styles.buttonDisabled]}>
-              {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Ionicons name="person-add-outline" size={18} color={colors.accentText} />}
-              <Text style={styles.buttonText}>{authLoading ? "Creating..." : "Create agent"}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        {canCreateListing ? (
-          <View style={styles.formCard}>
-            <View style={styles.formTitleRow}>
-              <View>
-                <Text style={styles.formTitle}>New listing intake</Text>
-                <Text style={styles.formSubtitle}>Photos, GPS, rent, deposit, utilities, and verification details.</Text>
+              <View style={styles.agentGrid}>
+                <Input label="Phone" value={agentForm.phone} onChangeText={(value) => setAgentForm((current) => ({ ...current, phone: value }))} keyboardType="phone-pad" />
+                <Input label="Temporary password" value={agentForm.password} onChangeText={(value) => setAgentForm((current) => ({ ...current, password: value }))} secureTextEntry autoCapitalize="none" />
               </View>
-              <View style={styles.formIcon}>
-                <Ionicons name="add" size={18} color={colors.accent} />
-              </View>
-            </View>
-          <Input label="Title" value={form.title} onChangeText={(value) => setForm((current) => ({ ...current, title: value }))} />
-          <Input label="Address" value={form.address} onChangeText={(value) => setForm((current) => ({ ...current, address: value }))} />
-          <View style={styles.formRow}>
-            <Input label="City" value={form.city} onChangeText={(value) => setForm((current) => ({ ...current, city: value }))} />
-            <Input label="Suburb" value={form.suburb} onChangeText={(value) => setForm((current) => ({ ...current, suburb: value }))} />
-          </View>
-          <View style={styles.formRow}>
-            <Input label="Price" value={form.price} onChangeText={(value) => setForm((current) => ({ ...current, price: value }))} />
-            <Input label="Deposit" value={form.deposit} onChangeText={(value) => setForm((current) => ({ ...current, deposit: value }))} />
-          </View>
-          <View style={styles.optionRow}>
-            {propertyTypes.map((type) => (
-              <Pressable key={type} onPress={() => setForm((current) => ({ ...current, type }))} style={[styles.optionChip, form.type === type && styles.optionChipActive]}>
-                <Text style={[styles.optionText, form.type === type && styles.optionTextActive]}>{shortType(type)}</Text>
+              {agentNotice ? <Text style={styles.agentNotice}>{agentNotice}</Text> : null}
+              {agentError || authError ? <Text style={styles.agentError}>{agentError || authError}</Text> : null}
+              <Pressable onPress={submitAgent} disabled={authLoading} style={[styles.button, authLoading && styles.buttonDisabled]}>
+                {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Ionicons name="person-add-outline" size={18} color={colors.accentText} />}
+                <Text style={styles.buttonText}>{authLoading ? "Creating..." : "Create agent"}</Text>
               </Pressable>
-            ))}
-          </View>
-          <View style={styles.formRow}>
-            <Input label="Bedrooms" keyboardType="number-pad" value={form.bedrooms} onChangeText={(value) => setForm((current) => ({ ...current, bedrooms: value }))} />
-            <Input label="Bathrooms" keyboardType="number-pad" value={form.bathrooms} onChangeText={(value) => setForm((current) => ({ ...current, bathrooms: value }))} />
-          </View>
-          <Input label="Furnished" value={form.furnished} onChangeText={(value) => setForm((current) => ({ ...current, furnished: value }))} />
-          <Input label="Parking" value={form.parking} onChangeText={(value) => setForm((current) => ({ ...current, parking: value }))} />
-          <Input label="Power" value={form.power} onChangeText={(value) => setForm((current) => ({ ...current, power: value }))} />
-          <Input label="Water" value={form.water} onChangeText={(value) => setForm((current) => ({ ...current, water: value }))} />
-          <Input label="GPS" value={form.gps} onChangeText={(value) => setForm((current) => ({ ...current, gps: value }))} />
-          <View style={styles.formRow}>
-            <Input label="Photo label" value={form.photoLabel} onChangeText={(value) => setForm((current) => ({ ...current, photoLabel: value }))} />
-            <Input label="Videos" keyboardType="number-pad" value={form.videoCount} onChangeText={(value) => setForm((current) => ({ ...current, videoCount: value }))} />
-          </View>
-          <View style={styles.optionRow}>
-            <ToggleChip label="Solar power" active={form.solarPower} onPress={() => setForm((current) => ({ ...current, solarPower: !current.solarPower }))} />
-            <ToggleChip label="Borehole" active={form.borehole} onPress={() => setForm((current) => ({ ...current, borehole: !current.borehole }))} />
-            <ToggleChip label="Pet friendly" active={form.petFriendly} onPress={() => setForm((current) => ({ ...current, petFriendly: !current.petFriendly }))} />
-            <ToggleChip label="360 tour future" active={form.tourAvailable} onPress={() => setForm((current) => ({ ...current, tourAvailable: !current.tourAvailable }))} />
-          </View>
-          <Input label="Description" value={form.description} onChangeText={(value) => setForm((current) => ({ ...current, description: value }))} multiline />
-            <Pressable onPress={submit} style={styles.button}>
-              <Ionicons name="cloud-upload-outline" size={18} color={colors.accentText} />
-              <Text style={styles.buttonText}>Save property</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        <SectionHeader title="Current properties" subtitle="Rendered from state and used by all other screens." />
-        <View style={styles.listStack}>
-          {state.properties.length ? (
-            state.properties.map((property) => <PropertyCard key={property.id} property={property} />)
-          ) : (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No properties saved yet</Text>
-              <Text style={styles.emptyBody}>Use the form above to add your first listing and populate the app dynamically.</Text>
             </View>
-          )}
-        </View>
+          ) : null}
+
+          {canCreateListing ? (
+            <View style={styles.formCard}>
+              <View style={styles.formTitleRow}>
+                <View>
+                  <Text style={styles.formTitle}>New listing intake</Text>
+                  <Text style={styles.formSubtitle}>Photos, videos, GPS, rent, deposit, utilities, and assigned agent.</Text>
+                </View>
+                <View style={styles.formIcon}>
+                  <Ionicons name="add" size={18} color={colors.accent} />
+                </View>
+              </View>
+              <Input label="Title" value={form.title} onChangeText={(value) => setForm((current) => ({ ...current, title: value }))} />
+              <Input label="Address" value={form.address} onChangeText={(value) => setForm((current) => ({ ...current, address: value }))} />
+              <View style={styles.formRow}>
+                <Input label="City" value={form.city} onChangeText={(value) => setForm((current) => ({ ...current, city: value }))} />
+                <Input label="Suburb" value={form.suburb} onChangeText={(value) => setForm((current) => ({ ...current, suburb: value }))} />
+              </View>
+              <View style={styles.formRow}>
+                <Input label="Price" value={form.price} onChangeText={(value) => setForm((current) => ({ ...current, price: value }))} />
+                <Input label="Deposit" value={form.deposit} onChangeText={(value) => setForm((current) => ({ ...current, deposit: value }))} />
+              </View>
+              <View style={styles.optionRow}>
+                {propertyTypes.map((type) => (
+                  <Pressable key={type} onPress={() => setForm((current) => ({ ...current, type }))} style={[styles.optionChip, form.type === type && styles.optionChipActive]}>
+                    <Text style={[styles.optionText, form.type === type && styles.optionTextActive]}>{shortType(type)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.formRow}>
+                <Input label="Bedrooms" keyboardType="number-pad" value={form.bedrooms} onChangeText={(value) => setForm((current) => ({ ...current, bedrooms: value }))} />
+                <Input label="Bathrooms" keyboardType="number-pad" value={form.bathrooms} onChangeText={(value) => setForm((current) => ({ ...current, bathrooms: value }))} />
+              </View>
+              <Input label="Furnished" value={form.furnished} onChangeText={(value) => setForm((current) => ({ ...current, furnished: value }))} />
+              <Input label="Parking" value={form.parking} onChangeText={(value) => setForm((current) => ({ ...current, parking: value }))} />
+              <Input label="Power" value={form.power} onChangeText={(value) => setForm((current) => ({ ...current, power: value }))} />
+              <Input label="Water" value={form.water} onChangeText={(value) => setForm((current) => ({ ...current, water: value }))} />
+              <View style={styles.gpsPanel}>
+                <Input label="GPS" value={form.gps} onChangeText={(value) => setForm((current) => ({ ...current, gps: value }))} />
+                <Pressable onPress={captureGps} disabled={authLoading} style={[styles.gpsButton, authLoading && styles.buttonDisabled]}>
+                  <Ionicons name="locate-outline" size={17} color={colors.accent} />
+                  <Text style={styles.gpsButtonText}>Use current pin</Text>
+                </Pressable>
+              </View>
+
+              {authUser?.role === "landlord" && assignableAgents.length ? (
+                <View style={styles.mediaPanel}>
+                  <Text style={styles.inputLabel}>Assign agent</Text>
+                  <View style={styles.optionRow}>
+                    <ToggleChip label="Owner handles" active={!selectedAgentId} onPress={() => setSelectedAgentId("")} />
+                    {assignableAgents.map((agent) => (
+                      <ToggleChip key={agent.id} label={agent.name} active={selectedAgentId === agent.id} onPress={() => setSelectedAgentId(agent.id)} />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.mediaPanel}>
+                <View style={styles.mediaHeader}>
+                  <Text style={styles.inputLabel}>Pictures</Text>
+                  <Text style={styles.mediaCount}>{photoFiles.length}/{maxPhotos}</Text>
+                </View>
+                <Pressable onPress={pickPhotos} disabled={photoFiles.length >= maxPhotos || authLoading} style={[styles.mediaButton, (photoFiles.length >= maxPhotos || authLoading) && styles.buttonDisabled]}>
+                  <Ionicons name="images-outline" size={17} color={colors.accent} />
+                  <Text style={styles.mediaButtonText}>{photoFiles.length ? "Add more photos" : "Upload photos"}</Text>
+                </Pressable>
+                {photoFiles.length ? <Text style={styles.mediaMeta}>{photoFiles.map((file) => file.name).join(" · ")}</Text> : null}
+              </View>
+
+              <View style={styles.mediaPanel}>
+                <View style={styles.mediaHeader}>
+                  <Text style={styles.inputLabel}>Videos</Text>
+                  <Text style={styles.mediaCount}>{videoFiles.length}</Text>
+                </View>
+                <Pressable onPress={pickVideos} disabled={authLoading} style={styles.mediaButton}>
+                  <Ionicons name="videocam-outline" size={17} color={colors.accent} />
+                  <Text style={styles.mediaButtonText}>{videoFiles.length ? "Add more videos" : "Upload videos"}</Text>
+                </Pressable>
+                {videoFiles.length ? <Text style={styles.mediaMeta}>{videoFiles.map((file) => file.name).join(" · ")}</Text> : null}
+              </View>
+
+              <View style={styles.optionRow}>
+                <ToggleChip label="Solar power" active={form.solarPower} onPress={() => setForm((current) => ({ ...current, solarPower: !current.solarPower }))} />
+                <ToggleChip label="Borehole" active={form.borehole} onPress={() => setForm((current) => ({ ...current, borehole: !current.borehole }))} />
+                <ToggleChip label="Pet friendly" active={form.petFriendly} onPress={() => setForm((current) => ({ ...current, petFriendly: !current.petFriendly }))} />
+                <ToggleChip label="360 tour future" active={form.tourAvailable} onPress={() => setForm((current) => ({ ...current, tourAvailable: !current.tourAvailable }))} />
+              </View>
+              <Input label="Description" value={form.description} onChangeText={(value) => setForm((current) => ({ ...current, description: value }))} multiline />
+              {listingNotice ? <Text style={styles.agentNotice}>{listingNotice}</Text> : null}
+              {listingError || authError ? <Text style={styles.agentError}>{listingError || authError}</Text> : null}
+              <Pressable onPress={submit} disabled={authLoading} style={[styles.button, authLoading && styles.buttonDisabled]}>
+                {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Ionicons name="cloud-upload-outline" size={18} color={colors.accentText} />}
+                <Text style={styles.buttonText}>{authLoading ? "Saving..." : "Save property"}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          <SectionHeader title="Current properties" subtitle="Rendered from live account data and used by Home, Inbox, and supplier profiles." />
+          <View style={styles.listStack}>
+            {state.properties.length ? (
+              state.properties.map((property) => <PropertyCard key={property.id} property={property} />)
+            ) : (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>No properties saved yet</Text>
+                <Text style={styles.emptyBody}>Use the form above to add your first listing and populate the app dynamically.</Text>
+              </View>
+            )}
+          </View>
         </ScrollView>
       </Screen>
     </AccessGuard>
@@ -296,6 +443,17 @@ function formatMoney(value: string) {
   return cleaned.startsWith("$") ? cleaned : `$${cleaned}`;
 }
 
+function imageAssetToUpload(asset: ImagePicker.ImagePickerAsset, label: string): AccountMediaFile {
+  const cleanUri = asset.uri.split("?")[0] || "";
+  const extension = cleanUri.split(".").pop()?.toLowerCase() || (asset.type === "video" ? "mp4" : "jpg");
+  const safeExtension = extension.length > 5 ? (asset.type === "video" ? "mp4" : "jpg") : extension;
+  return {
+    uri: asset.uri,
+    name: asset.fileName || `${label}-${Date.now()}.${safeExtension}`,
+    type: asset.mimeType || (asset.type === "video" ? "video/mp4" : `image/${safeExtension === "jpg" ? "jpeg" : safeExtension}`),
+  };
+}
+
 const styles = StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.md, backgroundColor: colors.background },
   header: { gap: spacing.sm, marginBottom: spacing.sm },
@@ -323,6 +481,15 @@ const styles = StyleSheet.create({
   optionText: { color: colors.text, fontSize: 12, ...typography.button },
   optionTextActive: { color: colors.accent },
   inputLabel: { color: colors.textMuted, fontSize: 12, textTransform: "uppercase", ...typography.label },
+  gpsPanel: { gap: 8 },
+  gpsButton: { minHeight: 42, borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(229,9,20,0.36)", backgroundColor: colors.accentSoft, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  gpsButtonText: { color: colors.text, fontSize: 13, ...typography.button },
+  mediaPanel: { gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.background, padding: spacing.sm },
+  mediaHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  mediaCount: { color: colors.accent, fontSize: 12, ...typography.label },
+  mediaButton: { minHeight: 42, borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(229,9,20,0.36)", backgroundColor: colors.accentSoft, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  mediaButtonText: { color: colors.text, fontSize: 13, ...typography.button },
+  mediaMeta: { color: colors.textMuted, fontSize: 11, lineHeight: 16, ...typography.body },
   input: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
