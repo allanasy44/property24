@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body th:replace="~{email/template :: layout(~{::section})}">
+<section>
+    <h1>Payment confirmation</h1>
+    <p th:text="|Hello ${firstName},|">Hello Customer,</p>
+    <p th:text="|We received your payment of ${amountPaid} for ${propertyTitle} on ${paymentDate}.|">Payment confirmation.</p>
+</section>
+</body>
+</html>

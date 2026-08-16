@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="layout(content)">
+<body style="margin:0;padding:0;background-color:#f4f7fb;font-family:Arial,sans-serif;color:#1f2937;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f7fb;padding:24px 12px;">
+    <tr>
+        <td align="center">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+                <tr>
+                    <td style="background-color:#0f172a;padding:24px;text-align:center;">
+                        <img th:src="${logoUrl}" alt="Logo" style="max-height:48px;max-width:180px;display:block;margin:0 auto 12px;">
+                        <p th:text="${platformName}" style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">[PLATFORM_NAME]</p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:32px 24px 20px 24px;line-height:1.6;">
+                        <th:block th:replace="${content}"></th:block>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:0 24px 24px 24px;">
+                        <p style="margin:0 0 16px 0;padding:16px;border-radius:12px;background-color:#eff6ff;color:#1e3a8a;">
+                            Security notice: Never share passwords, OTPs, or sensitive account details over email.
+                        </p>
+                        <p style="margin:0;color:#6b7280;font-size:14px;">
+                            Need help? Contact
+                            <a th:href="|mailto:${supportEmail}|" th:text="${supportEmail}" style="color:#2563eb;text-decoration:none;">[SUPPORT_EMAIL]</a>.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

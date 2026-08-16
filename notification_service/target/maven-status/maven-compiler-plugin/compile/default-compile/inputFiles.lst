@@ -1,0 +1,16 @@
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/DemoApplication.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/config/MailConfiguration.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/config/MailProperties.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/EmailTemplateType.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/api/EmailController.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/api/EmailRequest.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/api/EmailResponse.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/exception/DuplicateEmailRequestException.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/exception/EmailDeliveryException.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/exception/EmailTemplateException.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/exception/InvalidEmailRequestException.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/service/EmailService.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/service/EmailServiceImpl.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/email/service/PlainTextEmailRenderer.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/shared/ApiErrorResponse.java
+/home/tanaka/Documents/property24/notification_service/src/main/java/com/notifications/demo/shared/GlobalExceptionHandler.java

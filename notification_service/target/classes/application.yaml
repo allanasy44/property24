@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: demo
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS_ENABLE:true}
+
+app:
+  mail:
+    from-address: ${MAIL_FROM_ADDRESS:no-reply@example.com}
+    from-name: ${MAIL_FROM_NAME:[PLATFORM_NAME]}
+    reply-to: ${MAIL_REPLY_TO:}
+    frontend-url: ${FRONTEND_URL:https://example.com}
+    support-email: ${SUPPORT_EMAIL:support@example.com}
+    logo-url: ${LOGO_URL:https://example.com/logo.png}
+    platform-name: ${PLATFORM_NAME:[PLATFORM_NAME]}
+    primary-color: ${PRIMARY_COLOR:#1F6FEB}

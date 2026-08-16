@@ -1,0 +1,12 @@
+com/notifications/demo/email/api/EmailResponse.class
+com/notifications/demo/email/api/EmailController.class
+com/notifications/demo/config/MailProperties.class
+com/notifications/demo/email/exception/EmailDeliveryException.class
+com/notifications/demo/email/exception/EmailTemplateException.class
+com/notifications/demo/email/exception/InvalidEmailRequestException.class
+com/notifications/demo/DemoApplication.class
+com/notifications/demo/email/exception/DuplicateEmailRequestException.class
+com/notifications/demo/email/service/EmailService.class
+com/notifications/demo/config/MailConfiguration.class
+com/notifications/demo/email/EmailTemplateType.class
+com/notifications/demo/email/api/EmailRequest.class

@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body th:replace="~{email/template :: layout(~{::section})}">
+<section>
+    <h1>Viewing request received</h1>
+    <p th:text="|Hello ${firstName},|">Hello Customer,</p>
+    <p th:text="|We received your viewing request for ${propertyTitle}.|">Confirmation.</p>
+    <p th:text="|Preferred date: ${preferredDate}|">Preferred date.</p>
+</section>
+</body>
+</html>

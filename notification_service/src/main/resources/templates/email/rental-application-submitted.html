@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body th:replace="~{email/template :: layout(~{::section})}">
+<section>
+    <h1>Rental application submitted</h1>
+    <p th:text="|Hello ${firstName},|">Hello Customer,</p>
+    <p th:text="|Your application for ${propertyTitle} has been submitted.|">Submitted.</p>
+    <p th:text="|Reference: ${applicationReference}|">Reference.</p>
+</section>
+</body>
+</html>

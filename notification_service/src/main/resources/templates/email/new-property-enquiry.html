@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body th:replace="~{email/template :: layout(~{::section})}">
+<section>
+    <h1>New property enquiry</h1>
+    <p th:text="|Hello ${firstName},|">Hello Customer,</p>
+    <p th:text="|${enquirerName} has sent a new enquiry for ${propertyTitle}.|">Enquiry intro.</p>
+    <p th:text="${enquiryMessage}">Message body.</p>
+</section>
+</body>
+</html>
