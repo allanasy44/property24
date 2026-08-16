@@ -28,7 +28,14 @@
         {
           "contactsPermission": "Allow Property24 to let you choose a contact to share in chat."
         }
-      ]
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#E50914"
+        }
+      ],
+      "@config-plugins/react-native-webrtc"
     ],
     "experiments": {
       "typedRoutes": true

@@ -14,16 +14,20 @@ from .chat_services import (
     create_text_message,
     end_call,
     get_authorized_conversation,
+    mark_conversation_delivered,
     mark_conversation_read,
     touch_user_presence,
     user_conversation_ids,
     user_group_name,
 )
 from .models import CallSession, SecurityAuditEvent
+from .notification_services import send_call_push, send_chat_message_push
 from .views import serialize_call_session, serialize_message
 
-ALLOWED_INBOUND_EVENTS = {"message.send", "typing", "read", "call.start", "call.end", "presence.ping"}
+ALLOWED_INBOUND_EVENTS = {"message.send", "typing", "delivered", "read", "call.start", "call.end", "call.signal", "presence.ping"}
 MAX_EVENTS_PER_MINUTE = 80
+MAX_SIGNAL_BYTES = 12000
+ALLOWED_SIGNAL_TYPES = {"offer", "answer", "ice-candidate", "ready", "reject", "busy", "mute", "unmute", "camera-off", "camera-on"}
 
 
 class ConversationConsumer(AsyncJsonWebsocketConsumer):
@@ -96,16 +100,20 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             await self.handle_message_send(conversation, content)
         elif event_type == "typing":
             await self.handle_typing(conversation, content)
+        elif event_type == "delivered":
+            await self.handle_delivered(conversation)
         elif event_type == "read":
             await self.handle_read(conversation)
         elif event_type == "call.start":
             await self.handle_call_start(conversation, content)
         elif event_type == "call.end":
             await self.handle_call_end(conversation, content)
+        elif event_type == "call.signal":
+            await self.handle_call_signal(conversation, content)
 
     async def handle_message_send(self, conversation, content):
         try:
-            message = await database_sync_to_async(create_text_message)(conversation, self.user, content.get("body"))
+            message = await database_sync_to_async(create_text_message)(conversation, self.user, content.get("body"), content.get("client_id"))
         except ValueError as exc:
             await self.send_error(str(exc))
             return
@@ -113,6 +121,7 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         payload["client_id"] = str(content.get("client_id") or "")[:80]
         await self.audit("message_created", metadata={"conversation_id": conversation.id, "message_id": message.id})
         await self.channel_layer.group_send(conversation_group_name(conversation.id), {"type": "chat.event", "event": "message.created", "payload": payload})
+        await database_sync_to_async(send_chat_message_push)(message)
 
     async def handle_typing(self, conversation, content):
         is_typing = bool(content.get("is_typing"))
@@ -126,6 +135,20 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
                 "is_typing": is_typing,
             },
         })
+
+    async def handle_delivered(self, conversation):
+        message_ids = await database_sync_to_async(mark_conversation_delivered)(conversation, self.user)
+        if message_ids:
+            await self.audit("messages_delivered", metadata={"conversation_id": conversation.id, "count": len(message_ids)})
+            await self.channel_layer.group_send(conversation_group_name(conversation.id), {
+                "type": "chat.event",
+                "event": "messages.delivered",
+                "payload": {
+                    "conversation_id": str(conversation.id),
+                    "recipient_id": str(self.user.id),
+                    "message_ids": [str(item) for item in message_ids],
+                },
+            })
 
     async def handle_read(self, conversation):
         message_ids = await database_sync_to_async(mark_conversation_read)(conversation, self.user)
@@ -150,6 +173,38 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         payload = await database_sync_to_async(serialize_call_session)(call)
         await self.audit("call_started", metadata={"conversation_id": conversation.id, "call_id": call.id, "mode": call.mode})
         await self.channel_layer.group_send(conversation_group_name(conversation.id), {"type": "chat.event", "event": "call.started", "payload": payload})
+        await database_sync_to_async(send_call_push)(call)
+
+    async def handle_call_signal(self, conversation, content):
+        signal_type = str(content.get("signal_type") or "")[:40]
+        if signal_type not in ALLOWED_SIGNAL_TYPES:
+            await self.send_error("Unsupported call signal")
+            return
+        try:
+            call_id = int(content.get("call_id"))
+            call = await database_sync_to_async(CallSession.objects.get)(pk=call_id, conversation=conversation)
+        except (TypeError, ValueError, CallSession.DoesNotExist):
+            await self.send_error("Call could not be found")
+            return
+        if call.status != CallSession.Status.RINGING:
+            await self.send_error("Call is no longer active")
+            return
+        signal_payload = content.get("signal") or {}
+        if len(str(signal_payload)) > MAX_SIGNAL_BYTES:
+            await self.send_error("Call signal is too large")
+            return
+        target_user_id = str(content.get("target_user_id") or "")[:40]
+        payload = {
+            "conversation_id": str(conversation.id),
+            "call_id": str(call.id),
+            "sender_id": str(self.user.id),
+            "target_user_id": target_user_id,
+            "signal_type": signal_type,
+            "signal": signal_payload,
+            "sent_at": int(time.time()),
+        }
+        await self.audit("call_signal", metadata={"conversation_id": conversation.id, "call_id": call.id, "signal_type": signal_type})
+        await self.channel_layer.group_send(conversation_group_name(conversation.id), {"type": "chat.event", "event": "call.signal", "payload": payload})
 
     async def handle_call_end(self, conversation, content):
         try:

@@ -2,10 +2,11 @@ import hashlib
 import hmac
 from datetime import datetime, timezone
 from urllib.error import HTTPError
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.core.files.storage import Storage
 from django.utils.crypto import get_random_string
 
@@ -38,6 +39,10 @@ class MinioStorage(Storage):
         self._request("PUT", name, body=body, headers=headers)
         return name
 
+    def _open(self, name, mode="rb"):
+        response = self._request("GET", name)
+        return ContentFile(response.read(), name=name)
+
     def exists(self, name):
         try:
             self._request("HEAD", name)
@@ -56,9 +61,41 @@ class MinioStorage(Storage):
 
     def url(self, name, parameters=None, expire=None, http_method=None):
         public_base_url = settings.OBJECT_STORAGE_PUBLIC_BASE_URL.rstrip("/")
-        if public_base_url:
+        if public_base_url and not parameters:
             return f"{public_base_url}/{quote(name, safe='/')}"
+        if parameters and parameters.get("signed"):
+            return self.presigned_url(name, expires=expire or settings.OBJECT_STORAGE_UPLOAD_EXPIRY_SECONDS, method=http_method or "GET")
         return f"{self.endpoint_url}/{self.bucket_name}/{quote(name, safe='/')}"
+
+    def presigned_url(self, name, expires=900, method="GET"):
+        if not self.endpoint_url or not self.bucket_name:
+            raise RuntimeError("MinIO storage requires OBJECT_STORAGE_ENDPOINT_URL and OBJECT_STORAGE_BUCKET.")
+        parsed = urlparse(self.endpoint_url)
+        now = datetime.now(timezone.utc)
+        amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+        date_stamp = now.strftime("%Y%m%d")
+        credential_scope = f"{date_stamp}/{self.region_name}/s3/aws4_request"
+        encoded_name = quote(name, safe="/~")
+        canonical_uri = f"{parsed.path.rstrip('/')}/{self.bucket_name}/{encoded_name}"
+        credential = f"{self.access_key}/{credential_scope}"
+        query_params = {
+            "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+            "X-Amz-Credential": credential,
+            "X-Amz-Date": amz_date,
+            "X-Amz-Expires": str(max(60, min(int(expires or 900), 3600))),
+            "X-Amz-SignedHeaders": "host",
+        }
+        canonical_query = urlencode(sorted(query_params.items()), quote_via=quote)
+        canonical_headers = f"host:{parsed.netloc}\n"
+        canonical_request = "\n".join([method, canonical_uri, canonical_query, canonical_headers, "host", "UNSIGNED-PAYLOAD"])
+        string_to_sign = "\n".join([
+            "AWS4-HMAC-SHA256",
+            amz_date,
+            credential_scope,
+            hashlib.sha256(canonical_request.encode("utf-8")).hexdigest(),
+        ])
+        signature = hmac.new(self._signing_key(date_stamp), string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
+        return f"{parsed.scheme}://{parsed.netloc}{canonical_uri}?{canonical_query}&X-Amz-Signature={signature}"
 
     def get_available_name(self, name, max_length=None):
         if self.file_overwrite:

@@ -508,15 +508,36 @@ class Message(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_messages")
     body = models.TextField()
+    client_message_id = models.CharField(max_length=80, blank=True, db_index=True)
     attachment = models.FileField(upload_to="conversations/attachments/", blank=True)
     attachment_url = models.URLField(blank=True)
     attachment_type = models.CharField(max_length=32, blank=True)
     attachment_name = models.CharField(max_length=180, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     read_at = models.DateTimeField(null=True, blank=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["created_at"]
+
+
+class MessageReceipt(models.Model):
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="receipts")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="message_receipts")
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["message", "user"], name="unique_message_receipt_per_user"),
+        ]
+        indexes = [
+            models.Index(fields=["user", "delivered_at"]),
+            models.Index(fields=["user", "read_at"]),
+            models.Index(fields=["message", "user"]),
+        ]
 
 
 class CallSession(models.Model):
@@ -575,6 +596,121 @@ class DisputeReport(models.Model):
 
     def __str__(self):
         return self.subject
+
+
+class ChatBlock(models.Model):
+    blocker = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chat_blocks_created")
+    blocked = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chat_blocks_received")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["blocker", "blocked"], name="unique_chat_block"),
+            models.CheckConstraint(condition=~models.Q(blocker=models.F("blocked")), name="prevent_self_chat_block"),
+        ]
+        indexes = [
+            models.Index(fields=["blocker", "blocked"]),
+            models.Index(fields=["blocked"]),
+        ]
+
+
+class ChatReport(models.Model):
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        REVIEWING = "reviewing", "Reviewing"
+        RESOLVED = "resolved", "Resolved"
+        DISMISSED = "dismissed", "Dismissed"
+
+    reporter = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chat_reports_created")
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="chat_reports")
+    message = models.ForeignKey(Message, on_delete=models.SET_NULL, null=True, blank=True, related_name="chat_reports")
+    reason = models.CharField(max_length=80)
+    details = models.TextField(blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["conversation", "status"]),
+            models.Index(fields=["reporter", "created_at"]),
+        ]
+
+
+class PushDevice(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="push_devices")
+    token = models.CharField(max_length=255, unique=True)
+    platform = models.CharField(max_length=24)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "enabled"]),
+            models.Index(fields=["platform"]),
+        ]
+
+
+class MediaAsset(models.Model):
+    class Scope(models.TextChoices):
+        PROFILE = "profile", "Profile"
+        PROPERTY = "property", "Property"
+        CHAT = "chat", "Chat"
+        MAINTENANCE = "maintenance", "Maintenance"
+        VERIFICATION = "verification", "Verification"
+        LEASE = "lease", "Lease"
+
+    class MediaType(models.TextChoices):
+        IMAGE = "image", "Image"
+        VIDEO = "video", "Video"
+        DOCUMENT = "document", "Document"
+        AUDIO = "audio", "Audio"
+        OTHER = "other", "Other"
+
+    class Access(models.TextChoices):
+        PUBLIC = "public", "Public"
+        PRIVATE = "private", "Private"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        DELETED = "deleted", "Deleted"
+
+    class ProcessingStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        READY = "ready", "Ready"
+        SKIPPED = "skipped", "Skipped"
+        FAILED = "failed", "Failed"
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="media_assets")
+    file = models.FileField(upload_to="media/assets/")
+    thumbnail = models.ImageField(upload_to="media/thumbnails/", blank=True)
+    media_type = models.CharField(max_length=16, choices=MediaType.choices, default=MediaType.OTHER)
+    scope = models.CharField(max_length=24, choices=Scope.choices)
+    access = models.CharField(max_length=12, choices=Access.choices, default=Access.PRIVATE)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.ACTIVE)
+    processing_status = models.CharField(max_length=12, choices=ProcessingStatus.choices, default=ProcessingStatus.PENDING)
+    original_name = models.CharField(max_length=180, blank=True)
+    mime_type = models.CharField(max_length=120, blank=True)
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    width = models.PositiveIntegerField(null=True, blank=True)
+    height = models.PositiveIntegerField(null=True, blank=True)
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)
+    source_model = models.CharField(max_length=80, blank=True)
+    source_id = models.CharField(max_length=80, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["owner", "scope", "status"]),
+            models.Index(fields=["source_model", "source_id"]),
+            models.Index(fields=["media_type", "created_at"]),
+        ]
+
+    def __str__(self):
+        return self.original_name or self.file.name
 
 
 class AIAnalysis(models.Model):

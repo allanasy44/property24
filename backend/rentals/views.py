@@ -40,6 +40,7 @@ from .models import (
     EmailVerificationOTP,
     LeaseAgreement,
     MaintenanceRequest,
+    MediaAsset,
     Message,
     Payment,
     PendingRegistrationOTP,
@@ -59,12 +60,41 @@ from .ai import review_listing_payload, score_application_payload, triage_mainte
 from .auth import issue_token_pair, user_from_authorization_header, user_from_token
 from .chat_services import (
     audit_event,
+    block_chat_user,
     broadcast_to_conversation,
     create_call,
+    create_chat_message,
+    default_attachment_body,
+    delete_chat_message,
+    edit_chat_message,
+    list_conversations_for_user,
+    mark_conversation_delivered,
     mark_conversation_read,
+    open_listing_conversation,
+    register_push_device,
+    report_chat_message,
 )
 from .google_auth import GoogleAuthError, verify_google_id_token
 from .identity_verification import get_identity_verification_provider
+from .media_services import (
+    CHAT_MIME_TYPES,
+    DOCUMENT_MIME_TYPES,
+    IMAGE_MIME_TYPES,
+    MAX_CHAT_ATTACHMENT_BYTES,
+    MAX_DOCUMENT_BYTES,
+    MAX_IMAGE_BYTES,
+    MAX_VIDEO_BYTES,
+    MediaValidationError,
+    VIDEO_MIME_TYPES,
+    delete_file,
+    optimize_image_upload,
+    register_media_asset,
+    serialize_media_asset,
+    signed_media_url,
+    soft_delete_media_asset,
+    validate_upload,
+)
+from .notification_services import send_call_push, send_chat_message_push
 from .object_storage import object_storage_status
 
 
@@ -372,28 +402,47 @@ def auth_profile(request):
             changed_fields.append(field)
 
     if to_bool(data.get("remove_profile_picture")):
+        remove_media_assets("user", user.id, "profile_picture")
         if user.profile_picture:
-            user.profile_picture.delete(save=False)
+            delete_file(user.profile_picture)
+        user.profile_picture = ""
         user.profile_picture_url = ""
         changed_fields.extend(["profile_picture", "profile_picture_url"])
     if to_bool(data.get("remove_cover_photo")):
+        remove_media_assets("user", user.id, "cover_photo")
         if user.cover_photo:
-            user.cover_photo.delete(save=False)
+            delete_file(user.cover_photo)
+        user.cover_photo = ""
         user.cover_photo_url = ""
         changed_fields.extend(["cover_photo", "cover_photo_url"])
 
     files = request.FILES if hasattr(request, "FILES") else {}
-    if files.get("profile_picture"):
-        user.profile_picture = files["profile_picture"]
-        user.profile_picture_url = ""
-        changed_fields.extend(["profile_picture", "profile_picture_url"])
-    if files.get("cover_photo"):
-        user.cover_photo = files["cover_photo"]
-        user.cover_photo_url = ""
-        changed_fields.extend(["cover_photo", "cover_photo_url"])
+    try:
+        if files.get("profile_picture"):
+            upload = validate_upload(files["profile_picture"], allowed_types=IMAGE_MIME_TYPES, max_bytes=MAX_IMAGE_BYTES, label="Profile photo")
+            remove_media_assets("user", user.id, "profile_picture")
+            if user.profile_picture:
+                delete_file(user.profile_picture)
+            user.profile_picture = optimize_image_upload(upload)
+            user.profile_picture_url = ""
+            changed_fields.extend(["profile_picture", "profile_picture_url"])
+        if files.get("cover_photo"):
+            upload = validate_upload(files["cover_photo"], allowed_types=IMAGE_MIME_TYPES, max_bytes=MAX_IMAGE_BYTES, label="Cover photo")
+            remove_media_assets("user", user.id, "cover_photo")
+            if user.cover_photo:
+                delete_file(user.cover_photo)
+            user.cover_photo = optimize_image_upload(upload)
+            user.cover_photo_url = ""
+            changed_fields.extend(["cover_photo", "cover_photo_url"])
+    except MediaValidationError as exc:
+        return json_error(str(exc))
 
     if changed_fields:
         user.save(update_fields=sorted(set(changed_fields)))
+        if "profile_picture" in changed_fields and user.profile_picture:
+            register_media_asset(user, user.profile_picture, scope=MediaAsset.Scope.PROFILE, source_model="user", source_id=user.id, original_name="profile_picture", mime_type="image/jpeg", metadata={"slot": "profile_picture"})
+        if "cover_photo" in changed_fields and user.cover_photo:
+            register_media_asset(user, user.cover_photo, scope=MediaAsset.Scope.PROFILE, source_model="user", source_id=user.id, original_name="cover_photo", mime_type="image/jpeg", metadata={"slot": "cover_photo"})
     return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user)})
 
 
@@ -761,13 +810,22 @@ def property_photos_collection(request, property_id):
     data = request_data(request)
     if prop.photos.count() >= MAX_PROPERTY_PHOTOS:
         return json_error(f"A property can have a maximum of {MAX_PROPERTY_PHOTOS} photos", status=400)
+    image_file = request.FILES.get("image") if hasattr(request, "FILES") else None
+    try:
+        image_file = optimize_image_upload(validate_upload(image_file, allowed_types=IMAGE_MIME_TYPES, max_bytes=MAX_IMAGE_BYTES, label="Property photo")) if image_file else None
+    except MediaValidationError as exc:
+        return json_error(str(exc))
     photo = PropertyPhoto.objects.create(
         property=prop,
-        image=request.FILES.get("image") if hasattr(request, "FILES") else None,
+        image=image_file,
         caption=data.get("caption", ""),
         sort_order=int(data.get("sort_order", prop.photos.count())),
     )
-    return JsonResponse(serialize_property_photo(photo), status=201)
+    asset = register_media_asset(acting_user, photo.image, scope=MediaAsset.Scope.PROPERTY, source_model="property_photo", source_id=photo.id, access=MediaAsset.Access.PUBLIC, original_name=data.get("caption") or "property_photo", mime_type="image/jpeg") if photo.image else None
+    payload = serialize_property_photo(photo)
+    if asset:
+        payload["media_asset"] = serialize_media_asset(asset, include_private_url=True)
+    return JsonResponse(payload, status=201)
 
 
 @csrf_exempt
@@ -780,13 +838,22 @@ def property_videos_collection(request, property_id):
     if not can_manage_property(acting_user, prop):
         return forbidden()
     data = request_data(request)
+    video_file = request.FILES.get("video") if hasattr(request, "FILES") else None
+    try:
+        validate_upload(video_file, allowed_types=VIDEO_MIME_TYPES, max_bytes=MAX_VIDEO_BYTES, label="Property video") if video_file else None
+    except MediaValidationError as exc:
+        return json_error(str(exc))
     video = PropertyVideo.objects.create(
         property=prop,
-        video=request.FILES.get("video") if hasattr(request, "FILES") else None,
+        video=video_file,
         external_url=data.get("external_url", ""),
         caption=data.get("caption", ""),
     )
-    return JsonResponse(serialize_property_video(video), status=201)
+    asset = register_media_asset(acting_user, video.video, scope=MediaAsset.Scope.PROPERTY, source_model="property_video", source_id=video.id, access=MediaAsset.Access.PUBLIC, original_name=data.get("caption") or "property_video", mime_type=getattr(video_file, "content_type", "")) if video.video else None
+    payload = serialize_property_video(video)
+    if asset:
+        payload["media_asset"] = serialize_media_asset(asset, include_private_url=True)
+    return JsonResponse(payload, status=201)
 
 
 @csrf_exempt
@@ -1056,16 +1123,23 @@ def maintenance_collection(request):
 
     ai_triage = triage_maintenance_payload(data) if settings.AI_ASSISTED_REVIEW_ENABLED else None
     category = data.get("category") or (ai_triage or {}).get("suggested_category")
+    photo_file = request.FILES.get("photo") if hasattr(request, "FILES") else None
+    try:
+        photo_file = optimize_image_upload(validate_upload(photo_file, allowed_types=IMAGE_MIME_TYPES, max_bytes=MAX_IMAGE_BYTES, label="Maintenance photo")) if photo_file else None
+    except MediaValidationError as exc:
+        return json_error(str(exc))
     ticket = MaintenanceRequest.objects.create(
         property=prop,
         tenant=acting_user,
         issue=data.get("issue", ""),
         category=normalise_choice(category, MaintenanceRequest.Category, MaintenanceRequest.Category.GENERAL),
         description=data.get("description", ""),
-        photo=request.FILES.get("photo") if hasattr(request, "FILES") else None,
+        photo=photo_file,
         status=data.get("status", MaintenanceRequest.Status.OPEN),
         priority=data.get("priority") or (ai_triage or {}).get("recommendation", "normal"),
     )
+    if ticket.photo:
+        register_media_asset(acting_user, ticket.photo, scope=MediaAsset.Scope.MAINTENANCE, source_model="maintenance_request", source_id=ticket.id, original_name="maintenance_photo", mime_type="image/jpeg")
     payload = serialize_maintenance(ticket)
     if ai_triage:
         payload["ai_triage"] = serialize_ai_analysis(record_ai_analysis(ai_triage, "maintenance_request", ticket.id))
@@ -1138,8 +1212,17 @@ def maintenance_detail(request, maintenance_id):
     if data.get("priority"):
         ticket.priority = data["priority"]
     if hasattr(request, "FILES") and request.FILES.get("photo"):
-        ticket.photo = request.FILES["photo"]
+        try:
+            photo_file = optimize_image_upload(validate_upload(request.FILES["photo"], allowed_types=IMAGE_MIME_TYPES, max_bytes=MAX_IMAGE_BYTES, label="Maintenance photo"))
+        except MediaValidationError as exc:
+            return json_error(str(exc))
+        remove_media_assets("maintenance_request", ticket.id)
+        if ticket.photo:
+            delete_file(ticket.photo)
+        ticket.photo = photo_file
     ticket.save()
+    if ticket.photo and hasattr(request, "FILES") and request.FILES.get("photo"):
+        register_media_asset(acting_user, ticket.photo, scope=MediaAsset.Scope.MAINTENANCE, source_model="maintenance_request", source_id=ticket.id, original_name="maintenance_photo", mime_type="image/jpeg")
     return JsonResponse(serialize_maintenance(ticket))
 
 
@@ -1541,9 +1624,7 @@ def conversations_collection(request):
         return auth_response
 
     if request.method == "GET":
-        conversations = Conversation.objects.prefetch_related("participants", "messages").order_by("-updated_at")
-        if not is_admin(acting_user):
-            conversations = conversations.filter(participants=acting_user)
+        conversations = list_conversations_for_user(acting_user)
         return JsonResponse({"results": [serialize_conversation(item) for item in conversations]})
 
     data = request_json(request)
@@ -1558,19 +1639,8 @@ def conversations_collection(request):
     if participant_ids is None:
         return forbidden()
 
-    existing = Conversation.objects.filter(property=prop, participants=acting_user).filter(participants__id__in=participant_ids).distinct().first()
-    if existing:
-        return JsonResponse(serialize_conversation(existing))
-
-    contact_names = list(User.objects.filter(id__in=participant_ids).values_list("full_name", "username"))
-    readable_contacts = ", ".join(full_name or username for full_name, username in contact_names)
-    conversation = Conversation.objects.create(
-        property=prop,
-        title=data.get("title") or f"{prop.title} · {readable_contacts}",
-        phone_numbers_revealed=False,
-    )
-    conversation.participants.set(User.objects.filter(id__in={acting_user.id, *participant_ids}))
-    return JsonResponse(serialize_conversation(conversation), status=201)
+    conversation, created = open_listing_conversation(acting_user, prop, participant_ids, data.get("title") or "")
+    return JsonResponse(serialize_conversation(conversation), status=201 if created else 200)
 
 
 @csrf_exempt
@@ -1626,31 +1696,141 @@ def conversation_messages(request, conversation_id):
         files = {}
     if data is None:
         return json_error("Invalid JSON body")
-    body = str(data.get("body") or "").strip()
-    attachment = files.get("attachment")
-    attachment_url = str(data.get("attachment_url") or "").strip()
-    attachment_type = str(data.get("attachment_type") or "").strip()[:32]
-    attachment_name = str(data.get("attachment_name") or "").strip()[:180]
-    if not body and not attachment and not attachment_url:
-        return json_error("Message body or attachment is required")
-    if len(body) > 2000:
-        return json_error("Message body must be 2000 characters or fewer")
-    if attachment and attachment.size > 25 * 1024 * 1024:
-        return json_error("Attachment must be 25MB or smaller")
-    message = Message.objects.create(
-        conversation=conversation,
-        sender=acting_user,
-        body=body or default_attachment_body(attachment_type, attachment_name),
-        attachment=attachment,
-        attachment_url=attachment_url,
-        attachment_type=attachment_type,
-        attachment_name=attachment_name or getattr(attachment, "name", "")[:180],
-    )
-    conversation.save(update_fields=["updated_at"])
+    attachment_file = files.get("attachment")
+    try:
+        validate_upload(attachment_file, allowed_types=CHAT_MIME_TYPES, max_bytes=MAX_CHAT_ATTACHMENT_BYTES, label="Chat attachment") if attachment_file else None
+        message = create_chat_message(
+            conversation,
+            acting_user,
+            data.get("body"),
+            attachment=attachment_file,
+            attachment_url=data.get("attachment_url"),
+            attachment_type=data.get("attachment_type"),
+            attachment_name=data.get("attachment_name"),
+            client_message_id=data.get("client_message_id") or data.get("client_id"),
+        )
+    except (MediaValidationError, ValueError) as exc:
+        return json_error(str(exc))
+    if message.attachment:
+        register_media_asset(acting_user, message.attachment, scope=MediaAsset.Scope.CHAT, source_model="message", source_id=message.id, original_name=message.attachment_name or getattr(attachment_file, "name", "chat_attachment"), mime_type=getattr(attachment_file, "content_type", ""))
     payload = serialize_message(message)
     audit_event("message_created_rest", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, metadata={"conversation_id": conversation.id, "message_id": message.id})
     broadcast_to_conversation(conversation.id, "message.created", payload)
+    send_chat_message_push(message)
     return JsonResponse(payload, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["PATCH", "DELETE", "OPTIONS"])
+def conversation_message_detail(request, conversation_id, message_id):
+    conversation = get_object_or_404(Conversation, pk=conversation_id)
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+        return forbidden()
+
+    try:
+        if request.method == "DELETE":
+            message = delete_chat_message(conversation, message_id, acting_user)
+            payload = serialize_message(message)
+            audit_event("message_deleted_rest", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, metadata={"conversation_id": conversation.id, "message_id": message.id})
+            broadcast_to_conversation(conversation.id, "message.deleted", payload)
+            return JsonResponse(payload)
+
+        data = request_json(request)
+        if data is None:
+            return json_error("Invalid JSON body")
+        if data.get("delete") is True:
+            message = delete_chat_message(conversation, message_id, acting_user)
+            payload = serialize_message(message)
+            audit_event("message_deleted_rest", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, metadata={"conversation_id": conversation.id, "message_id": message.id})
+            broadcast_to_conversation(conversation.id, "message.deleted", payload)
+            return JsonResponse(payload)
+        message = edit_chat_message(conversation, message_id, acting_user, data.get("body"))
+    except Message.DoesNotExist:
+        return json_error("Message not found", status=404)
+    except PermissionError:
+        return forbidden()
+    except ValueError as exc:
+        return json_error(str(exc))
+
+    payload = serialize_message(message)
+    audit_event("message_edited_rest", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, metadata={"conversation_id": conversation.id, "message_id": message.id})
+    broadcast_to_conversation(conversation.id, "message.edited", payload)
+    return JsonResponse(payload)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def conversation_delivered(request, conversation_id):
+    conversation = get_object_or_404(Conversation, pk=conversation_id)
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+        return forbidden()
+
+    message_ids = mark_conversation_delivered(conversation, acting_user)
+    payload = {
+        "conversation_id": str(conversation.id),
+        "recipient_id": str(acting_user.id),
+        "message_ids": [str(item) for item in message_ids],
+    }
+    if message_ids:
+        broadcast_to_conversation(conversation.id, "messages.delivered", payload)
+    return JsonResponse(payload)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def conversation_block(request, conversation_id):
+    conversation = get_object_or_404(Conversation, pk=conversation_id)
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    if not conversation.participants.filter(id=acting_user.id).exists():
+        return forbidden()
+
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
+    try:
+        block = block_chat_user(conversation, acting_user, data.get("blocked_user_id"))
+    except ValueError as exc:
+        return json_error(str(exc))
+    audit_event("chat_user_blocked", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, severity=SecurityAuditEvent.Severity.MEDIUM, metadata={"conversation_id": conversation.id, "blocked_user_id": block.blocked_id})
+    broadcast_to_conversation(conversation.id, "conversation.blocked", {"conversation_id": str(conversation.id), "blocker_id": str(acting_user.id), "blocked_user_id": str(block.blocked_id)})
+    return JsonResponse({"blocked_user_id": str(block.blocked_id), "created_at": block.created_at.isoformat()}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def conversation_report(request, conversation_id):
+    conversation = get_object_or_404(Conversation, pk=conversation_id)
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+        return forbidden()
+
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
+    try:
+        report = report_chat_message(
+            conversation,
+            acting_user,
+            message_id=data.get("message_id"),
+            reason=data.get("reason"),
+            details=data.get("details"),
+        )
+    except Message.DoesNotExist:
+        return json_error("Message not found", status=404)
+    except ValueError as exc:
+        return json_error(str(exc))
+    audit_event("chat_report_created", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, severity=SecurityAuditEvent.Severity.MEDIUM, metadata={"conversation_id": conversation.id, "report_id": report.id})
+    return JsonResponse({"id": str(report.id), "status": report.status, "created_at": report.created_at.isoformat()}, status=201)
 
 
 @csrf_exempt
@@ -1677,6 +1857,7 @@ def conversation_calls(request, conversation_id):
     payload = serialize_call_session(call)
     audit_event("call_started_rest", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, metadata={"conversation_id": conversation.id, "call_id": call.id, "mode": mode})
     broadcast_to_conversation(conversation.id, "call.started", payload)
+    send_call_push(call)
     return JsonResponse(payload, status=201)
 
 
@@ -1706,6 +1887,78 @@ def conversation_call_detail(request, conversation_id, call_id):
     audit_event("call_ended_rest", actor=acting_user, category=SecurityAuditEvent.Category.CHAT, metadata={"conversation_id": conversation.id, "call_id": call.id, "status": status})
     broadcast_to_conversation(conversation.id, "call.ended", payload)
     return JsonResponse(payload)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def push_devices_collection(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
+    try:
+        device = register_push_device(acting_user, data.get("token"), data.get("platform"))
+    except ValueError as exc:
+        return json_error(str(exc))
+    audit_event("push_device_registered", actor=acting_user, category=SecurityAuditEvent.Category.AUTHENTICATION, metadata={"platform": device.platform})
+    return JsonResponse({
+        "id": str(device.id),
+        "platform": device.platform,
+        "enabled": device.enabled,
+        "updated_at": device.updated_at.isoformat(),
+    }, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "OPTIONS"])
+def media_assets_collection(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    assets = media_asset_queryset_for_user(acting_user)
+    scope = request.GET.get("scope")
+    source_model = request.GET.get("source_model")
+    source_id = request.GET.get("source_id")
+    property_id = request.GET.get("property_id")
+    conversation_id = request.GET.get("conversation_id")
+    if scope:
+        assets = assets.filter(scope=scope)
+    if source_model:
+        assets = assets.filter(source_model=source_model)
+    if source_id:
+        assets = assets.filter(source_id=str(source_id))
+    if property_id:
+        photo_ids = PropertyPhoto.objects.filter(property_id=property_id).values_list("id", flat=True)
+        video_ids = PropertyVideo.objects.filter(property_id=property_id).values_list("id", flat=True)
+        assets = assets.filter(Q(source_model="property_photo", source_id__in=[str(item) for item in photo_ids]) | Q(source_model="property_video", source_id__in=[str(item) for item in video_ids]))
+    if conversation_id:
+        conversation = get_object_or_404(Conversation, pk=conversation_id)
+        if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+            return forbidden()
+        message_ids = [str(item) for item in conversation.messages.values_list("id", flat=True)]
+        assets = assets.filter(source_model="message", source_id__in=message_ids)
+    return JsonResponse({"results": [serialize_media_asset(asset, include_private_url=True) for asset in assets.order_by("-created_at")[:200]]})
+
+
+@csrf_exempt
+@require_http_methods(["GET", "DELETE", "OPTIONS"])
+def media_asset_detail(request, media_id):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    asset = get_object_or_404(MediaAsset, pk=media_id)
+    if not can_access_media_asset(acting_user, asset):
+        return forbidden()
+    if request.method == "GET":
+        return JsonResponse(serialize_media_asset(asset, include_private_url=True))
+    if not can_delete_media_asset(acting_user, asset):
+        return forbidden()
+    clear_media_source(asset)
+    soft_delete_media_asset(asset)
+    audit_event("media_asset_deleted", actor=acting_user, category=SecurityAuditEvent.Category.CHAT if asset.scope == MediaAsset.Scope.CHAT else SecurityAuditEvent.Category.AUTHORIZATION, metadata={"media_id": asset.id, "scope": asset.scope})
+    return JsonResponse(serialize_media_asset(asset, include_private_url=False))
 
 
 @csrf_exempt
@@ -2750,7 +3003,7 @@ def account_media_url(user, field_name):
     media_file = getattr(user, field_name, None)
     if media_file:
         try:
-            return media_file.url
+            return signed_media_url(media_file)
         except ValueError:
             return ""
     return ""
@@ -2775,6 +3028,93 @@ def serialize_account_context(user):
             "full_verification_endpoint": "/api/verifications/" if full_verification_required(user) else "",
         },
     }
+
+
+def media_asset_queryset_for_user(user):
+    assets = MediaAsset.objects.filter(status=MediaAsset.Status.ACTIVE)
+    if is_admin(user):
+        return assets
+    property_ids = [str(item) for item in user_properties(user).values_list("id", flat=True)] if user.role in {User.Roles.LANDLORD, User.Roles.AGENT} else []
+    visible_property_photo_ids = [str(item) for item in PropertyPhoto.objects.filter(property_id__in=property_ids).values_list("id", flat=True)]
+    visible_property_video_ids = [str(item) for item in PropertyVideo.objects.filter(property_id__in=property_ids).values_list("id", flat=True)]
+    conversation_message_ids = [str(item) for item in Message.objects.filter(conversation__participants=user).values_list("id", flat=True)]
+    maintenance_ids = [str(item) for item in MaintenanceRequest.objects.filter(Q(tenant=user) | Q(property__in=user_properties(user))).values_list("id", flat=True)]
+    return assets.filter(
+        Q(owner=user)
+        | Q(access=MediaAsset.Access.PUBLIC, scope=MediaAsset.Scope.PROPERTY)
+        | Q(source_model="message", source_id__in=conversation_message_ids)
+        | Q(source_model="maintenance_request", source_id__in=maintenance_ids)
+        | Q(source_model="property_photo", source_id__in=visible_property_photo_ids)
+        | Q(source_model="property_video", source_id__in=visible_property_video_ids)
+    ).distinct()
+
+
+def can_access_media_asset(user, asset):
+    if not user or not user.is_authenticated:
+        return asset.access == MediaAsset.Access.PUBLIC and asset.scope == MediaAsset.Scope.PROPERTY and asset.status == MediaAsset.Status.ACTIVE
+    return media_asset_queryset_for_user(user).filter(pk=asset.pk).exists()
+
+
+def can_delete_media_asset(user, asset):
+    if not user or not user.is_authenticated:
+        return False
+    if is_admin(user) or asset.owner_id == user.id:
+        return True
+    if asset.source_model in {"property_photo", "property_video"}:
+        prop = property_for_media_asset(asset)
+        return bool(prop and can_manage_property(user, prop))
+    return False
+
+
+def property_for_media_asset(asset):
+    if asset.source_model == "property_photo":
+        item = PropertyPhoto.objects.select_related("property").filter(pk=asset.source_id).first()
+        return item.property if item else None
+    if asset.source_model == "property_video":
+        item = PropertyVideo.objects.select_related("property").filter(pk=asset.source_id).first()
+        return item.property if item else None
+    return None
+
+
+def remove_media_assets(source_model, source_id, slot=None):
+    assets = MediaAsset.objects.filter(source_model=source_model, source_id=str(source_id), status=MediaAsset.Status.ACTIVE)
+    if slot:
+        assets = assets.filter(metadata__slot=slot)
+    for asset in assets:
+        soft_delete_media_asset(asset)
+
+
+def clear_media_source(asset):
+    if asset.source_model == "property_photo":
+        PropertyPhoto.objects.filter(pk=asset.source_id).delete()
+    elif asset.source_model == "property_video":
+        video = PropertyVideo.objects.filter(pk=asset.source_id).first()
+        if video:
+            video.video = ""
+            video.external_url = ""
+            video.save(update_fields=["video", "external_url"])
+    elif asset.source_model == "message":
+        message = Message.objects.filter(pk=asset.source_id).first()
+        if message:
+            message.attachment = ""
+            message.attachment_url = ""
+            message.attachment_type = ""
+            message.attachment_name = ""
+            message.save(update_fields=["attachment", "attachment_url", "attachment_type", "attachment_name"])
+    elif asset.source_model == "maintenance_request":
+        MaintenanceRequest.objects.filter(pk=asset.source_id).update(photo="")
+    elif asset.source_model == "user":
+        user = User.objects.filter(pk=asset.source_id).first()
+        if user:
+            slot = (asset.metadata or {}).get("slot")
+            if slot == "profile_picture":
+                user.profile_picture = ""
+                user.profile_picture_url = ""
+                user.save(update_fields=["profile_picture", "profile_picture_url"])
+            elif slot == "cover_photo":
+                user.cover_photo = ""
+                user.cover_photo_url = ""
+                user.save(update_fields=["cover_photo", "cover_photo_url"])
 
 
 def serialize_property(prop):
@@ -2802,8 +3142,8 @@ def serialize_property(prop):
         "has_360_tour": prop.has_360_tour,
         "verified": prop.is_verified and prop.owner.is_verified,
         "listing_status": prop.listing_status,
-        "photos": [photo.image.url if photo.image else photo.caption for photo in prop.photos.all()],
-        "videos": [video.external_url or (video.video.url if video.video else video.caption) for video in prop.videos.all()],
+        "photos": [signed_media_url(photo.image) if photo.image else photo.caption for photo in prop.photos.all()],
+        "videos": [video.external_url or (signed_media_url(video.video) if video.video else video.caption) for video in prop.videos.all()],
         "listing_views": prop.views_count,
         "saved_count": prop.saved_count or prop.saved_by.count(),
         "applications_count": getattr(prop, "application_total", prop.applications.count()),
@@ -2815,7 +3155,7 @@ def serialize_property_photo(photo):
     return {
         "id": photo.id,
         "property_id": photo.property_id,
-        "image": photo.image.url if photo.image else "",
+        "image": signed_media_url(photo.image) if photo.image else "",
         "caption": photo.caption,
         "sort_order": photo.sort_order,
     }
@@ -2840,7 +3180,7 @@ def serialize_property_video(video):
     return {
         "id": video.id,
         "property_id": video.property_id,
-        "video": video.video.url if video.video else "",
+        "video": signed_media_url(video.video) if video.video else "",
         "external_url": video.external_url,
         "caption": video.caption,
     }
@@ -2911,7 +3251,7 @@ def serialize_maintenance(ticket):
         "issue": ticket.issue,
         "category": ticket.category,
         "description": ticket.description,
-        "photo": ticket.photo.url if ticket.photo else "",
+        "photo": signed_media_url(ticket.photo) if ticket.photo else "",
         "status": ticket.status,
         "priority": ticket.priority,
         "updated_at": ticket.updated_at.isoformat(),
@@ -2986,33 +3326,50 @@ def serialize_conversation(conversation):
 
 
 def serialize_message(message):
+    receipts = [serialize_message_receipt(receipt) for receipt in message.receipts.select_related("user").all()]
+    active_receipts = [receipt for receipt in receipts if str(receipt["user_id"]) != str(message.sender_id)]
+    if active_receipts and all(receipt.get("read_at") for receipt in active_receipts):
+        delivery_status = "read"
+    elif active_receipts and all(receipt.get("delivered_at") for receipt in active_receipts):
+        delivery_status = "delivered"
+    else:
+        delivery_status = "sent"
+    is_deleted = bool(message.deleted_at)
     return {
         "id": message.id,
         "conversation_id": message.conversation_id,
         "sender_id": message.sender_id,
         "sender": str(message.sender),
-        "body": message.body,
-        "attachment_url": message_attachment_url(message),
-        "attachment_type": message.attachment_type,
-        "attachment_name": message.attachment_name,
+        "body": "This message was deleted" if is_deleted else message.body,
+        "client_message_id": message.client_message_id,
+        "attachment_url": "" if is_deleted else message_attachment_url(message),
+        "attachment_type": "" if is_deleted else message.attachment_type,
+        "attachment_name": "" if is_deleted else message.attachment_name,
         "created_at": message.created_at.isoformat(),
         "read_at": message.read_at.isoformat() if message.read_at else None,
+        "edited_at": message.edited_at.isoformat() if message.edited_at else None,
+        "deleted_at": message.deleted_at.isoformat() if message.deleted_at else None,
+        "deleted": is_deleted,
+        "delivery_status": delivery_status,
+        "receipts": receipts,
+    }
+
+
+def serialize_message_receipt(receipt):
+    return {
+        "user_id": receipt.user_id,
+        "delivered_at": receipt.delivered_at.isoformat() if receipt.delivered_at else None,
+        "read_at": receipt.read_at.isoformat() if receipt.read_at else None,
     }
 
 
 def message_attachment_url(message):
     if message.attachment:
         try:
-            return message.attachment.url
+            return signed_media_url(message.attachment)
         except Exception:
             return ""
     return message.attachment_url
-
-
-def default_attachment_body(attachment_type, attachment_name):
-    label = attachment_type or "attachment"
-    name = f" {attachment_name}" if attachment_name else ""
-    return f"Shared {label}{name}".strip()
 
 
 def serialize_call_session(call):

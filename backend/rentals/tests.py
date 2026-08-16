@@ -18,7 +18,7 @@ from .auth import issue_token_pair
 from .views import hash_otp, normalize_phone, phone_lookup_values
 from property24_backend.asgi import application
 
-from .models import AIAnalysis, Application, CallSession, Conversation, DisputeReport, EmailVerificationOTP, LeaseAgreement, MaintenanceRequest, Message, Payment, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, PropertyPhoto, SecurityAuditEvent, VerificationRequest, Viewing
+from .models import AIAnalysis, Application, CallSession, ChatBlock, ChatReport, Conversation, DisputeReport, EmailVerificationOTP, LeaseAgreement, MaintenanceRequest, MediaAsset, Message, MessageReceipt, Payment, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, PropertyPhoto, PushDevice, SecurityAuditEvent, VerificationRequest, Viewing
 
 
 class RentalApiTests(TestCase):
@@ -1016,6 +1016,17 @@ class RentalApiTests(TestCase):
         self.assertEqual(maintenance.json()["priority"], "urgent")
         self.assertEqual(maintenance.json()["category"], MaintenanceRequest.Category.PLUMBING)
 
+    def test_tenant_opens_single_listing_conversation_with_verified_supplier(self):
+        first = self.post_json("/api/conversations/", {"property_id": self.property.id}, user=self.tenant)
+        second = self.post_json("/api/conversations/", {"property_id": self.property.id}, user=self.tenant)
+
+        self.assertEqual(first.status_code, 201, first.json())
+        self.assertEqual(second.status_code, 200, second.json())
+        self.assertEqual(first.json()["id"], second.json()["id"])
+        participant_ids = {item["id"] for item in first.json()["participants"]}
+        self.assertEqual(participant_ids, {self.tenant.id, self.agent.id})
+        self.assertFalse(first.json()["phone_numbers_revealed"])
+
     def test_conversation_messages_mark_read_and_validate_body(self):
         conversation = Conversation.objects.create(property=self.property, title="Borrowdale chat")
         conversation.participants.set([self.tenant, self.agent])
@@ -1029,6 +1040,79 @@ class RentalApiTests(TestCase):
         self.assertEqual(list_response.status_code, 200)
         self.assertIsNotNone(message.read_at)
         self.assertIsNotNone(list_response.json()["results"][0]["read_at"])
+
+    def test_conversation_messages_track_receipts_and_retry_client_ids(self):
+        conversation = Conversation.objects.create(property=self.property, title="Borrowdale chat")
+        conversation.participants.set([self.tenant, self.agent])
+        path = f"/api/conversations/{conversation.id}/messages/"
+
+        first = self.post_json(path, {"body": "Can I view today?", "client_message_id": "tenant-msg-1"}, user=self.tenant)
+        duplicate = self.post_json(path, {"body": "Can I view today?", "client_message_id": "tenant-msg-1"}, user=self.tenant)
+        delivered = self.post_json(f"/api/conversations/{conversation.id}/delivered/", {}, user=self.agent)
+        list_response = self.client.get(path, **self.auth_header(self.agent))
+        message = Message.objects.get(pk=first.json()["id"])
+        agent_receipt = MessageReceipt.objects.get(message=message, user=self.agent)
+
+        self.assertEqual(first.status_code, 201, first.json())
+        self.assertEqual(duplicate.status_code, 201, duplicate.json())
+        self.assertEqual(Message.objects.filter(conversation=conversation, client_message_id="tenant-msg-1").count(), 1)
+        self.assertEqual(delivered.status_code, 200, delivered.json())
+        self.assertIn(str(message.id), delivered.json()["message_ids"])
+        self.assertIsNotNone(agent_receipt.delivered_at)
+        agent_receipt.refresh_from_db()
+        self.assertIsNotNone(agent_receipt.read_at)
+        self.assertEqual(list_response.json()["results"][0]["delivery_status"], "read")
+
+    def test_conversation_message_can_be_edited_deleted_blocked_and_reported(self):
+        conversation = Conversation.objects.create(property=self.property, title="Borrowdale chat")
+        conversation.participants.set([self.tenant, self.agent])
+        create_response = self.post_json(f"/api/conversations/{conversation.id}/messages/", {"body": "Original viewing message"}, user=self.tenant)
+        message_id = create_response.json()["id"]
+
+        forbidden_edit = self.patch_json(f"/api/conversations/{conversation.id}/messages/{message_id}/", {"body": "Agent edit"}, user=self.agent)
+        edit_response = self.patch_json(f"/api/conversations/{conversation.id}/messages/{message_id}/", {"body": "Updated viewing message"}, user=self.tenant)
+        report_response = self.post_json(f"/api/conversations/{conversation.id}/report/", {"message_id": message_id, "reason": "suspicious", "details": "Testing report flow"}, user=self.agent)
+        delete_response = self.client.delete(f"/api/conversations/{conversation.id}/messages/{message_id}/", **self.auth_header(self.tenant))
+        block_response = self.post_json(f"/api/conversations/{conversation.id}/block/", {"blocked_user_id": self.tenant.id}, user=self.agent)
+        blocked_message = self.post_json(f"/api/conversations/{conversation.id}/messages/", {"body": "Can you still see me?"}, user=self.tenant)
+
+        self.assertEqual(create_response.status_code, 201, create_response.json())
+        self.assertEqual(forbidden_edit.status_code, 403)
+        self.assertEqual(edit_response.status_code, 200, edit_response.json())
+        self.assertIsNotNone(edit_response.json()["edited_at"])
+        self.assertEqual(report_response.status_code, 201, report_response.json())
+        self.assertEqual(ChatReport.objects.filter(conversation=conversation, reporter=self.agent).count(), 1)
+        self.assertEqual(delete_response.status_code, 200, delete_response.json())
+        self.assertTrue(delete_response.json()["deleted"])
+        self.assertEqual(delete_response.json()["body"], "This message was deleted")
+        self.assertEqual(block_response.status_code, 201, block_response.json())
+        self.assertTrue(ChatBlock.objects.filter(blocker=self.agent, blocked=self.tenant).exists())
+        self.assertEqual(blocked_message.status_code, 400)
+        self.assertIn("blocked", blocked_message.json()["error"].lower())
+
+    def test_push_device_registration_upserts_token(self):
+        first = self.post_json("/api/push/devices/", {"token": "expo-token-1", "platform": "expo"}, user=self.tenant)
+        second = self.post_json("/api/push/devices/", {"token": "expo-token-1", "platform": "android"}, user=self.tenant)
+
+        self.assertEqual(first.status_code, 201, first.json())
+        self.assertEqual(second.status_code, 201, second.json())
+        self.assertEqual(PushDevice.objects.filter(token="expo-token-1").count(), 1)
+        self.assertEqual(PushDevice.objects.get(token="expo-token-1").platform, "android")
+
+    def test_chat_message_sends_push_to_registered_recipient_devices(self):
+        conversation = Conversation.objects.create(property=self.property, title="Borrowdale chat")
+        conversation.participants.set([self.tenant, self.agent])
+        PushDevice.objects.create(user=self.agent, token="ExponentPushToken[agent]", platform="expo")
+
+        with patch("rentals.notification_services.urlrequest.urlopen", return_value=FakePushResponse({"data": [{"status": "ok"}]})) as push_request:
+            response = self.post_json(f"/api/conversations/{conversation.id}/messages/", {"body": "Viewing at 2pm?"}, user=self.tenant)
+
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertTrue(push_request.called)
+        body = json.loads(push_request.call_args.args[0].data.decode("utf-8"))
+        self.assertEqual(body[0]["to"], "ExponentPushToken[agent]")
+        self.assertEqual(body[0]["data"]["kind"], "chat_message")
+        self.assertEqual(body[0]["data"]["conversation_id"], str(conversation.id))
 
     def test_conversation_calls_can_be_listed_and_ended(self):
         conversation = Conversation.objects.create(property=self.property, title="Borrowdale chat")
@@ -1045,6 +1129,65 @@ class RentalApiTests(TestCase):
         self.assertEqual(end_response.status_code, 200)
         self.assertEqual(end_response.json()["status"], CallSession.Status.ENDED)
         self.assertIsNotNone(end_response.json()["ended_at"])
+
+    def test_profile_media_is_tracked_and_removed_with_assets(self):
+        response = self.client.post(
+            "/api/auth/profile/",
+            {"profile_picture": self.identity_image_upload("profile.jpg")},
+            **self.auth_header(self.tenant),
+        )
+        self.assertEqual(response.status_code, 200, response.json())
+        self.tenant.refresh_from_db()
+        asset = MediaAsset.objects.get(owner=self.tenant, source_model="user", source_id=str(self.tenant.id), metadata__slot="profile_picture")
+
+        remove = self.client.post(
+            "/api/auth/profile/",
+            {"remove_profile_picture": "true"},
+            **self.auth_header(self.tenant),
+        )
+        asset.refresh_from_db()
+        self.tenant.refresh_from_db()
+
+        self.assertEqual(asset.scope, MediaAsset.Scope.PROFILE)
+        self.assertEqual(asset.media_type, MediaAsset.MediaType.IMAGE)
+        self.assertEqual(remove.status_code, 200, remove.json())
+        self.assertEqual(asset.status, MediaAsset.Status.DELETED)
+        self.assertFalse(bool(self.tenant.profile_picture))
+
+    def test_property_media_gallery_and_delete_cleanup(self):
+        upload = self.client.post(
+            f"/api/properties/{self.property.id}/photos/",
+            {"image": self.identity_image_upload("front.jpg"), "caption": "Front"},
+            **self.auth_header(self.landlord),
+        )
+        asset_id = upload.json()["media_asset"]["id"]
+        gallery = self.client.get(f"/api/media/?property_id={self.property.id}", **self.auth_header(self.tenant))
+        delete = self.client.delete(f"/api/media/{asset_id}/", **self.auth_header(self.landlord))
+
+        self.assertEqual(upload.status_code, 201, upload.json())
+        self.assertEqual(gallery.status_code, 200, gallery.json())
+        self.assertEqual(gallery.json()["results"][0]["id"], asset_id)
+        self.assertTrue(gallery.json()["results"][0]["thumbnail_url"] or gallery.json()["results"][0]["processing_status"] in {MediaAsset.ProcessingStatus.READY, MediaAsset.ProcessingStatus.FAILED})
+        self.assertEqual(delete.status_code, 200, delete.json())
+        self.assertEqual(MediaAsset.objects.get(pk=asset_id).status, MediaAsset.Status.DELETED)
+        self.assertEqual(self.property.photos.count(), 0)
+
+    def test_chat_attachment_media_gallery_is_limited_to_participants(self):
+        other_tenant = get_user_model().objects.create_user(username="other-media", password="secret12345", role=get_user_model().Roles.TENANT, is_verified=True)
+        conversation = Conversation.objects.create(property=self.property, title="Borrowdale chat")
+        conversation.participants.set([self.tenant, self.agent])
+        response = self.client.post(
+            f"/api/conversations/{conversation.id}/messages/",
+            {"body": "See attachment", "attachment": self.identity_image_upload("pipe.jpg"), "attachment_type": "image", "attachment_name": "pipe.jpg"},
+            **self.auth_header(self.tenant),
+        )
+        allowed = self.client.get(f"/api/media/?conversation_id={conversation.id}", **self.auth_header(self.agent))
+        denied = self.client.get(f"/api/media/?conversation_id={conversation.id}", **self.auth_header(other_tenant))
+
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertEqual(allowed.status_code, 200, allowed.json())
+        self.assertEqual(len(allowed.json()["results"]), 1)
+        self.assertEqual(denied.status_code, 403)
 
     def test_property_comments_are_saved_in_app_and_counted_on_listing(self):
         path = f"/api/properties/{self.property.id}/comments/"
@@ -1210,6 +1353,35 @@ class RentalWebSocketTests(TransactionTestCase):
         self.assertTrue(await audit_exists("websocket_connected"))
         self.assertTrue(await audit_exists("message_created"))
 
+    def test_websocket_call_signal_is_broadcast_to_conversation(self):
+        async_to_sync(self._websocket_call_signal_is_broadcast_to_conversation)()
+
+    async def _websocket_call_signal_is_broadcast_to_conversation(self):
+        token = issue_token_pair(self.tenant)["access"]
+        communicator = WebsocketCommunicator(application, f"/ws/conversations/?token={token}", headers=[(b"host", b"localhost"), (b"origin", b"http://localhost")])
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await receive_until(communicator, "connection.ready")
+
+        await communicator.send_json_to({"type": "call.start", "conversation_id": self.conversation.id, "mode": "video"})
+        started = await receive_until(communicator, "call.started")
+        call_id = started["payload"]["id"]
+
+        await communicator.send_json_to({
+            "type": "call.signal",
+            "conversation_id": self.conversation.id,
+            "call_id": call_id,
+            "signal_type": "offer",
+            "signal": {"sdp": "offer-sdp"},
+        })
+        signal = await receive_until(communicator, "call.signal")
+
+        self.assertEqual(signal["payload"]["call_id"], str(call_id))
+        self.assertEqual(signal["payload"]["signal_type"], "offer")
+        self.assertEqual(signal["payload"]["signal"]["sdp"], "offer-sdp")
+        await communicator.disconnect()
+        self.assertTrue(await audit_exists("call_signal"))
+
     def test_websocket_denies_conversation_outside_participation(self):
         async_to_sync(self._websocket_denies_conversation_outside_participation)()
 
@@ -1253,3 +1425,17 @@ def create_other_conversation(landlord, prop):
     conversation = Conversation.objects.create(property=prop, title="Private owner chat")
     conversation.participants.set([landlord])
     return conversation
+
+
+class FakePushResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self):
+        return json.dumps(self.payload).encode("utf-8")

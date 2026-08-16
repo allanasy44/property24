@@ -1,7 +1,19 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import * as FileSystem from "expo-file-system";
+import * as MediaLibrary from "expo-media-library";
+import * as Notifications from "expo-notifications";
 import { Dispatch, ReactNode, createContext, useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { Platform } from "react-native";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 export type Property = {
   id: string;
@@ -184,17 +196,29 @@ export type ConversationParticipant = {
   lastSeenAt?: string;
 };
 
+export type ConversationMessageReceipt = {
+  userId: string;
+  deliveredAt?: string;
+  readAt?: string;
+};
+
 export type ConversationMessage = {
   id: string;
   conversationId: string;
   senderId: string;
   sender: string;
   body: string;
+  clientMessageId?: string;
   attachmentUrl?: string;
   attachmentType?: string;
   attachmentName?: string;
   createdAt: string;
   readAt?: string;
+  editedAt?: string;
+  deletedAt?: string;
+  deleted?: boolean;
+  deliveryStatus?: "sent" | "delivered" | "read";
+  receipts?: ConversationMessageReceipt[];
 };
 
 export type ConversationCallSession = {
@@ -205,6 +229,35 @@ export type ConversationCallSession = {
   status: string;
   createdAt: string;
   endedAt?: string;
+};
+
+export type MediaAsset = {
+  id: string;
+  scope: string;
+  mediaType: "image" | "video" | "document" | "audio" | "other";
+  access: "public" | "private";
+  status: string;
+  processingStatus: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  width?: number;
+  height?: number;
+  durationSeconds?: number;
+  sourceModel: string;
+  sourceId: string;
+  url: string;
+  thumbnailUrl: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MediaAssetFilter = {
+  scope?: string;
+  sourceModel?: string;
+  sourceId?: string;
+  propertyId?: string;
+  conversationId?: string;
 };
 
 export type PropertyCommentItem = {
@@ -676,6 +729,9 @@ type RentalPlatformContextValue = {
   startConversationCall: (conversationId: string, mode: "voice" | "video") => Promise<ConversationCallSession>;
   fetchConversationCalls: (conversationId: string) => Promise<ConversationCallSession[]>;
   endConversationCall: (conversationId: string, callId: string, status?: "ended" | "missed") => Promise<ConversationCallSession>;
+  fetchMediaAssets: (filters?: MediaAssetFilter) => Promise<MediaAsset[]>;
+  deleteMediaAsset: (mediaId: string) => Promise<MediaAsset>;
+  saveMediaAssetToDevice: (asset: MediaAsset) => Promise<string>;
   fetchPropertyComments: (propertyId: string) => Promise<PropertyCommentItem[]>;
   addPropertyComment: (propertyId: string, payload: PropertyCommentInput) => Promise<PropertyCommentItem>;
   toggleSupplierFollow: (supplierId: string, following: boolean) => Promise<void>;
@@ -715,6 +771,11 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
     if (!ready) return;
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
   }, [ready, state]);
+
+  useEffect(() => {
+    if (!ready || !authToken || !authUser) return;
+    registerDeviceForPush(authToken).catch(() => undefined);
+  }, [ready, authToken, authUser?.id]);
 
   const value = useMemo<RentalPlatformContextValue>(
     () => {
@@ -1140,7 +1201,8 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
           return response.results.map(mapApiConversationMessage);
         },
         sendConversationMessage: async (conversationId, body, attachment) => {
-          const payload = attachment ? buildMessageFormData(body, attachment) : { body };
+          const clientMessageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+          const payload = attachment ? buildMessageFormData(body, attachment, clientMessageId) : { body, client_message_id: clientMessageId };
           const message = mapApiConversationMessage(await postProtected(`conversations/${conversationId}/messages/`, authToken, payload));
           await refreshRentalPlatform(dispatch, authToken);
           return message;
@@ -1160,6 +1222,24 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
           const call = mapApiConversationCall(await protectedRequest(`conversations/${conversationId}/calls/${callId}/`, authToken, "PATCH", { status }));
           await refreshRentalPlatform(dispatch, authToken);
           return call;
+        },
+        fetchMediaAssets: async (filters = {}) => {
+          if (!API_BASE_URL) throw new Error("Set EXPO_PUBLIC_API_URL to the account API before using media");
+          if (!authToken) throw new Error("Sign in is required to load media");
+          const query = new URLSearchParams();
+          Object.entries(filters).forEach(([key, value]) => {
+            if (value) query.set(snakeCase(key), String(value));
+          });
+          const suffix = query.toString() ? `?${query.toString()}` : "";
+          const response = await fetchJson(`${API_BASE_URL}/media/${suffix}`, authToken);
+          return response.results.map(mapApiMediaAsset);
+        },
+        deleteMediaAsset: async (mediaId) => {
+          if (!mediaId) throw new Error("Media item is required");
+          return mapApiMediaAsset(await protectedRequest(`media/${mediaId}/`, authToken, "DELETE"));
+        },
+        saveMediaAssetToDevice: async (asset) => {
+          return saveMediaToDevice(asset);
         },
         fetchPropertyComments: async (propertyId) => {
           if (!API_BASE_URL) throw new Error("Set EXPO_PUBLIC_API_URL to the account API before using comments");
@@ -1358,9 +1438,10 @@ function buildAccountProfileFormData(payload: AccountProfileUpdatePayload) {
   return formData;
 }
 
-function buildMessageFormData(body: string, attachment: MessageAttachmentInput) {
+function buildMessageFormData(body: string, attachment: MessageAttachmentInput, clientMessageId?: string) {
   const formData = new FormData();
   formData.append("body", body);
+  if (clientMessageId) formData.append("client_message_id", clientMessageId);
   formData.append("attachment_type", attachment.type);
   if (attachment.name) formData.append("attachment_name", attachment.name);
   if (attachment.url) formData.append("attachment_url", attachment.url);
@@ -1739,11 +1820,44 @@ function mapApiConversationMessage(item: any): ConversationMessage {
     senderId: String(item.sender_id),
     sender: item.sender || "Property24 user",
     body: item.body || "",
+    clientMessageId: item.client_message_id || undefined,
     attachmentUrl: resolveMediaUrl(item.attachment_url),
     attachmentType: item.attachment_type || undefined,
     attachmentName: item.attachment_name || undefined,
     createdAt: item.created_at,
     readAt: item.read_at || undefined,
+    editedAt: item.edited_at || undefined,
+    deletedAt: item.deleted_at || undefined,
+    deleted: Boolean(item.deleted),
+    deliveryStatus: item.delivery_status || undefined,
+    receipts: Array.isArray(item.receipts) ? item.receipts.map((receipt: any) => ({
+      userId: String(receipt.user_id),
+      deliveredAt: receipt.delivered_at || undefined,
+      readAt: receipt.read_at || undefined,
+    })) : [],
+  };
+}
+
+function mapApiMediaAsset(item: any): MediaAsset {
+  return {
+    id: String(item.id),
+    scope: item.scope || "",
+    mediaType: item.media_type || "other",
+    access: item.access || "private",
+    status: item.status || "active",
+    processingStatus: item.processing_status || "pending",
+    originalName: item.original_name || "",
+    mimeType: item.mime_type || "",
+    sizeBytes: Number(item.size_bytes || 0),
+    width: item.width || undefined,
+    height: item.height || undefined,
+    durationSeconds: item.duration_seconds || undefined,
+    sourceModel: item.source_model || "",
+    sourceId: String(item.source_id || ""),
+    url: resolveMediaUrl(item.url),
+    thumbnailUrl: resolveMediaUrl(item.thumbnail_url),
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
   };
 }
 
@@ -1814,6 +1928,60 @@ function normalizeApiUrlForDevice(value: string) {
   } catch {
     return value;
   }
+}
+
+async function registerDeviceForPush(authToken: string) {
+  if (Platform.OS === "web") return;
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("messages", {
+      name: "Messages and calls",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#E50914",
+    });
+  }
+
+  const existing = await Notifications.getPermissionsAsync();
+  const permission = existing.granted ? existing : await Notifications.requestPermissionsAsync();
+  if (!permission.granted) return;
+
+  const projectId = (Constants as any).expoConfig?.extra?.eas?.projectId || (Constants as any).easConfig?.projectId;
+  const tokenResult = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+  if (!tokenResult.data) return;
+  await protectedRequest("push/devices/", authToken, "POST", { token: tokenResult.data, platform: "expo" });
+}
+
+async function saveMediaToDevice(asset: MediaAsset) {
+  if (!asset.url) throw new Error("Media download URL is not available");
+  if (Platform.OS === "web") {
+    window.open(asset.url, "_blank", "noopener,noreferrer");
+    return asset.url;
+  }
+
+  const permission = await MediaLibrary.requestPermissionsAsync();
+  if (!permission.granted) {
+    throw new Error("Allow media library access to save this file");
+  }
+  const extension = extensionForMedia(asset);
+  const safeName = (asset.originalName || `property24-${asset.id}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+  const filename = safeName.includes(".") ? safeName : `${safeName}${extension}`;
+  const targetFile = new FileSystem.File(FileSystem.Paths.cache, filename);
+  const downloaded = await FileSystem.File.downloadFileAsync(asset.url, targetFile, { idempotent: true });
+  const saved = await MediaLibrary.createAssetAsync(downloaded.uri);
+  return saved.uri;
+}
+
+function extensionForMedia(asset: MediaAsset) {
+  if (asset.mimeType === "image/png") return ".png";
+  if (asset.mimeType === "image/webp") return ".webp";
+  if (asset.mimeType?.startsWith("video/")) return ".mp4";
+  if (asset.mimeType === "application/pdf") return ".pdf";
+  if (asset.mimeType?.startsWith("audio/")) return ".m4a";
+  return asset.mediaType === "image" ? ".jpg" : "";
+}
+
+function snakeCase(value: string) {
+  return value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 }
 
 function resolveMediaUrl(value?: string | null) {

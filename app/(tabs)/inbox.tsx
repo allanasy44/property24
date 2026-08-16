@@ -6,6 +6,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Link, useLocalSearchParams, type Href } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ImageBackground, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { mediaDevices, MediaStream, RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCView } from "react-native-webrtc";
 import { AccessGuard } from "../../components/AccessGuard";
 import { Screen } from "../../components/Screen";
 import { colors, shadows, spacing, typography } from "../../constants/theme";
@@ -61,9 +62,16 @@ export default function InboxScreen() {
   const [muted, setMuted] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<"front" | "back">("front");
+  const [callSignalStatus, setCallSignalStatus] = useState("Secure signaling ready");
+  const [localStreamUrl, setLocalStreamUrl] = useState("");
+  const [remoteStreamUrl, setRemoteStreamUrl] = useState("");
+  const [peerConnectionState, setPeerConnectionState] = useState("idle");
   const messagesRef = useRef<ScrollView>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const pendingIceCandidatesRef = useRef<any[]>([]);
   const [liveConnected, setLiveConnected] = useState(false);
   const [typingUser, setTypingUser] = useState("");
   const [presenceOverrides, setPresenceOverrides] = useState<Record<string, { online: boolean; lastSeenAt?: string }>>({});
@@ -189,6 +197,7 @@ export default function InboxScreen() {
     setCallOverlayVisible(false);
     setMuted(false);
     setSpeakerOn(false);
+    cleanupWebRtcCall();
   }, [activeCall?.id]);
 
   useEffect(() => {
@@ -229,25 +238,44 @@ export default function InboxScreen() {
       setLiveConnected(true);
       setError("");
       sendSocketEvent("presence.ping", {});
-      if (activeConversation?.id) sendSocketEvent("read", { conversation_id: activeConversation.id });
+      if (activeConversation?.id) {
+        sendSocketEvent("delivered", { conversation_id: activeConversation.id });
+        sendSocketEvent("read", { conversation_id: activeConversation.id });
+      }
     };
 
     socket.onmessage = (event) => {
       handleLiveChatEvent(event.data, {
         activeConversationId: activeConversation?.id || "",
         authUserId: authUser?.id || "",
-        onCallEnded: (call) => setCalls((current) => current.map((item) => item.id === call.id ? call : item)),
+        onCallEnded: (call) => {
+          setCalls((current) => current.map((item) => item.id === call.id ? call : item));
+          setCallSignalStatus("Call ended");
+        },
         onCallStarted: (call) => {
           setCalls((current) => [call, ...current.filter((item) => item.id !== call.id)]);
+          setCallSignalStatus("Incoming call signaling started");
           setCallOverlayVisible(true);
+          if (String(call.initiatorId) !== String(authUser?.id || "")) {
+            sendSocketEvent("call.signal", { conversation_id: call.conversationId, call_id: call.id, signal_type: "ready", signal: { accepted: true, media: call.mode } });
+          }
         },
         onError: setError,
         onMessage: (message) => {
           setMessages((current) => upsertMessages(current, message));
           if (String(message.senderId) !== String(authUser?.id || "") && activeConversation?.id === message.conversationId) {
+            sendSocketEvent("delivered", { conversation_id: activeConversation.id });
             sendSocketEvent("read", { conversation_id: activeConversation.id });
           }
           void refreshConversations().catch(() => undefined);
+        },
+        onDelivered: (payload) => {
+          const ids = new Set((payload.message_ids || []).map(String));
+          if (!ids.size) return;
+          setMessages((current) => current.map((item) => ids.has(item.id) ? { ...item, deliveryStatus: item.deliveryStatus === "read" ? "read" : "delivered" } : item));
+        },
+        onCallSignal: (payload) => {
+          void handleCallSignal(payload);
         },
         onPresence: (payload) => {
           setPresenceOverrides((current) => ({
@@ -259,7 +287,7 @@ export default function InboxScreen() {
         onRead: (payload) => {
           const ids = new Set((payload.message_ids || []).map(String));
           if (!ids.size) return;
-          setMessages((current) => current.map((item) => ids.has(item.id) ? { ...item, readAt: item.readAt || new Date().toISOString() } : item));
+          setMessages((current) => current.map((item) => ids.has(item.id) ? { ...item, readAt: item.readAt || new Date().toISOString(), deliveryStatus: "read" } : item));
         },
         onTyping: (payload) => {
           if (String(payload.user_id) === String(authUser?.id || "") || String(payload.conversation_id) !== String(activeConversation?.id || "")) return;
@@ -289,6 +317,135 @@ export default function InboxScreen() {
     if (!socket || socket.readyState !== WebSocket.OPEN) return false;
     socket.send(JSON.stringify({ type, ...payload }));
     return true;
+  };
+
+  const cleanupWebRtcCall = () => {
+    pendingIceCandidatesRef.current = [];
+    peerConnectionRef.current?.close();
+    peerConnectionRef.current = null;
+    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current = null;
+    setLocalStreamUrl("");
+    setRemoteStreamUrl("");
+    setPeerConnectionState("idle");
+  };
+
+  const createPeerConnection = (conversationId: string, callId: string) => {
+    peerConnectionRef.current?.close();
+    const peerConnection = new RTCPeerConnection({
+      iceServers: rtcIceServers(),
+    });
+
+    peerConnection.onicecandidate = (event: any) => {
+      if (!event.candidate) return;
+      sendSocketEvent("call.signal", {
+        conversation_id: conversationId,
+        call_id: callId,
+        signal_type: "ice-candidate",
+        signal: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate,
+      });
+    };
+    peerConnection.ontrack = (event: any) => {
+      const [stream] = event.streams || [];
+      if (stream?.toURL) setRemoteStreamUrl(stream.toURL());
+    };
+    peerConnection.onconnectionstatechange = () => {
+      setPeerConnectionState(peerConnection.connectionState || "connecting");
+      if (peerConnection.connectionState === "connected") setCallSignalStatus("Media connected");
+      if (["failed", "disconnected", "closed"].includes(peerConnection.connectionState || "")) setCallSignalStatus("Media connection interrupted");
+    };
+    peerConnectionRef.current = peerConnection;
+    return peerConnection;
+  };
+
+  const ensureWebRtcSession = async (conversationId: string, call: ConversationCallSession, initiator: boolean) => {
+    if (Platform.OS === "web") {
+      setCallSignalStatus("WebRTC native calls require the mobile build");
+      return null;
+    }
+    const peerConnection = peerConnectionRef.current || createPeerConnection(conversationId, call.id);
+    if (!localStreamRef.current) {
+      const stream = await mediaDevices.getUserMedia({
+        audio: true,
+        video: call.mode === "video" ? { facingMode: cameraFacing === "front" ? "user" : "environment" } : false,
+      } as any);
+      localStreamRef.current = stream;
+      setLocalStreamUrl(stream.toURL());
+      stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
+    }
+    setPeerConnectionState(peerConnection.connectionState || "connecting");
+    setCallSignalStatus(initiator ? "Creating secure media offer" : "Preparing secure media answer");
+    return peerConnection;
+  };
+
+  const processPendingIceCandidates = async () => {
+    const peerConnection = peerConnectionRef.current;
+    if (!peerConnection?.remoteDescription) return;
+    const pending = [...pendingIceCandidatesRef.current];
+    pendingIceCandidatesRef.current = [];
+    for (const candidate of pending) {
+      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+  };
+
+  const handleCallSignal = async (payload: any) => {
+    if (String(payload.sender_id) === String(authUser?.id || "")) return;
+    if (payload.target_user_id && String(payload.target_user_id) !== String(authUser?.id || "")) return;
+    const call = calls.find((item) => String(item.id) === String(payload.call_id)) || activeCall;
+    const conversationId = String(payload.conversation_id || activeConversation?.id || "");
+    if (!call || !conversationId) return;
+    const signalType = String(payload.signal_type || "");
+    const signal = payload.signal || {};
+
+    try {
+      if (signalType === "offer") {
+        const peerConnection = await ensureWebRtcSession(conversationId, call, false);
+        if (!peerConnection) return;
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        sendSocketEvent("call.signal", { conversation_id: conversationId, call_id: call.id, signal_type: "answer", signal: answer });
+        await processPendingIceCandidates();
+        setCallSignalStatus("Media answer sent");
+        return;
+      }
+      if (signalType === "answer") {
+        const peerConnection = peerConnectionRef.current;
+        if (!peerConnection) return;
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
+        await processPendingIceCandidates();
+        setCallSignalStatus("Media handshake complete");
+        return;
+      }
+      if (signalType === "ice-candidate") {
+        const peerConnection = peerConnectionRef.current;
+        if (!peerConnection?.remoteDescription) {
+          pendingIceCandidatesRef.current.push(signal);
+        } else {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(signal));
+        }
+        setCallSignalStatus("Network route updated");
+        return;
+      }
+      if (signalType === "ready") setCallSignalStatus("Contact is ready for media");
+      else if (signalType === "mute") setCallSignalStatus("Contact muted microphone");
+      else if (signalType === "unmute") setCallSignalStatus("Contact unmuted microphone");
+      else if (signalType === "camera-off") setCallSignalStatus("Contact turned camera off");
+      else if (signalType === "camera-on") setCallSignalStatus("Contact turned camera on");
+      else if (signalType === "reject" || signalType === "busy") setCallSignalStatus("Contact is unavailable");
+    } catch (signalError) {
+      setCallSignalStatus("Media signaling failed");
+      setError(signalError instanceof Error ? signalError.message : "Call signaling failed");
+    }
+  };
+
+  const sendWebRtcOffer = async (conversationId: string, call: ConversationCallSession) => {
+    const peerConnection = await ensureWebRtcSession(conversationId, call, true);
+    if (!peerConnection) return;
+    const offer = await peerConnection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: call.mode === "video" });
+    await peerConnection.setLocalDescription(offer);
+    sendSocketEvent("call.signal", { conversation_id: conversationId, call_id: call.id, signal_type: "offer", signal: offer });
+    setCallSignalStatus("Media offer sent");
   };
 
   const handleDraftChange = (value: string) => {
@@ -343,6 +500,9 @@ export default function InboxScreen() {
       const call = await startConversationCall(conversation.id, mode);
       setCalls((current) => [call, ...current.filter((item) => item.id !== call.id)]);
       setCallOverlayVisible(true);
+      setCallSignalStatus("Waiting for contact signaling");
+      sendSocketEvent("call.signal", { conversation_id: conversation.id, call_id: call.id, signal_type: "ready", signal: { initiator: true, media: mode } });
+      await sendWebRtcOffer(conversation.id, call);
       setNotice(`${mode === "video" ? "Video" : "Voice"} call started.`);
       await loadCalls(conversation.id);
     } catch (callError) {
@@ -446,8 +606,10 @@ export default function InboxScreen() {
     setNotice("");
     try {
       setLoading(true);
+      sendSocketEvent("call.signal", { conversation_id: activeConversation.id, call_id: call.id, signal_type: "reject", signal: { ended: true } });
       const ended = await endConversationCall(activeConversation.id, call.id);
       setCalls((current) => current.map((item) => item.id === ended.id ? ended : item));
+      cleanupWebRtcCall();
       setCallOverlayVisible(false);
       setNotice("Call ended.");
       await loadCalls(activeConversation.id);
@@ -625,11 +787,22 @@ export default function InboxScreen() {
               visible={Boolean(activeCall && callOverlayVisible)}
               onEnd={(call) => endCall(call)}
               onMessage={() => setCallOverlayVisible(false)}
-              onToggleMuted={() => setMuted((value) => !value)}
+              onToggleMuted={() => {
+                const nextMuted = !muted;
+                localStreamRef.current?.getAudioTracks().forEach((track) => {
+                  track.enabled = !nextMuted;
+                });
+                setMuted(nextMuted);
+                if (activeConversation?.id && activeCall?.id) sendSocketEvent("call.signal", { conversation_id: activeConversation.id, call_id: activeCall.id, signal_type: nextMuted ? "mute" : "unmute", signal: { muted: nextMuted } });
+              }}
               cameraFacing={cameraFacing}
               cameraReady={Boolean(cameraPermission?.granted)}
               onFlipCamera={() => setCameraFacing((value) => value === "front" ? "back" : "front")}
               onToggleSpeaker={() => setSpeakerOn((value) => !value)}
+              connectionState={peerConnectionState}
+              localStreamUrl={localStreamUrl}
+              remoteStreamUrl={remoteStreamUrl}
+              signalStatus={callSignalStatus}
             />
             <AttachmentSheet
               visible={attachmentSheetVisible}
@@ -648,9 +821,11 @@ type LiveChatHandlers = {
   activeConversationId: string;
   authUserId: string;
   onCallEnded: (call: ConversationCallSession) => void;
+  onCallSignal: (payload: any) => void;
   onCallStarted: (call: ConversationCallSession) => void;
   onError: (message: string) => void;
   onMessage: (message: ConversationMessage) => void;
+  onDelivered: (payload: any) => void;
   onPresence: (payload: any) => void;
   onRead: (payload: any) => void;
   onTyping: (payload: any) => void;
@@ -666,11 +841,28 @@ function handleLiveChatEvent(raw: string, handlers: LiveChatHandlers) {
   const payload = event.payload || {};
   if (event.type === "error") handlers.onError(String(payload.message || "Live chat error"));
   if (event.type === "message.created") handlers.onMessage(mapLiveMessage(payload));
+  if (event.type === "message.edited") handlers.onMessage(mapLiveMessage(payload));
+  if (event.type === "message.deleted") handlers.onMessage(mapLiveMessage(payload));
+  if (event.type === "messages.delivered") handlers.onDelivered(payload);
   if (event.type === "messages.read") handlers.onRead(payload);
   if (event.type === "typing") handlers.onTyping(payload);
   if (event.type === "presence.changed") handlers.onPresence(payload);
+  if (event.type === "call.signal") handlers.onCallSignal(payload);
   if (event.type === "call.started") handlers.onCallStarted(mapLiveCall(payload));
   if (event.type === "call.ended") handlers.onCallEnded(mapLiveCall(payload));
+}
+
+function rtcIceServers() {
+  const raw = process.env.EXPO_PUBLIC_RTC_ICE_SERVERS;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch {
+      return raw.split(",").map((url) => ({ urls: url.trim() })).filter((item) => item.urls);
+    }
+  }
+  return [{ urls: "stun:stun.l.google.com:19302" }];
 }
 
 function mapLiveMessage(item: any): ConversationMessage {
@@ -682,9 +874,19 @@ function mapLiveMessage(item: any): ConversationMessage {
     body: item.body || "",
     attachmentUrl: item.attachment_url || undefined,
     attachmentType: item.attachment_type || undefined,
+    clientMessageId: item.client_message_id || item.client_id || undefined,
     attachmentName: item.attachment_name || undefined,
     createdAt: item.created_at || new Date().toISOString(),
     readAt: item.read_at || undefined,
+    editedAt: item.edited_at || undefined,
+    deletedAt: item.deleted_at || undefined,
+    deleted: Boolean(item.deleted),
+    deliveryStatus: item.delivery_status || undefined,
+    receipts: Array.isArray(item.receipts) ? item.receipts.map((receipt: any) => ({
+      userId: String(receipt.user_id),
+      deliveredAt: receipt.delivered_at || undefined,
+      readAt: receipt.read_at || undefined,
+    })) : [],
   };
 }
 
@@ -704,7 +906,7 @@ function upsertMessages(current: ConversationMessage[], message: ConversationMes
   return [...current.filter((item) => item.id !== message.id), message].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
-function CallOverlay({ call, cameraFacing, cameraReady, contactName, contactOnline, muted, onEnd, onFlipCamera, onMessage, onToggleMuted, onToggleSpeaker, profilePicture, speakerOn, visible }: { call?: ConversationCallSession; cameraFacing: "front" | "back"; cameraReady: boolean; contactName: string; contactOnline: boolean; muted: boolean; onEnd: (call: ConversationCallSession) => void; onFlipCamera: () => void; onMessage: () => void; onToggleMuted: () => void; onToggleSpeaker: () => void; profilePicture?: string; speakerOn: boolean; visible: boolean }) {
+function CallOverlay({ call, cameraFacing, cameraReady, connectionState, contactName, contactOnline, localStreamUrl, muted, onEnd, onFlipCamera, onMessage, onToggleMuted, onToggleSpeaker, profilePicture, remoteStreamUrl, signalStatus, speakerOn, visible }: { call?: ConversationCallSession; cameraFacing: "front" | "back"; cameraReady: boolean; connectionState: string; contactName: string; contactOnline: boolean; localStreamUrl: string; muted: boolean; onEnd: (call: ConversationCallSession) => void; onFlipCamera: () => void; onMessage: () => void; onToggleMuted: () => void; onToggleSpeaker: () => void; profilePicture?: string; remoteStreamUrl: string; signalStatus: string; speakerOn: boolean; visible: boolean }) {
   if (!call) return null;
   const callLabel = call.mode === "video" ? "Video call" : "Voice call";
   const status = contactOnline ? "Ringing..." : "Calling... contact appears offline";
@@ -717,7 +919,9 @@ function CallOverlay({ call, cameraFacing, cameraReady, contactName, contactOnli
         </Pressable>
         {call.mode === "video" ? (
           <View style={styles.videoCallStage}>
-            {cameraReady ? (
+            {remoteStreamUrl ? (
+              <RTCView objectFit="cover" streamURL={remoteStreamUrl} style={styles.callCameraPreview} />
+            ) : cameraReady ? (
               <CameraView facing={cameraFacing} mirror={cameraFacing === "front"} style={styles.callCameraPreview} />
             ) : (
               <View style={styles.callCameraPermission}>
@@ -725,6 +929,7 @@ function CallOverlay({ call, cameraFacing, cameraReady, contactName, contactOnli
                 <Text style={styles.callCameraPermissionText}>Camera permission is needed for video.</Text>
               </View>
             )}
+            {localStreamUrl ? <RTCView mirror objectFit="cover" streamURL={localStreamUrl} style={styles.localWebRtcPreview} /> : null}
             <View style={styles.remoteVideoCard}>
               <View style={styles.remoteAvatarSmall}>
                 {profilePicture ? (
@@ -735,7 +940,8 @@ function CallOverlay({ call, cameraFacing, cameraReady, contactName, contactOnli
               </View>
               <View style={styles.remoteCopy}>
                 <Text numberOfLines={1} style={styles.remoteName}>{contactName}</Text>
-                <Text style={styles.remoteStatus}>{status}</Text>
+                <Text style={styles.remoteStatus}>{remoteStreamUrl ? `Connected · ${connectionState}` : status}</Text>
+                <Text numberOfLines={1} style={styles.callSignalText}>{signalStatus}</Text>
               </View>
             </View>
             <Pressable onPress={onFlipCamera} style={styles.flipCameraButton}>
@@ -756,7 +962,8 @@ function CallOverlay({ call, cameraFacing, cameraReady, contactName, contactOnli
               <View style={[styles.presenceDot, contactOnline && styles.presenceDotOnline]} />
               <Text style={styles.callStatusText}>{status}</Text>
             </View>
-            <Text style={styles.callModeText}>{callLabel} · in-app</Text>
+            <Text style={styles.callModeText}>{callLabel} · {connectionState}</Text>
+            <Text style={styles.callSignalText}>{signalStatus}</Text>
           </View>
         )}
         <View style={styles.callControls}>
@@ -1053,7 +1260,11 @@ function formatMessageMeta(message: ConversationMessage, mine: boolean) {
   const date = new Date(message.createdAt);
   const time = Number.isNaN(date.getTime()) ? "Now" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   if (!mine) return time;
-  return message.readAt ? `${time} · Read` : `${time} · Sent`;
+  if (message.deleted) return `${time} · Deleted`;
+  if (message.editedAt) return `${time} · Edited`;
+  if (message.deliveryStatus === "read" || message.readAt) return `${time} · Read`;
+  if (message.deliveryStatus === "delivered") return `${time} · Delivered`;
+  return `${time} · Sent`;
 }
 
 const styles = StyleSheet.create({
@@ -1175,8 +1386,10 @@ const styles = StyleSheet.create({
   callStatusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   callStatusText: { color: colors.textMuted, fontSize: 13, ...typography.label },
   callModeText: { color: colors.textMuted, fontSize: 12, ...typography.body },
+  callSignalText: { color: colors.success, fontSize: 11, lineHeight: 15, textAlign: "center", ...typography.label },
   videoCallStage: { width: "100%", flex: 1, position: "relative", overflow: "hidden", borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
   callCameraPreview: { flex: 1 },
+  localWebRtcPreview: { position: "absolute", right: 14, bottom: 88, width: 104, height: 148, borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   callCameraPermission: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 20, backgroundColor: colors.surface },
   callCameraPermissionText: { color: colors.textMuted, fontSize: 13, lineHeight: 18, textAlign: "center", ...typography.body },
   remoteVideoCard: { position: "absolute", left: 12, right: 12, top: 12, minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: "rgba(0,0,0,0.68)" },
