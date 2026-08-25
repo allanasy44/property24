@@ -1,19 +1,45 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system";
-import * as MediaLibrary from "expo-media-library";
-import * as Notifications from "expo-notifications";
 import { Dispatch, ReactNode, createContext, useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { Platform } from "react-native";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+
+type NotificationsModule = typeof import("expo-notifications");
+type MediaLibraryModule = typeof import("expo-media-library");
+
+let cachedNotificationsModule: NotificationsModule | null | undefined;
+let cachedMediaLibraryModule: MediaLibraryModule | null | undefined;
+
+function getNotificationsModule(): NotificationsModule | null {
+  if (Platform.OS === "web") return null;
+  if (cachedNotificationsModule !== undefined) return cachedNotificationsModule;
+  try {
+    cachedNotificationsModule = require("expo-notifications") as NotificationsModule;
+    cachedNotificationsModule.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch {
+    cachedNotificationsModule = null;
+  }
+  return cachedNotificationsModule;
+}
+
+function getMediaLibraryModule(): MediaLibraryModule | null {
+  if (Platform.OS === "web") return null;
+  if (cachedMediaLibraryModule !== undefined) return cachedMediaLibraryModule;
+  try {
+    cachedMediaLibraryModule = require("expo-media-library") as MediaLibraryModule;
+  } catch {
+    cachedMediaLibraryModule = null;
+  }
+  return cachedMediaLibraryModule;
+}
 
 export type Property = {
   id: string;
@@ -320,7 +346,6 @@ export type RegisterAccountPayload = {
   accountType: PublicAccountRole;
   name: string;
   email: string;
-  phone: string;
   password: string;
 };
 
@@ -380,7 +405,7 @@ export type VerificationSubmissionPayload = {
   politically_exposed_person?: boolean;
   declaration_accepted?: boolean;
   national_id_number: string;
-  phone_verified: boolean;
+  phone_verified?: boolean;
   email_verified?: boolean;
   selfie_uploaded: boolean;
   identity_confirmed?: boolean;
@@ -455,6 +480,7 @@ type ConversationInput = Omit<ConversationItem, "id" | "time" | "status" | "part
 const STORAGE_KEY = "property24-zimbabwe-rental-platform-v3";
 const ACCOUNT_ROLE_STORAGE_KEY = "property24-zimbabwe-account-role";
 const API_TOKEN_STORAGE_KEY = "property24-zimbabwe-api-token";
+const DEFAULT_API_PORT = "8010";
 const API_BASE_URL = resolveApiBaseUrl();
 const defaultAccountRole: AccountRole = "tenant";
 
@@ -462,17 +488,17 @@ export const accountContexts: Record<AccountRole, Omit<AccountContext, "accountT
   tenant: {
     visibleSections: ["index", "inbox", "profile", "payments", "maintenance", "leases", "verification"],
     capabilities: ["search_properties", "save_properties", "submit_tenant_verification", "apply_for_rentals", "pay_rent", "view_rental_history", "report_maintenance", "sign_leases", "message_landlord_or_agent"],
-    onboardingRequirements: ["email_verification", "phone_verification"],
+    onboardingRequirements: ["email_verification"],
   },
   landlord: {
     visibleSections: ["index", "listings", "inbox", "profile", "payments", "maintenance", "leases", "analytics", "verification"],
     capabilities: ["add_properties", "upload_property_media", "create_agents", "submit_landlord_verification", "approve_tenants", "receive_rent", "manage_maintenance", "view_landlord_reports", "message_tenants"],
-    onboardingRequirements: ["email_verification", "phone_verification"],
+    onboardingRequirements: ["email_verification"],
   },
   agent: {
     visibleSections: ["index", "listings", "inbox", "profile", "operations"],
     capabilities: ["list_properties", "submit_agent_verification", "schedule_viewings", "manage_landlords", "track_applications", "track_commissions", "message_clients"],
-    onboardingRequirements: ["email_verification", "phone_verification"],
+    onboardingRequirements: ["email_verification"],
   },
   admin: {
     visibleSections: ["index", "profile", "verification", "operations", "payments", "analytics"],
@@ -838,8 +864,7 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
               account_type: payload.accountType,
               name: payload.name.trim(),
               email: payload.email.trim(),
-              username: payload.email.trim() || payload.phone.trim(),
-              phone: payload.phone.trim(),
+              username: payload.email.trim(),
               password: payload.password,
             });
             if (!response.user) {
@@ -942,6 +967,12 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
           setAuthError("");
           try {
             const response = await postProtected("verifications/email-otp/verify/", authToken, { challenge_id: challengeId, otp: otp.trim() });
+            if (response.user) {
+              const nextUser = mapAuthUser(response.user, response.account);
+              setAuthUser(nextUser);
+              setAccountRole(nextUser.role);
+              await AsyncStorage.setItem(ACCOUNT_ROLE_STORAGE_KEY, nextUser.role);
+            }
             return { emailVerified: Boolean(response.email_verified), email: response.email || "" };
           } catch (error) {
             const message = error instanceof Error ? error.message : "Email OTP verification failed";
@@ -1408,7 +1439,7 @@ function buildVerificationFormData(payload: VerificationSubmissionPayload) {
   if (payload.politically_exposed_person !== undefined) formData.append("politically_exposed_person", String(payload.politically_exposed_person));
   if (payload.declaration_accepted !== undefined) formData.append("declaration_accepted", String(payload.declaration_accepted));
   formData.append("national_id_number", payload.national_id_number);
-  formData.append("phone_verified", String(payload.phone_verified));
+  if (payload.phone_verified !== undefined) formData.append("phone_verified", String(payload.phone_verified));
   if (payload.email_verified !== undefined) formData.append("email_verified", String(payload.email_verified));
   formData.append("selfie_uploaded", String(payload.selfie_uploaded));
   if (payload.identity_confirmed !== undefined) formData.append("identity_confirmed", String(payload.identity_confirmed));
@@ -1894,20 +1925,20 @@ function resolveApiBaseUrl() {
   if (explicitUrl) return normalizeApiUrlForDevice(trimTrailingSlash(explicitUrl));
 
   if (Platform.OS === "web") {
-    return "http://127.0.0.1:8011/api";
+    return `http://127.0.0.1:${DEFAULT_API_PORT}/api`;
   }
 
   const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost;
   const host = hostUri?.split(":")[0];
   if (host) {
-    return `http://${host}:8011/api`;
+    return `http://${host}:${DEFAULT_API_PORT}/api`;
   }
 
   if (Platform.OS === "android") {
-    return "http://10.0.2.2:8011/api";
+    return `http://10.0.2.2:${DEFAULT_API_PORT}/api`;
   }
 
-  return "http://127.0.0.1:8011/api";
+  return `http://127.0.0.1:${DEFAULT_API_PORT}/api`;
 }
 
 function normalizeApiUrlForDevice(value: string) {
@@ -1931,7 +1962,9 @@ function normalizeApiUrlForDevice(value: string) {
 }
 
 async function registerDeviceForPush(authToken: string) {
-  if (Platform.OS === "web") return;
+  if (Platform.OS === "web" || Constants.appOwnership === "expo") return;
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("messages", {
       name: "Messages and calls",
@@ -1958,6 +1991,8 @@ async function saveMediaToDevice(asset: MediaAsset) {
     return asset.url;
   }
 
+  const MediaLibrary = getMediaLibraryModule();
+  if (!MediaLibrary) throw new Error("Media library requires a development build on this device");
   const permission = await MediaLibrary.requestPermissionsAsync();
   if (!permission.granted) {
     throw new Error("Allow media library access to save this file");

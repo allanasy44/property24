@@ -1,16 +1,45 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import * as Contacts from "expo-contacts";
+import Constants from "expo-constants";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { Link, useLocalSearchParams, type Href } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ImageBackground, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { mediaDevices, MediaStream, RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCView } from "react-native-webrtc";
 import { AccessGuard } from "../../components/AccessGuard";
 import { Screen } from "../../components/Screen";
 import { colors, shadows, spacing, typography } from "../../constants/theme";
 import { ConversationCallSession, ConversationItem, ConversationMessage, MessageAttachmentInput, Property, useRentalPlatform } from "../../state/rentalPlatform";
+
+type WebRtcModule = {
+  mediaDevices: { getUserMedia: (constraints: any) => Promise<any> };
+  RTCPeerConnection: new (configuration?: any) => any;
+  RTCIceCandidate: new (candidate: any) => any;
+  RTCSessionDescription: new (description: any) => any;
+  RTCView: any;
+};
+
+let cachedWebRtcModule: WebRtcModule | null | undefined;
+const canUseNativeWebRtc = Platform.OS !== "web" && Constants.appOwnership !== "expo";
+
+function getWebRtcModule(): WebRtcModule | null {
+  if (!canUseNativeWebRtc) return null;
+  if (cachedWebRtcModule !== undefined) return cachedWebRtcModule;
+  try {
+    cachedWebRtcModule = require("react-native-webrtc") as WebRtcModule;
+  } catch {
+    cachedWebRtcModule = null;
+  }
+  return cachedWebRtcModule;
+}
+
+function OptionalRTCView(props: any) {
+  const webRtc = getWebRtcModule();
+  if (!webRtc?.RTCView) return null;
+  const NativeRTCView = webRtc.RTCView;
+  return <NativeRTCView {...props} />;
+}
 
 type ListingThread = {
   key: string;
@@ -69,8 +98,8 @@ export default function InboxScreen() {
   const messagesRef = useRef<ScrollView>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionRef = useRef<any | null>(null);
+  const localStreamRef = useRef<any | null>(null);
   const pendingIceCandidatesRef = useRef<any[]>([]);
   const [liveConnected, setLiveConnected] = useState(false);
   const [typingUser, setTypingUser] = useState("");
@@ -323,7 +352,7 @@ export default function InboxScreen() {
     pendingIceCandidatesRef.current = [];
     peerConnectionRef.current?.close();
     peerConnectionRef.current = null;
-    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current?.getTracks().forEach((track: any) => track.stop());
     localStreamRef.current = null;
     setLocalStreamUrl("");
     setRemoteStreamUrl("");
@@ -331,8 +360,13 @@ export default function InboxScreen() {
   };
 
   const createPeerConnection = (conversationId: string, callId: string) => {
+    const webRtc = getWebRtcModule();
+    if (!webRtc) {
+      setCallSignalStatus("Native WebRTC requires a development build");
+      return null;
+    }
     peerConnectionRef.current?.close();
-    const peerConnection = new RTCPeerConnection({
+    const peerConnection = new webRtc.RTCPeerConnection({
       iceServers: rtcIceServers(),
     });
 
@@ -359,19 +393,25 @@ export default function InboxScreen() {
   };
 
   const ensureWebRtcSession = async (conversationId: string, call: ConversationCallSession, initiator: boolean) => {
-    if (Platform.OS === "web") {
-      setCallSignalStatus("WebRTC native calls require the mobile build");
+    if (!canUseNativeWebRtc) {
+      setCallSignalStatus("Native WebRTC calls require a development build");
+      return null;
+    }
+    const webRtc = getWebRtcModule();
+    if (!webRtc) {
+      setCallSignalStatus("Install and run a development build for real calls");
       return null;
     }
     const peerConnection = peerConnectionRef.current || createPeerConnection(conversationId, call.id);
+    if (!peerConnection) return null;
     if (!localStreamRef.current) {
-      const stream = await mediaDevices.getUserMedia({
+      const stream = await webRtc.mediaDevices.getUserMedia({
         audio: true,
         video: call.mode === "video" ? { facingMode: cameraFacing === "front" ? "user" : "environment" } : false,
       } as any);
       localStreamRef.current = stream;
       setLocalStreamUrl(stream.toURL());
-      stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
+      stream.getTracks().forEach((track: any) => peerConnection.addTrack(track, stream));
     }
     setPeerConnectionState(peerConnection.connectionState || "connecting");
     setCallSignalStatus(initiator ? "Creating secure media offer" : "Preparing secure media answer");
@@ -384,7 +424,8 @@ export default function InboxScreen() {
     const pending = [...pendingIceCandidatesRef.current];
     pendingIceCandidatesRef.current = [];
     for (const candidate of pending) {
-      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      const webRtc = getWebRtcModule();
+      if (webRtc) await peerConnection.addIceCandidate(new webRtc.RTCIceCandidate(candidate));
     }
   };
 
@@ -401,7 +442,9 @@ export default function InboxScreen() {
       if (signalType === "offer") {
         const peerConnection = await ensureWebRtcSession(conversationId, call, false);
         if (!peerConnection) return;
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
+        const webRtc = getWebRtcModule();
+        if (!webRtc) return;
+        await peerConnection.setRemoteDescription(new webRtc.RTCSessionDescription(signal));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
         sendSocketEvent("call.signal", { conversation_id: conversationId, call_id: call.id, signal_type: "answer", signal: answer });
@@ -412,7 +455,9 @@ export default function InboxScreen() {
       if (signalType === "answer") {
         const peerConnection = peerConnectionRef.current;
         if (!peerConnection) return;
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
+        const webRtc = getWebRtcModule();
+        if (!webRtc) return;
+        await peerConnection.setRemoteDescription(new webRtc.RTCSessionDescription(signal));
         await processPendingIceCandidates();
         setCallSignalStatus("Media handshake complete");
         return;
@@ -422,7 +467,8 @@ export default function InboxScreen() {
         if (!peerConnection?.remoteDescription) {
           pendingIceCandidatesRef.current.push(signal);
         } else {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(signal));
+          const webRtc = getWebRtcModule();
+          if (webRtc) await peerConnection.addIceCandidate(new webRtc.RTCIceCandidate(signal));
         }
         setCallSignalStatus("Network route updated");
         return;
@@ -789,7 +835,7 @@ export default function InboxScreen() {
               onMessage={() => setCallOverlayVisible(false)}
               onToggleMuted={() => {
                 const nextMuted = !muted;
-                localStreamRef.current?.getAudioTracks().forEach((track) => {
+                localStreamRef.current?.getAudioTracks().forEach((track: any) => {
                   track.enabled = !nextMuted;
                 });
                 setMuted(nextMuted);
@@ -920,7 +966,7 @@ function CallOverlay({ call, cameraFacing, cameraReady, connectionState, contact
         {call.mode === "video" ? (
           <View style={styles.videoCallStage}>
             {remoteStreamUrl ? (
-              <RTCView objectFit="cover" streamURL={remoteStreamUrl} style={styles.callCameraPreview} />
+              <OptionalRTCView objectFit="cover" streamURL={remoteStreamUrl} style={styles.callCameraPreview} />
             ) : cameraReady ? (
               <CameraView facing={cameraFacing} mirror={cameraFacing === "front"} style={styles.callCameraPreview} />
             ) : (
@@ -929,7 +975,7 @@ function CallOverlay({ call, cameraFacing, cameraReady, connectionState, contact
                 <Text style={styles.callCameraPermissionText}>Camera permission is needed for video.</Text>
               </View>
             )}
-            {localStreamUrl ? <RTCView mirror objectFit="cover" streamURL={localStreamUrl} style={styles.localWebRtcPreview} /> : null}
+            {localStreamUrl ? <OptionalRTCView mirror objectFit="cover" streamURL={localStreamUrl} style={styles.localWebRtcPreview} /> : null}
             <View style={styles.remoteVideoCard}>
               <View style={styles.remoteAvatarSmall}>
                 {profilePicture ? (

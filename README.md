@@ -35,7 +35,7 @@ npm run start
 To hydrate the mobile app from Django:
 
 ```bash
-EXPO_PUBLIC_API_URL=http://127.0.0.1:8011/api npm run web
+EXPO_PUBLIC_API_URL=http://127.0.0.1:8010/api npm run web
 ```
 
 For Google sign-in, create OAuth client IDs in Google Cloud Console, then start Expo with `EXPO_PUBLIC_GOOGLE_CLIENT_ID`, and with `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` / `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` for native builds. Put the same client IDs in backend `GOOGLE_CLIENT_IDS` and keep `GOOGLE_SIGN_IN_ENABLED=true`.
@@ -47,7 +47,7 @@ cd backend
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 python3 manage.py migrate
-python3 manage.py runserver 0.0.0.0:8011
+python3 manage.py runserver 0.0.0.0:8010
 ```
 
 Local admin login:
@@ -73,7 +73,7 @@ To customize secrets or service addresses, copy `backend/.env.example` to `backe
 
 ## Django API
 
-The local npm backend exposes JSON endpoints under `http://localhost:8011/api/`; Docker exposes them under `http://localhost:8010/api/`.
+The local npm backend and Docker expose JSON endpoints under `http://localhost:8010/api/`.
 
 - `GET /api/properties/` with filters for `city`, `suburb`, `rent_min`, `rent_max`, `bedrooms_min`, `type`, and `verified_only`
 - `POST /api/auth/login/`, `POST /api/auth/refresh/`, and `GET /api/auth/me/` for JWT authentication

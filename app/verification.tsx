@@ -82,13 +82,11 @@ export default function VerificationScreen() {
       await submitVerification({
         role: authUser.role,
         name: authUser.name,
-        phone: authUser.phone,
         privacy_notice_accepted: true,
         document_type: "identity_document",
         declaration_accepted: true,
         national_id_number: documentNumber.trim(),
         extracted_national_id_number: extraction.extractedNationalIdNumber,
-        phone_verified: authUser.phoneVerified,
         email_verified: authUser.emailVerified,
         selfie_uploaded: false,
         identity_confirmed: true,

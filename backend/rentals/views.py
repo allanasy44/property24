@@ -102,7 +102,7 @@ User = get_user_model()
 
 PUBLIC_ACCOUNT_ROLES = {User.Roles.TENANT, User.Roles.LANDLORD}
 VERIFICATION_REQUIRED_ROLES = {User.Roles.TENANT, User.Roles.LANDLORD, User.Roles.AGENT}
-VERIFICATION_ALLOWED_PATH_SUFFIXES = ("/auth/me/", "/auth/profile/", "/verifications/", "/verifications/email-otp/", "/verifications/email-otp/verify/", "/verifications/phone-otp/", "/verifications/phone-otp/verify/", "/verifications/id-extract/")
+VERIFICATION_ALLOWED_PATH_SUFFIXES = ("/auth/me/", "/auth/profile/", "/verifications/", "/verifications/email-otp/", "/verifications/email-otp/verify/", "/verifications/id-extract/")
 PASSWORD_MIN_LENGTH = 15
 PASSWORD_MAX_LENGTH = 128
 USERNAME_MAX_LENGTH = 150
@@ -169,9 +169,9 @@ ROLE_VISIBLE_SECTIONS = {
 }
 
 ROLE_ONBOARDING_REQUIREMENTS = {
-    User.Roles.TENANT: ["email_verification", "phone_verification"],
-    User.Roles.LANDLORD: ["email_verification", "phone_verification"],
-    User.Roles.AGENT: ["email_verification", "phone_verification"],
+    User.Roles.TENANT: ["email_verification"],
+    User.Roles.LANDLORD: ["email_verification"],
+    User.Roles.AGENT: ["email_verification"],
     User.Roles.ADMIN: [],
 }
 
@@ -220,9 +220,9 @@ def require_authenticated(request):
         return None, json_error(error, status=401)
     if request.method != "OPTIONS" and user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user) and not verification_access_allowed(request):
         return None, json_error(
-            "Email and phone verification are required before using this feature",
+            "Email verification is required before using this feature",
             status=403,
-            errors={"account_onboarding_required": True, "next_endpoint": "/api/verifications/phone-otp/"},
+            errors={"account_onboarding_required": True, "next_endpoint": "/api/verifications/email-otp/"},
         )
     return user, None
 
@@ -2259,8 +2259,6 @@ def validate_verification_submission(request, data, role, user):
         errors.append("identity_confirmed must be true after confirming the document information")
     if not to_bool(data.get("email_verified")) or not email_otp_verified(user):
         errors.append("email_verified must be completed using OTP")
-    if not to_bool(data.get("phone_verified")) or not user.phone_verified or normalize_phone(user.phone) != phone or not phone_otp_verified(user, phone):
-        errors.append("phone_verified must be completed using OTP for this phone number")
 
     if role == User.Roles.LANDLORD and not (files.get("ownership_or_authorization_document") or data.get("ownership_or_authorization_uploaded")):
         errors.append("ownership_or_authorization_document is required for landlord verification")
@@ -2686,7 +2684,6 @@ def validate_public_registration_payload(data):
     for error in (
         validate_text_field(username, "Username", USERNAME_MAX_LENGTH, required=True),
         validate_email_field(email, required=True),
-        validate_phone_field(phone, required=True),
         validate_text_field(data.get("name") or data.get("full_name", ""), "Full name", NAME_MAX_LENGTH),
     ):
         if error:
@@ -2698,10 +2695,6 @@ def validate_public_registration_payload(data):
         return None, "An account with this email already exists"
     if User.objects.filter(username__iexact=username).exists():
         return None, "An account with this username already exists"
-    if User.objects.filter(phone_identity_query(phone)).exists():
-        return None, "An account with this phone number already exists"
-    if normalize_phone(username) and User.objects.filter(phone_identity_query(username)).exists():
-        return None, "An account with this username or phone number already exists"
 
     return {
         "username": username,
@@ -2718,7 +2711,7 @@ def create_registration_otp_challenge(data):
     if error:
         return None, "", error
 
-    pending_match = Q(phone=cleaned["phone"]) | Q(username__iexact=cleaned["username"])
+    pending_match = Q(username__iexact=cleaned["username"])
     if cleaned["email"]:
         pending_match |= Q(email=cleaned["email"])
     PendingRegistrationOTP.objects.filter(status=PendingRegistrationOTP.Status.PENDING).filter(pending_match).update(status=PendingRegistrationOTP.Status.EXPIRED)
@@ -2773,10 +2766,9 @@ def create_public_account_from_otp(challenge):
         return None, "An account with this email already exists"
     if User.objects.filter(username__iexact=challenge.username).exists():
         return None, "An account with this username already exists"
-    if User.objects.filter(Q(phone=challenge.phone) | Q(username__iexact=challenge.phone) | Q(email__iexact=challenge.phone)).exists():
+    if challenge.phone and User.objects.filter(Q(phone=challenge.phone) | Q(username__iexact=challenge.phone) | Q(email__iexact=challenge.phone)).exists():
         return None, "An account with this phone number already exists"
-    if normalize_phone(challenge.username) and User.objects.filter(phone=normalize_phone(challenge.username)).exists():
-        return None, "An account with this username or phone number already exists"
+
 
     try:
         user = User(
@@ -2966,7 +2958,7 @@ def account_onboarding_complete(user):
         return True
     if user.is_verified:
         return True
-    return bool(user.email_verified and user.phone_verified)
+    return bool(user.email_verified)
 
 
 def full_verification_required(user):
@@ -3023,7 +3015,7 @@ def serialize_account_context(user):
         "onboarding": {
             "required": user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user),
             "requirements": [] if account_onboarding_complete(user) else ROLE_ONBOARDING_REQUIREMENTS.get(user.role, []),
-            "next_endpoint": "/api/verifications/phone-otp/" if user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user) else "",
+            "next_endpoint": "/api/verifications/email-otp/" if user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user) else "",
             "full_verification_required": full_verification_required(user),
             "full_verification_endpoint": "/api/verifications/" if full_verification_required(user) else "",
         },

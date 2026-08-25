@@ -29,7 +29,7 @@ const passwordMaxLength = 128;
 const passwordControlCharPattern = /[\x00-\x1F\x7F]/;
 
 export function AuthGate({ children }: AuthGateProps) {
-  const { ready, authUser, authToken, authError, authLoading, account, signIn, registerAccount, googleSignIn, sendVerificationEmailOtp, verifyVerificationEmailOtp, sendVerificationPhoneOtp, verifyVerificationPhoneOtp } = useRentalPlatform();
+  const { ready, authUser, authToken, authError, authLoading, account, signIn, registerAccount, googleSignIn, sendVerificationEmailOtp, verifyVerificationEmailOtp } = useRentalPlatform();
   const { width } = useWindowDimensions();
   const compact = width < 680;
   const [mode, setMode] = useState<AuthMode>("signin");
@@ -132,7 +132,7 @@ export function AuthGate({ children }: AuthGateProps) {
     return (
       <>
         {verificationLocked ? (
-          <AccountOnboardingGate accountType={authUser.role} accountEmail={authUser.email} accountPhone={authUser.phone} emailVerified={authUser.emailVerified} phoneVerified={authUser.phoneVerified} authError={authError} authLoading={authLoading} sendEmailOtp={sendVerificationEmailOtp} verifyEmailOtp={verifyVerificationEmailOtp} sendPhoneOtp={sendVerificationPhoneOtp} verifyPhoneOtp={verifyVerificationPhoneOtp} />
+          <AccountOnboardingGate accountType={authUser.role} accountEmail={authUser.email} emailVerified={authUser.emailVerified} authError={authError} authLoading={authLoading} sendEmailOtp={sendVerificationEmailOtp} verifyEmailOtp={verifyVerificationEmailOtp} />
         ) : children}
         {introVisible ? <PostLoginIntro onDone={() => setIntroVisible(false)} /> : null}
       </>
@@ -162,7 +162,7 @@ export function AuthGate({ children }: AuthGateProps) {
         clearAuthForm();
         return;
       }
-      await registerAccount({ accountType, name: "", email: identifier, phone: "", password });
+      await registerAccount({ accountType, name: "", email: identifier, password });
       clearAuthForm();
       setMode("signin");
       setLocalError("Account created. Sign in to continue.");
@@ -308,51 +308,36 @@ export function AuthGate({ children }: AuthGateProps) {
 function AccountOnboardingGate({
   accountType,
   accountEmail,
-  accountPhone,
   emailVerified: initialEmailVerified,
-  phoneVerified: initialPhoneVerified,
   authError,
   authLoading,
   sendEmailOtp,
   verifyEmailOtp,
-  sendPhoneOtp,
-  verifyPhoneOtp,
 }: {
   accountType: AccountRole;
   accountEmail: string;
-  accountPhone: string;
   emailVerified: boolean;
-  phoneVerified: boolean;
   authError: string;
   authLoading: boolean;
   sendEmailOtp: ReturnType<typeof useRentalPlatform>["sendVerificationEmailOtp"];
   verifyEmailOtp: ReturnType<typeof useRentalPlatform>["verifyVerificationEmailOtp"];
-  sendPhoneOtp: ReturnType<typeof useRentalPlatform>["sendVerificationPhoneOtp"];
-  verifyPhoneOtp: ReturnType<typeof useRentalPlatform>["verifyVerificationPhoneOtp"];
 }) {
   const [emailChallengeId, setEmailChallengeId] = useState("");
-  const [phoneChallengeId, setPhoneChallengeId] = useState("");
   const [emailOtp, setEmailOtp] = useState("");
-  const [phoneOtp, setPhoneOtp] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [verificationEmail, setVerificationEmail] = useState(accountEmail);
-  const [phone, setPhone] = useState(accountPhone);
   const [emailVerified, setEmailVerified] = useState(initialEmailVerified);
-  const [phoneVerified, setPhoneVerified] = useState(initialPhoneVerified);
   const [currentStage, setCurrentStage] = useState(initialEmailVerified ? 1 : 0);
   const [notice, setNotice] = useState("");
   const [localError, setLocalError] = useState("");
 
   const countdown = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
   const cleanEmail = verificationEmail.trim();
-  const cleanPhone = phone.trim();
-  const accountLabel = accountType === "landlord" ? "Landlord profile" : accountType === "tenant" ? "Tenant profile" : "Account";
 
   useEffect(() => {
     setEmailVerified(initialEmailVerified);
-    setPhoneVerified(initialPhoneVerified);
-    if (initialEmailVerified && !initialPhoneVerified) setCurrentStage(1);
-  }, [initialEmailVerified, initialPhoneVerified]);
+    if (initialEmailVerified) setCurrentStage(1);
+  }, [initialEmailVerified]);
 
   useEffect(() => {
     if (!secondsLeft) return undefined;
@@ -402,42 +387,6 @@ function AccountOnboardingGate({
     }
   };
 
-  const requestPhoneOtp = async () => {
-    setNotice("");
-    setLocalError("");
-    if (!isValidPhoneNumber(cleanPhone)) {
-      setLocalError("Enter a valid phone number with country code.");
-      return;
-    }
-    try {
-      const challenge = await sendPhoneOtp(cleanPhone);
-      setPhoneChallengeId(challenge.challengeId);
-      setSecondsLeft(challenge.expiresInSeconds || 30);
-      setNotice(challenge.message || "OTP sent to your phone.");
-    } catch {
-      // authError is shown below.
-    }
-  };
-
-  const confirmPhoneOtp = async () => {
-    setNotice("");
-    setLocalError("");
-    if (!phoneChallengeId || !phoneOtp.trim()) {
-      setLocalError("Enter the phone OTP.");
-      return;
-    }
-    try {
-      const result = await verifyPhoneOtp(phoneChallengeId, phoneOtp);
-      setPhoneVerified(result.phoneVerified);
-      setPhoneChallengeId("");
-      setPhoneOtp("");
-      setSecondsLeft(0);
-      setNotice(`${accountLabel} created. Basic features are now available.`);
-    } catch {
-      // authError is shown below.
-    }
-  };
-
   const renderStage = () => {
     if (!emailVerified && currentStage === 0) {
       return (
@@ -453,13 +402,9 @@ function AccountOnboardingGate({
     }
 
     return (
-      <VerificationScreenCard title="Phone verification" icon="phone-portrait-outline">
-        <Field compact icon="call-outline" placeholder="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" maxLength={32} />
-        {phoneChallengeId ? <Field compact icon="keypad-outline" placeholder="Enter OTP" value={phoneOtp} onChangeText={setPhoneOtp} keyboardType="number-pad" maxLength={6} /> : null}
-        {phoneChallengeId ? <View style={styles.otpCountdownBox}><Text style={styles.otpCountdownText}>{countdown}</Text></View> : null}
-        <Pressable onPress={phoneChallengeId ? confirmPhoneOtp : requestPhoneOtp} disabled={authLoading || phoneVerified || (!phoneChallengeId && Boolean(secondsLeft))} style={[styles.submitButton, (authLoading || phoneVerified || (!phoneChallengeId && Boolean(secondsLeft))) && styles.submitButtonDisabled]}>
-          {authLoading ? <ActivityIndicator color={colors.accentText} /> : <Text style={styles.submitText}>{phoneChallengeId ? "Verify phone" : "Send OTP"}</Text>}
-        </Pressable>
+      <VerificationScreenCard title="Email verified" icon="checkmark-circle-outline">
+        <Text style={styles.otpHint}>Your email is verified. Opening your account now.</Text>
+        <ActivityIndicator color={colors.accent} />
       </VerificationScreenCard>
     );
   };
@@ -476,10 +421,6 @@ function AccountOnboardingGate({
       </ScrollView>
     </KeyboardAvoidingView>
   );
-}
-
-function isValidPhoneNumber(value: string) {
-  return /^\+?\d{7,15}$/.test(value.replace(/[\s().-]/g, ""));
 }
 
 function ComplianceCheck({ checked, label, onPress }: { checked: boolean; label: string; onPress: () => void }) {
