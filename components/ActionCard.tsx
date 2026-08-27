@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Href, Link } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radius, shadows, spacing, typography } from "../constants/theme";
 
 type ActionCardProps = {
@@ -13,13 +13,13 @@ type ActionCardProps = {
 export function ActionCard({ title, subtitle, icon, href }: ActionCardProps) {
   return (
     <Link href={href} asChild>
-      <View style={styles.card}>
+      <Pressable style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
         <View style={styles.iconWrap}>
-          <Ionicons name={icon} size={18} color={colors.accent} />
+          <Ionicons name={icon} size={18} color={colors.accentStrong} />
         </View>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle}>{subtitle}</Text>
-      </View>
+      </Pressable>
     </Link>
   );
 }
@@ -28,20 +28,28 @@ const styles = StyleSheet.create({
   card: {
     width: "48%",
     backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
-    gap: 8,
+    gap: 10,
+    minHeight: 118,
     ...shadows.soft,
   },
+  cardPressed: {
+    transform: [{ scale: 0.99 }],
+    borderColor: colors.border,
+    shadowOpacity: 0.08,
+  },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: "rgba(30,41,59,0.08)",
   },
   title: {
     color: colors.text,

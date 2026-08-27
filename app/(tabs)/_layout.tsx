@@ -14,21 +14,25 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: colors.accent,
+        tabBarActiveTintColor: colors.accentStrong,
         tabBarInactiveTintColor: colors.muted,
+        tabBarActiveBackgroundColor: "rgba(15, 23, 42, 0.06)",
         tabBarStyle: {
           alignSelf: "center",
-          backgroundColor: colors.surface,
+          backgroundColor: "rgba(255,255,255,0.97)",
           borderTopColor: colors.border,
-          height: 62,
+          borderTopWidth: 1,
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
+          height: 74,
           maxWidth: 430,
-          paddingBottom: 8,
-          paddingTop: 7,
+          paddingBottom: 10,
+          paddingTop: 8,
           width: "100%",
           shadowColor: "#000000",
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.32,
-          shadowRadius: 10,
+          shadowOffset: { width: 0, height: -6 },
+          shadowOpacity: 0.07,
+          shadowRadius: 18,
           elevation: 8,
         },
         tabBarLabelStyle: {
@@ -38,8 +42,10 @@ export default function TabsLayout() {
           ...typography.label,
         },
         tabBarItemStyle: {
-          minHeight: 50,
-          paddingVertical: 3,
+          minHeight: 56,
+          paddingVertical: 4,
+          borderRadius: 16,
+          marginHorizontal: 6,
         },
         tabBarIcon: ({ color, size }) => {
           const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {

@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "../constants/theme";
+import { colors, shadows } from "../constants/theme";
 
 type ScreenProps = {
   children: ReactNode;
@@ -29,5 +29,6 @@ const styles = StyleSheet.create({
     borderLeftWidth: Platform.OS === "web" ? 1 : 0,
     borderRightWidth: Platform.OS === "web" ? 1 : 0,
     borderColor: colors.border,
+    ...shadows.soft,
   },
 });

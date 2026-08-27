@@ -528,6 +528,8 @@ function createEmptyRentalPlatformState(): RentalPlatformState {
 type RentalPlatformAction =
   | { type: "hydrate"; state: RentalPlatformState }
   | { type: "addProperty"; payload: PropertyInput }
+  | { type: "updateProperty"; propertyId: string; payload: Partial<PropertyInput> }
+  | { type: "deleteProperty"; propertyId: string }
   | { type: "addPayment"; payload: PaymentInput }
   | { type: "addMaintenance"; payload: MaintenanceInput }
   | { type: "addLease"; payload: LeaseInput }
@@ -565,6 +567,42 @@ function reducer(state: RentalPlatformState, action: RentalPlatformAction): Rent
             meta: `${nextProperty.title} · ${nextProperty.suburb}`,
             status: "Now",
             tone: "success",
+          },
+          ...state.liveEvents,
+        ],
+      };
+    }
+    case "updateProperty": {
+      const current = state.properties.find((property) => property.id === action.propertyId);
+      if (!current) return state;
+      return {
+        ...state,
+        properties: state.properties.map((property) => property.id === action.propertyId ? { ...property, ...action.payload, photos: action.payload.photos?.filter(Boolean) ?? property.photos } : property),
+        liveEvents: [
+          {
+            id: makeId("event"),
+            title: "Property updated",
+            meta: `${current.title} · ${current.suburb}`,
+            status: "Now",
+            tone: "info",
+          },
+          ...state.liveEvents,
+        ],
+      };
+    }
+    case "deleteProperty": {
+      const deleted = state.properties.find((property) => property.id === action.propertyId);
+      if (!deleted) return state;
+      return {
+        ...state,
+        properties: state.properties.filter((property) => property.id !== action.propertyId),
+        liveEvents: [
+          {
+            id: makeId("event"),
+            title: "Property removed",
+            meta: `${deleted.title} · ${deleted.suburb}`,
+            status: "Now",
+            tone: "warning",
           },
           ...state.liveEvents,
         ],
@@ -742,6 +780,8 @@ type RentalPlatformContextValue = {
   canAccessSection: (section: string) => boolean;
   hasCapability: (capability: string) => boolean;
   addProperty: (payload: PropertyInput) => Promise<Property | void>;
+  updateProperty: (propertyId: string, payload: Partial<PropertyInput>) => Promise<Property | void>;
+  deleteProperty: (propertyId: string) => Promise<void>;
   addPayment: (payload: PaymentInput) => void;
   addMaintenance: (payload: MaintenanceInput) => void;
   addLease: (payload: LeaseInput) => void;
@@ -1141,6 +1181,42 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
             }
           }
           dispatch({ type: "addProperty", payload });
+        },
+        updateProperty: async (propertyId, payload) => {
+          if (API_BASE_URL && authToken) {
+            setAuthLoading(true);
+            setAuthError("");
+            try {
+              const updated = mapApiProperty(await protectedRequest(`properties/${propertyId}/`, authToken, "PATCH", buildPropertyApiPayload(payload as PropertyInput)));
+              await refreshRentalPlatform(dispatch, authToken);
+              return updated;
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Property could not be updated";
+              setAuthError(message);
+              throw error;
+            } finally {
+              setAuthLoading(false);
+            }
+          }
+          dispatch({ type: "updateProperty", propertyId, payload });
+        },
+        deleteProperty: async (propertyId) => {
+          if (API_BASE_URL && authToken) {
+            setAuthLoading(true);
+            setAuthError("");
+            try {
+              await protectedRequest(`properties/${propertyId}/`, authToken, "DELETE");
+              await refreshRentalPlatform(dispatch, authToken);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Property could not be deleted";
+              setAuthError(message);
+              throw error;
+            } finally {
+              setAuthLoading(false);
+            }
+            return;
+          }
+          dispatch({ type: "deleteProperty", propertyId });
         },
         addPayment: (payload) => {
           if (API_BASE_URL && authToken && payload.propertyId) {

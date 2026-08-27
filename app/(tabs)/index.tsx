@@ -45,69 +45,145 @@ type DashboardPanel = {
 function RoleDashboard({ role, state, stats, visibleActions, userName, profileStatus, verified }: { role: Exclude<AccountRole, "tenant">; state: RentalPlatformState; stats: ReturnType<typeof useRentalPlatformStats>; visibleActions: typeof quickActions; userName?: string; profileStatus?: string; verified: boolean }) {
   const dashboard = getRoleDashboard(role, state, stats);
   const statusText = verified ? "Verified account" : profileStatus === "account_ready" ? "Basic account" : "Verification pending";
+  const featured = state.properties[0] ?? {
+    id: "featured",
+    title: "Marbisa Residence",
+    suburb: "Austin",
+    city: "Austin, TX",
+    price: "$475,000",
+    bedrooms: 3,
+    bathrooms: 2.5,
+    type: "Single family",
+    verified: true,
+  };
+  const featuredArea = "2,250 Sqft";
+  const featuredYear = "2010";
+
+  const filterPills = ["All", "Price", "Property", "Bed / Bath"];
+  const pricePills = ["$20K", "$30K", "$50K", "$60K"];
+
+  const featuredImage = featured.photos?.[0] || "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80";
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.dashboardContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.dashboardHero}>
-          <Text style={styles.kicker}>{roleLabel(role)} dashboard</Text>
-          <Text style={styles.dashboardTitle}>{userName ? firstName(userName) : roleLabel(role)}</Text>
-          <Text style={styles.dashboardSubcopy}>{statusText}</Text>
+      <ScrollView contentContainerStyle={styles.landlordContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.landlordTopRow}>
+          <View>
+            <Text style={styles.timeStamp}>9:30 PM</Text>
+            <Text style={styles.greetingTitle}>Good morning, {userName ? firstName(userName) : roleLabel(role)}</Text>
+          </View>
+          <View style={styles.avatarBadge}>
+            <Ionicons name="sunny-outline" size={16} color={colors.text} />
+          </View>
         </View>
 
-        <View style={styles.dashboardGrid}>
+        <View style={styles.filterRail}>
+          {['Overview', 'Properties', 'Finance', 'Insights'].map((item, index) => (
+            <View key={item} style={[styles.filterChip, index === 0 && styles.filterChipActive]}>
+              <Text style={[styles.filterChipText, index === 0 && styles.filterChipTextActive]}>{item}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.searchCard}>
+          <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+          <Text style={styles.searchPlaceholder}>Search listings, tenants, or locations</Text>
+        </View>
+
+        <View style={styles.featureCard}>
+          <ImageBackground source={{ uri: featuredImage }} resizeMode="cover" style={styles.featureImage}>
+            <View style={styles.featureGradient} />
+            <View style={styles.featureHeaderRow}>
+              <View style={styles.featureBadge}><Text style={styles.featureBadgeText}>Featured</Text></View>
+              <View style={styles.featureMetaBadge}>
+                <Ionicons name="shield-checkmark" size={13} color={colors.success} />
+                <Text style={styles.featureMetaText}>{featured.verified ? "Verified" : "Review"}</Text>
+              </View>
+            </View>
+            <View style={styles.featureBodyRow}>
+              <View style={styles.featureTextBlock}>
+                <Text style={styles.featureLabel}>Featured property</Text>
+                <Text style={styles.featureTitle}>{featured.title}</Text>
+                <Text style={styles.featureLocation}>{featured.city || "Harare, Zimbabwe"}</Text>
+              </View>
+              <View style={styles.priceBubble}>
+                <Text style={styles.priceBubbleText}>{featured.price || "$450,000"}</Text>
+              </View>
+            </View>
+          </ImageBackground>
+        </View>
+
+        <View style={styles.portfolioSummary}>
+          <View style={styles.portfolioHeaderRow}>
+            <Text style={styles.portfolioTitle}>Portfolio summary</Text>
+            <Text style={styles.sectionAction}>This month</Text>
+          </View>
+          <View style={styles.quickStatRow}>
+            <View style={styles.quickStat}>
+              <Text style={styles.quickStatValue}>{dashboard.metrics[0]?.value ?? '0'}</Text>
+              <Text style={styles.quickStatLabel}>Listings</Text>
+            </View>
+            <View style={styles.quickStat}>
+              <Text style={styles.quickStatValue}>{dashboard.metrics[1]?.value ?? '0'}</Text>
+              <Text style={styles.quickStatLabel}>Revenue</Text>
+            </View>
+            <View style={styles.quickStat}>
+              <Text style={styles.quickStatValue}>{dashboard.metrics[2]?.value ?? '0'}</Text>
+              <Text style={styles.quickStatLabel}>Alerts</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.featureDetailRow}>
+          <View style={styles.featureDetailPill}>
+            <Ionicons name="bed-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.featureDetailText}>{featured.bedrooms || 3} beds</Text>
+          </View>
+          <View style={styles.featureDetailPill}>
+            <Ionicons name="water-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.featureDetailText}>{featured.borehole ? "Borehole" : featured.water || "Mains water"}</Text>
+          </View>
+          <View style={styles.featureDetailPill}>
+            <Ionicons name="flash-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.featureDetailText}>{featured.solarPower ? "Solar" : featured.power || "Grid"}</Text>
+          </View>
+        </View>
+
+        <View style={styles.metricGrid}>
           {dashboard.metrics.map((metric) => (
-            <View key={metric.label} style={styles.dashboardMetricCard}>
-              <View style={styles.dashboardMetricTop}>
-                <Ionicons name={metric.icon} size={18} color={colors.accent} />
-                <Text style={styles.dashboardMetricValue}>{metric.value}</Text>
+            <View key={metric.label} style={styles.metricCard}>
+              <View style={styles.metricCardTop}>
+                <Ionicons name={metric.icon} size={18} color={colors.accentStrong} />
+                <Text style={styles.metricCardValue}>{metric.value}</Text>
               </View>
-              <Text style={styles.dashboardMetricLabel}>{metric.label}</Text>
-              <Text style={styles.dashboardMetricDetail}>{metric.detail}</Text>
+              <Text style={styles.metricLabel}>{metric.label}</Text>
+              <Text style={styles.metricDetail}>{metric.detail}</Text>
             </View>
           ))}
         </View>
 
-        <View style={styles.dashboardSectionHeader}>
-          <Text style={styles.tenantSectionTitle}>Today</Text>
-          <Text style={styles.tenantSeeAll}>Live backend data</Text>
+        <View style={styles.insightStrip}>
+          <View style={styles.insightCard}>
+            <Text style={styles.insightBadge}>Occupancy</Text>
+            <Text style={styles.insightValue}>{dashboard.metrics[3]?.value ?? '0%'}</Text>
+          </View>
+          <View style={styles.insightCard}>
+            <Text style={styles.insightBadge}>Verified</Text>
+            <Text style={styles.insightValue}>{state.properties.filter((item) => item.verified).length}</Text>
+          </View>
+          <View style={styles.insightCard}>
+            <Text style={styles.insightBadge}>Open tasks</Text>
+            <Text style={styles.insightValue}>{state.maintenance.filter((item) => item.status.toLowerCase() !== "resolved").length}</Text>
+          </View>
         </View>
 
-        <View style={styles.dashboardPanelStack}>
-          {dashboard.panels.map((panel) => (
-            <View key={panel.title} style={styles.dashboardPanel}>
-              <View style={styles.dashboardPanelHeader}>
-                <Text style={styles.dashboardPanelTitle}>{panel.title}</Text>
-                <Text style={styles.dashboardPanelSubtitle}>{panel.subtitle}</Text>
-              </View>
-              {panel.rows.length ? panel.rows.map((row) => (
-                <View key={row.id} style={styles.dashboardRow}>
-                  <View style={styles.dashboardRowAvatar}>
-                    <Text style={styles.dashboardRowInitial}>{row.title.charAt(0).toUpperCase()}</Text>
-                  </View>
-                  <View style={styles.dashboardRowBody}>
-                    <Text style={styles.dashboardRowTitle} numberOfLines={1}>{row.title}</Text>
-                    <Text style={styles.dashboardRowMeta} numberOfLines={1}>{row.meta}</Text>
-                  </View>
-                  {row.status ? <Text style={styles.dashboardRowStatus}>{row.status}</Text> : null}
-                </View>
-              )) : <Text style={styles.dashboardEmpty}>{panel.empty}</Text>}
-            </View>
-          ))}
-        </View>
+        {state.liveEvents.length ? (
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Live activity</Text>
+            <Text style={styles.sectionAction}>See all</Text>
+          </View>
+        ) : null}
 
-        <View style={styles.dashboardSectionHeader}>
-          <Text style={styles.tenantSectionTitle}>Actions</Text>
-        </View>
-        <View style={styles.actionsGrid}>
-          {visibleActions.map((action) => (
-            <ActionCard key={action.title} title={action.title} subtitle={action.subtitle} icon={action.icon as keyof typeof Ionicons.glyphMap} href={action.href} />
-          ))}
-        </View>
-
-        <View style={styles.dashboardSectionHeader}>
-          <Text style={styles.tenantSectionTitle}>Live activity</Text>
-        </View>
         <LiveFeed items={state.liveEvents} />
       </ScrollView>
     </Screen>
@@ -405,6 +481,94 @@ function storyImage(photo?: string) {
 }
 
 const styles = StyleSheet.create({
+  landlordContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: spacing.xl, gap: 12, backgroundColor: colors.background },
+  landlordTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
+  timeStamp: { color: colors.muted, fontSize: 12, ...typography.label },
+  greetingTitle: { color: colors.text, fontSize: 23, lineHeight: 28, marginTop: 3, ...typography.display },
+  avatarBadge: { width: 38, height: 38, borderRadius: 14, backgroundColor: "#eef2ff", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(30,41,59,0.08)" },
+  filterRail: { flexDirection: "row", gap: 8, marginTop: 2 },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border },
+  filterChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  filterChipText: { color: colors.textMuted, fontSize: 11, ...typography.label },
+  filterChipTextActive: { color: colors.accentText },
+  searchCard: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 16, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border, ...shadows.soft },
+  searchPlaceholder: { color: colors.textMuted, fontSize: 12, ...typography.body },
+  featureCard: { borderRadius: 28, overflow: "hidden", borderWidth: 1, borderColor: colors.border, ...shadows.card },
+  featureImage: { width: "100%", minHeight: 230, padding: 16, justifyContent: "space-between" },
+  featureGradient: { position: "absolute", inset: 0, backgroundColor: "rgba(10,17,25,0.20)" },
+  featureHeaderRow: { position: "relative", zIndex: 1, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  featureBadge: { backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  featureBadgeText: { color: "#ffffff", fontSize: 11, ...typography.label },
+  featureMetaBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  featureMetaText: { color: "#ffffff", fontSize: 11, ...typography.label },
+  featureBodyRow: { position: "relative", zIndex: 1, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 10 },
+  featureTextBlock: { flex: 1, minWidth: 0 },
+  featureLabel: { color: "rgba(255,255,255,0.8)", fontSize: 11, ...typography.label },
+  featureTitle: { color: "#ffffff", fontSize: 22, lineHeight: 26, marginTop: 2, ...typography.display },
+  featureLocation: { color: "rgba(255,255,255,0.82)", fontSize: 12, marginTop: 4, ...typography.body },
+  priceBubble: { backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.32)", borderRadius: 18, paddingHorizontal: 12, paddingVertical: 10, maxWidth: 112 },
+  priceBubbleText: { color: "#ffffff", fontSize: 14, textAlign: "center", ...typography.label },
+  portfolioSummary: { backgroundColor: colors.surfaceElevated, borderRadius: 24, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 10, ...shadows.soft },
+  portfolioHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  portfolioTitle: { color: colors.text, fontSize: 14, ...typography.title },
+  quickStatRow: { flexDirection: "row", gap: 10 },
+  quickStat: { flex: 1, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 18, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: "rgba(148,163,184,0.15)" },
+  quickStatValue: { color: colors.text, fontSize: 20, ...typography.display },
+  quickStatLabel: { color: colors.textMuted, fontSize: 11, marginTop: 2, ...typography.label },
+  featureDetailRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  featureDetailPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border },
+  featureDetailText: { color: colors.textMuted, fontSize: 11, ...typography.label },
+  insightStrip: { flexDirection: "row", gap: 8 },
+  insightCard: { flex: 1, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 10, ...shadows.soft },
+  insightBadge: { color: colors.textMuted, fontSize: 10, ...typography.label },
+  insightValue: { color: colors.text, fontSize: 18, marginTop: 4, ...typography.display },
+  landlordHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  locationTitle: { color: colors.text, fontSize: 24, lineHeight: 30, ...typography.title },
+  filterRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" },
+  filterPill: { backgroundColor: "#f8f9fc", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: "transparent" },
+  filterPillActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  filterPillText: { color: colors.text, fontSize: 12, ...typography.body },
+  filterPillTextActive: { color: "#ffffff" },
+  featuredCard: { backgroundColor: colors.surfaceElevated, borderRadius: 32, borderWidth: 1, borderColor: colors.border, padding: 22, gap: 14, ...shadows.card },
+  featuredTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  badgeForSale: { backgroundColor: "#eef2ff", borderRadius: 40, paddingHorizontal: 14, paddingVertical: 5 },
+  badgeText: { color: "#1e293b", fontSize: 12, fontWeight: "500" },
+  featuredPriceText: { color: colors.textMuted, fontSize: 14, ...typography.body },
+  priceRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
+  priceLarge: { color: colors.text, fontSize: 30, lineHeight: 35, ...typography.display },
+  estimateText: { color: "#475569", fontSize: 14, ...typography.body },
+  propertyAddress: { color: colors.text, fontSize: 16, ...typography.body },
+  detailRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  detailText: { color: colors.text, fontSize: 13, ...typography.body },
+  divider: { color: "#cbd5e1" },
+  detailGrid: { flexDirection: "row", gap: 12 },
+  detailCell: { flex: 1, minWidth: 0, backgroundColor: colors.surfaceMuted, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 },
+  detailLabel: { color: colors.textMuted, fontSize: 11, ...typography.label },
+  detailValue: { color: colors.text, fontSize: 14, marginTop: 4, ...typography.body },
+  primaryActionsRow: { flexDirection: "row", gap: 12 },
+  primaryButton: { flex: 1, minHeight: 46, borderRadius: 999, backgroundColor: "#1e293b", alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
+  primaryButtonText: { color: "#ffffff", fontSize: 14, fontWeight: "500" },
+  secondaryButton: { flex: 1, minHeight: 46, borderRadius: 999, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#e2e8f0", alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
+  secondaryButtonText: { color: "#1e293b", fontSize: 14, fontWeight: "500" },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4 },
+  sectionTitle: { color: colors.text, fontSize: 17, ...typography.title },
+  sectionAction: { color: colors.accent, fontSize: 12, ...typography.label },
+  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  metricCard: { flexGrow: 1, flexBasis: "47%", minHeight: 96, backgroundColor: colors.surfaceElevated, borderRadius: 24, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12, gap: 6, ...shadows.soft },
+  metricCardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  metricCardValue: { color: colors.text, fontSize: 22, ...typography.display },
+  metricLabel: { color: colors.text, fontSize: 13, ...typography.title },
+  metricDetail: { color: colors.textMuted, fontSize: 11, ...typography.body },
+  activityCard: { backgroundColor: colors.surfaceElevated, borderRadius: 28, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 10, ...shadows.soft },
+  activityHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  activityPrice: { color: colors.text, fontSize: 18, ...typography.title },
+  activityAddress: { color: colors.text, fontSize: 15, ...typography.body },
+  activityMeta: { color: colors.textMuted, fontSize: 12, borderTopWidth: 1, borderTopColor: "#f1f5f9", paddingTop: 10, ...typography.body },
+  inlinePriceGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  priceGridItem: { minWidth: 80, backgroundColor: "#f8f9fc", borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, alignItems: "center", justifyContent: "center" },
+  priceGridItemActive: { backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#2563eb" },
+  priceGridText: { color: colors.text, fontSize: 13, fontWeight: "500" },
+  priceGridTextActive: { color: colors.text },
   dashboardContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: spacing.xl, gap: 10, backgroundColor: colors.background },
   dashboardHero: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: 4, ...shadows.card },
   dashboardTitle: { color: colors.text, fontSize: 25, lineHeight: 30, ...typography.display },

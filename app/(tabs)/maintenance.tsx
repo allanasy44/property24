@@ -66,6 +66,17 @@ export default function MaintenanceScreen() {
             <StatusPill ready={maintenanceUnlocked} />
           </View>
 
+          <View style={styles.summaryStrip}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Open</Text>
+              <Text style={styles.summaryValue}>{visibleRequests.filter((item) => item.status.toLowerCase() !== "resolved").length}</Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Urgent</Text>
+              <Text style={styles.summaryValue}>{visibleRequests.filter((item) => item.priority.toLowerCase() === "high").length}</Text>
+            </View>
+          </View>
+
           {isTenant ? <OccupancyGate ready={Boolean(activeLease)} /> : null}
 
           {canCreateMaintenance ? (
@@ -153,6 +164,10 @@ function isStatus(value: string, expected: string) {
 const styles = StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.md, backgroundColor: colors.background },
   topBar: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.surfaceElevated, padding: spacing.md, ...shadows.card },
+  summaryStrip: { flexDirection: "row", gap: spacing.sm },
+  summaryCard: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surfaceElevated, padding: spacing.sm, ...shadows.soft },
+  summaryLabel: { color: colors.textMuted, fontSize: 10, ...typography.label },
+  summaryValue: { color: colors.text, fontSize: 18, marginTop: 4, ...typography.display },
   titleBlock: { flex: 1, minWidth: 0, gap: 3 },
   brandMark: { alignSelf: "flex-start", overflow: "hidden", borderRadius: 4, backgroundColor: colors.accent, color: colors.accentText, paddingHorizontal: 8, paddingVertical: 4, fontSize: 11, marginBottom: 4, ...typography.button },
   screenTitle: { color: colors.text, fontSize: 25, lineHeight: 30, ...typography.display },

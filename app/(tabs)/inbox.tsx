@@ -1402,7 +1402,7 @@ const styles = StyleSheet.create({
   messageAttachment: { minWidth: 190, maxWidth: "100%", minHeight: 54, flexDirection: "row", alignItems: "center", gap: 8, overflow: "hidden", borderRadius: 8, marginBottom: 4, backgroundColor: colors.surfaceMuted },
   messageAttachmentMine: { backgroundColor: "rgba(0,0,0,0.16)" },
   messageAttachmentImage: { width: 70, height: 70, backgroundColor: colors.surfaceMuted },
-  messageAttachmentIcon: { width: 54, height: 54, alignItems: "center", justifyContent: "center", backgroundColor: colors.accentDark },
+  messageAttachmentIcon: { width: 54, height: 54, alignItems: "center", justifyContent: "center", backgroundColor: colors.accent },
   messageAttachmentCopy: { flex: 1, minWidth: 0, paddingRight: 8 },
   messageAttachmentTitle: { color: colors.text, fontSize: 13, lineHeight: 17, ...typography.label },
   messageAttachmentMeta: { color: colors.textMuted, fontSize: 11, lineHeight: 14, marginTop: 1, ...typography.body },

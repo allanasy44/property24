@@ -449,15 +449,15 @@ function supplierHandle(name: string) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: "hidden",
     ...shadows.soft,
   },
   feedCard: {
-    borderRadius: 8,
-    shadowOpacity: 0.02,
+    borderRadius: 28,
+    shadowOpacity: 0.03,
   },
   feedHeader: {
     minHeight: 52,
@@ -550,12 +550,16 @@ const styles = StyleSheet.create({
   mediaText: { color: "#FFFFFF", fontSize: 12, ...typography.button },
   priceBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(17,19,21,0.82)",
-    borderRadius: radius.md,
-    paddingHorizontal: 11,
+    backgroundColor: "#ffffff",
+    borderRadius: 999,
+    paddingHorizontal: 12,
     paddingVertical: 7,
+    shadowColor: "#000000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
-  price: { color: "#FFFFFF", fontSize: 15, lineHeight: 19, ...typography.display },
+  price: { color: colors.text, fontSize: 15, lineHeight: 19, ...typography.display },
   feedActions: {
     minHeight: 40,
     flexDirection: "row",

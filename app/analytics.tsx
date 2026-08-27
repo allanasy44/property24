@@ -29,8 +29,19 @@ export default function AnalyticsScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <Text style={styles.kicker}>Property analytics</Text>
-          <Text style={styles.title}>Landlords and agents can see what the market is doing.</Text>
-          <Text style={styles.subtitle}>Metrics are computed from live frontend state instead of static arrays.</Text>
+          <Text style={styles.title}>Portfolio performance at a glance.</Text>
+          <Text style={styles.subtitle}>Metrics are computed from live frontend data and refreshed as the app evolves.</Text>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Rental income</Text>
+            <Text style={styles.summaryValue}>${rentalIncome}</Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Views</Text>
+            <Text style={styles.summaryValue}>{listingViews}</Text>
+          </View>
         </View>
 
         <SectionHeader title="Performance metrics" subtitle="Portfolio view for management and reporting." />
@@ -70,6 +81,10 @@ const styles = StyleSheet.create({
   kicker: { color: colors.accent, ...typography.label },
   title: { color: colors.text, fontSize: 28, lineHeight: 34, ...typography.display },
   subtitle: { color: colors.textMuted, lineHeight: 22, ...typography.body },
+  summaryRow: { flexDirection: "row", gap: spacing.sm },
+  summaryCard: { flex: 1, backgroundColor: colors.surfaceElevated, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md, ...shadows.soft },
+  summaryLabel: { color: colors.textMuted, fontSize: 10, ...typography.label },
+  summaryValue: { color: colors.text, fontSize: 20, marginTop: 6, ...typography.display },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   reportCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: 8, ...shadows.soft },
   reportItem: { color: colors.text, lineHeight: 20, ...typography.body },
