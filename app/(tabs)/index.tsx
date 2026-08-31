@@ -1,9 +1,9 @@
 import { Link } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FlatList, ImageBackground, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AccountRole, RentalPlatformState, useRentalPlatform, useRentalPlatformStats } from "../../state/rentalPlatform";
-import { colors, spacing, radius, shadows, typography } from "../../constants/theme";
+import { colors, spacing, radius, shadows, typography, useTheme, getGreetingFromTime, formatDashboardTime } from "../../constants/theme";
 import { quickActions } from "../../constants/content";
 import { ActionCard } from "../../components/ActionCard";
 import { LiveFeed } from "../../components/LiveFeed";
@@ -17,15 +17,15 @@ const bedroomFilters = ["Any", "1+", "2+", "3+", "4+"];
 
 export default function HomeScreen() {
   const { state, account, authUser } = useRentalPlatform();
+  const { colors: themeColors } = useTheme();
   const stats = useRentalPlatformStats();
   const visibleActions = quickActions.filter((action) => action.roles.includes(account.accountType));
 
-
   if (account.accountType === "tenant") {
-    return <TenantHome state={state} visibleActions={visibleActions} userName={authUser?.name} verified={Boolean(authUser?.verified)} />;
+    return <TenantHome state={state} visibleActions={visibleActions} userName={authUser?.name} verified={Boolean(authUser?.verified)} themeColors={themeColors} />;
   }
 
-  return <RoleDashboard role={account.accountType} state={state} stats={stats} visibleActions={visibleActions} userName={authUser?.name} profileStatus={authUser?.profileStatus} verified={Boolean(authUser?.verified)} />;
+  return <RoleDashboard role={account.accountType} state={state} stats={stats} visibleActions={visibleActions} userName={authUser?.name} profileStatus={authUser?.profileStatus} verified={Boolean(authUser?.verified)} themeColors={themeColors} />;
 }
 
 type DashboardMetric = {
@@ -42,7 +42,9 @@ type DashboardPanel = {
   empty: string;
 };
 
-function RoleDashboard({ role, state, stats, visibleActions, userName, profileStatus, verified }: { role: Exclude<AccountRole, "tenant">; state: RentalPlatformState; stats: ReturnType<typeof useRentalPlatformStats>; visibleActions: typeof quickActions; userName?: string; profileStatus?: string; verified: boolean }) {
+function RoleDashboard({ role, state, stats, visibleActions, userName, profileStatus, verified, themeColors }: { role: Exclude<AccountRole, "tenant">; state: RentalPlatformState; stats: ReturnType<typeof useRentalPlatformStats>; visibleActions: typeof quickActions; userName?: string; profileStatus?: string; verified: boolean; themeColors: typeof colors }) {
+  const { mode, toggleTheme } = useTheme();
+  const [now, setNow] = useState(new Date());
   const dashboard = getRoleDashboard(role, state, stats);
   const statusText = verified ? "Verified account" : profileStatus === "account_ready" ? "Basic account" : "Verification pending";
   const featured = state.properties[0] ?? {
@@ -59,35 +61,39 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, profileSt
   const featuredArea = "2,250 Sqft";
   const featuredYear = "2010";
 
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   const filterPills = ["All", "Price", "Property", "Bed / Bath"];
   const pricePills = ["$20K", "$30K", "$50K", "$60K"];
 
   const featuredImage = featured.photos?.[0] || "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80";
+  const greeting = getGreetingFromTime(now);
+  const displayName = userName ? firstName(userName) : roleLabel(role);
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.landlordContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.landlordTopRow}>
+      <ScrollView contentContainerStyle={[styles.landlordContent, { backgroundColor: themeColors.background }]} showsVerticalScrollIndicator={false}>
+        <View style={[styles.landlordTopRow, { backgroundColor: "transparent" }]}>
           <View>
-            <Text style={styles.timeStamp}>9:30 PM</Text>
-            <Text style={styles.greetingTitle}>Good morning, {userName ? firstName(userName) : roleLabel(role)}</Text>
+            <Text style={styles.timeStamp}>{formatDashboardTime(now)}</Text>
+            <Text style={styles.greetingTitle}>{greeting}, {displayName}</Text>
           </View>
-          <View style={styles.avatarBadge}>
-            <Ionicons name="sunny-outline" size={16} color={colors.text} />
-          </View>
+          <Pressable onPress={toggleTheme} style={[styles.avatarBadge, { backgroundColor: themeColors.accentSoft, borderColor: themeColors.border }]}>
+            <Ionicons name={mode === "dark" ? "moon-outline" : "sunny-outline"} size={16} color={themeColors.accentStrong} />          </Pressable>
         </View>
 
         <View style={styles.filterRail}>
-          {['Overview', 'Properties', 'Finance', 'Insights'].map((item, index) => (
-            <View key={item} style={[styles.filterChip, index === 0 && styles.filterChipActive]}>
-              <Text style={[styles.filterChipText, index === 0 && styles.filterChipTextActive]}>{item}</Text>
-            </View>
-          ))}
+          <View style={[styles.filterChip, styles.filterChipActive]}>
+            <Text style={[styles.filterChipText, styles.filterChipTextActive]}>Overview</Text>
+          </View>
         </View>
 
-        <View style={styles.searchCard}>
-          <Ionicons name="search-outline" size={16} color={colors.textMuted} />
-          <Text style={styles.searchPlaceholder}>Search listings, tenants, or locations</Text>
+        <View style={[styles.searchCard, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }]}>
+          <Ionicons name="search-outline" size={16} color={themeColors.textMuted} />
+          <Text style={[styles.searchPlaceholder, { color: themeColors.textMuted }]}>Search listings, tenants, or locations</Text>
         </View>
 
         <View style={styles.featureCard}>
@@ -111,27 +117,6 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, profileSt
               </View>
             </View>
           </ImageBackground>
-        </View>
-
-        <View style={styles.portfolioSummary}>
-          <View style={styles.portfolioHeaderRow}>
-            <Text style={styles.portfolioTitle}>Portfolio summary</Text>
-            <Text style={styles.sectionAction}>This month</Text>
-          </View>
-          <View style={styles.quickStatRow}>
-            <View style={styles.quickStat}>
-              <Text style={styles.quickStatValue}>{dashboard.metrics[0]?.value ?? '0'}</Text>
-              <Text style={styles.quickStatLabel}>Listings</Text>
-            </View>
-            <View style={styles.quickStat}>
-              <Text style={styles.quickStatValue}>{dashboard.metrics[1]?.value ?? '0'}</Text>
-              <Text style={styles.quickStatLabel}>Revenue</Text>
-            </View>
-            <View style={styles.quickStat}>
-              <Text style={styles.quickStatValue}>{dashboard.metrics[2]?.value ?? '0'}</Text>
-              <Text style={styles.quickStatLabel}>Alerts</Text>
-            </View>
-          </View>
         </View>
 
         <View style={styles.featureDetailRow}>
@@ -160,21 +145,6 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, profileSt
               <Text style={styles.metricDetail}>{metric.detail}</Text>
             </View>
           ))}
-        </View>
-
-        <View style={styles.insightStrip}>
-          <View style={styles.insightCard}>
-            <Text style={styles.insightBadge}>Occupancy</Text>
-            <Text style={styles.insightValue}>{dashboard.metrics[3]?.value ?? '0%'}</Text>
-          </View>
-          <View style={styles.insightCard}>
-            <Text style={styles.insightBadge}>Verified</Text>
-            <Text style={styles.insightValue}>{state.properties.filter((item) => item.verified).length}</Text>
-          </View>
-          <View style={styles.insightCard}>
-            <Text style={styles.insightBadge}>Open tasks</Text>
-            <Text style={styles.insightValue}>{state.maintenance.filter((item) => item.status.toLowerCase() !== "resolved").length}</Text>
-          </View>
         </View>
 
         {state.liveEvents.length ? (
@@ -247,7 +217,9 @@ function getRoleDashboard(role: Exclude<AccountRole, "tenant">, state: RentalPla
   };
 }
 
-function TenantHome({ state, visibleActions, userName, verified }: { state: ReturnType<typeof useRentalPlatform>["state"]; visibleActions: typeof quickActions; userName?: string; verified: boolean }) {
+function TenantHome({ state, visibleActions, userName, verified, themeColors }: { state: ReturnType<typeof useRentalPlatform>["state"]; visibleActions: typeof quickActions; userName?: string; verified: boolean; themeColors: typeof colors }) {
+  const { mode, toggleTheme } = useTheme();
+  const [now, setNow] = useState(new Date());
   const tenantVisibleProperties = useMemo(() => state.properties.filter(isVerifiedSupplierListing), [state.properties]);
   const verifiedCount = tenantVisibleProperties.length;
   const openMaintenance = state.maintenance.filter((item) => item.status.toLowerCase() !== "resolved").length;
@@ -255,6 +227,11 @@ function TenantHome({ state, visibleActions, userName, verified }: { state: Retu
   const [selectedType, setSelectedType] = useState("All");
   const [maxRent, setMaxRent] = useState("");
   const [bedrooms, setBedrooms] = useState("Any");
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const filteredProperties = useMemo(
     () =>
@@ -272,34 +249,45 @@ function TenantHome({ state, visibleActions, userName, verified }: { state: Retu
   );
   const featured = filteredProperties.slice(0, 6);
   const tenantActions = visibleActions.filter((action) => action.href !== "/");
+  const greeting = getGreetingFromTime(now);
+  const displayName = userName ? firstName(userName) : "Find verified rentals";
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.tenantContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.tenantContent, { backgroundColor: themeColors.background }]} showsVerticalScrollIndicator={false}>
         <View style={styles.tenantTopBar}>
           <View>
-            <Text style={styles.tenantKicker}>Tenant workspace</Text>
-            <Text style={styles.tenantTitle}>{userName ? `Hi, ${firstName(userName)}` : "Find verified rentals"}</Text>
+            <Text style={styles.tenantKicker}>{formatDashboardTime(now)} · Tenant workspace</Text>
+            <Text style={styles.tenantTitle}>{greeting}, {displayName}</Text>
+          </View>
+          <Pressable onPress={toggleTheme} style={[styles.avatarBadge, { backgroundColor: themeColors.accentSoft, borderColor: themeColors.border }]}>
+            <Ionicons name={mode === "dark" ? "moon-outline" : "sunny-outline"} size={16} color={themeColors.accentStrong} />
+          </Pressable>
+        </View>
+
+        <View style={styles.filterRail}>
+          <View style={[styles.filterChip, styles.filterChipActive]}>
+            <Text style={[styles.filterChipText, styles.filterChipTextActive]}>Overview</Text>
           </View>
         </View>
 
         <View style={styles.tenantSearchPanel}>
-          <View style={styles.tenantSearch}>
-            <Ionicons name="search" size={19} color={colors.textMuted} />
+          <View style={[styles.tenantSearch, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }]}>
+            <Ionicons name="search" size={19} color={themeColors.textMuted} />
             <TextInput
               value={query}
               onChangeText={setQuery}
               placeholder="Search city, suburb, or address"
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={themeColors.textMuted}
               autoCapitalize="none"
-              style={styles.tenantSearchInput}
+              style={[styles.tenantSearchInput, { color: themeColors.text }]}
             />
             {query ? (
               <Pressable onPress={() => setQuery("")} hitSlop={10}>
                 <Ionicons name="close-circle" size={18} color={colors.muted} />
               </Pressable>
             ) : (
-              <Ionicons name="options-outline" size={18} color={colors.text} />
+              <Ionicons name="options-outline" size={18} color={themeColors.text} />
             )}
           </View>
 
@@ -485,7 +473,7 @@ const styles = StyleSheet.create({
   landlordTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
   timeStamp: { color: colors.muted, fontSize: 12, ...typography.label },
   greetingTitle: { color: colors.text, fontSize: 23, lineHeight: 28, marginTop: 3, ...typography.display },
-  avatarBadge: { width: 38, height: 38, borderRadius: 14, backgroundColor: "#eef2ff", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(30,41,59,0.08)" },
+  avatarBadge: { width: 38, height: 38, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   filterRail: { flexDirection: "row", gap: 8, marginTop: 2 },
   filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border },
   filterChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
@@ -525,7 +513,7 @@ const styles = StyleSheet.create({
   landlordHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   locationTitle: { color: colors.text, fontSize: 24, lineHeight: 30, ...typography.title },
   filterRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" },
-  filterPill: { backgroundColor: "#f8f9fc", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: "transparent" },
+  filterPill: { backgroundColor: colors.surfaceMuted, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: colors.border },
   filterPillActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   filterPillText: { color: colors.text, fontSize: 12, ...typography.body },
   filterPillTextActive: { color: "#ffffff" },

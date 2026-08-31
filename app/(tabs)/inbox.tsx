@@ -820,7 +820,7 @@ export default function InboxScreen() {
                 onFocus={() => setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 180)}
               />
               <Pressable onPress={submit} disabled={!draft.trim() || !selectedThread || loading} style={[styles.sendButton, (!draft.trim() || !selectedThread || loading) && styles.sendButtonIdle]}>
-                <Ionicons name="send" size={17} color="#FFFFFF" />
+                <Ionicons name="send" size={17} color={colors.accentText} />
               </Pressable>
             </View>
             <CallOverlay
@@ -1027,7 +1027,7 @@ function CallOverlay({ call, cameraFacing, cameraReady, connectionState, contact
           </Pressable>
         </View>
         <Pressable onPress={() => onEnd(call)} style={styles.callEndLargeButton}>
-          <Ionicons name="call" size={26} color="#FFFFFF" />
+          <Ionicons name="call" size={26} color={colors.accentText} />
         </Pressable>
       </View>
     </Modal>
@@ -1336,7 +1336,7 @@ const styles = StyleSheet.create({
   threadRowActive: { backgroundColor: colors.surfaceElevated },
   threadAvatar: { width: 46, height: 46, borderRadius: 23, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: colors.accent },
   threadAvatarImage: { width: "100%", height: "100%" },
-  threadAvatarText: { color: "#FFFFFF", fontSize: 13, ...typography.button },
+  threadAvatarText: { color: colors.accentText, fontSize: 13, ...typography.button },
   threadOnlineDot: { position: "absolute", right: 1, bottom: 1, width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, borderColor: colors.background, backgroundColor: colors.success },
   threadCopy: { flex: 1, minWidth: 0, gap: 2 },
   threadNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -1358,7 +1358,7 @@ const styles = StyleSheet.create({
   chatIdentity: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 7 },
   chatAvatar: { width: 30, height: 30, borderRadius: 15, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: colors.accent },
   chatAvatarImage: { width: "100%", height: "100%" },
-  chatAvatarText: { color: "#FFFFFF", fontSize: 12, ...typography.button },
+  chatAvatarText: { color: colors.accentText, fontSize: 12, ...typography.button },
   chatTitleWrap: { flex: 1, minWidth: 0 },
   chatName: { color: colors.text, fontSize: 15, lineHeight: 19, ...typography.title },
   presenceRow: { minHeight: 12, flexDirection: "row", alignItems: "center", gap: 4 },
@@ -1370,7 +1370,7 @@ const styles = StyleSheet.create({
   chatIconButton: { width: 28, height: 28, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.accentSoft },
   messages: { flex: 1 },
   messagesContent: { paddingHorizontal: 7, paddingTop: 4, paddingBottom: 18, gap: 4 },
-  securityNotice: { alignSelf: "center", maxWidth: "88%", flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "rgba(16,16,16,0.86)" },
+  securityNotice: { alignSelf: "center", maxWidth: "88%", flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border },
   securityText: { flexShrink: 1, color: colors.textMuted, fontSize: 10, lineHeight: 13, textAlign: "center", ...typography.label },
   liveStatusPill: { alignSelf: "center", minHeight: 25, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: colors.surface },
   liveStatusDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.warning },
@@ -1396,11 +1396,11 @@ const styles = StyleSheet.create({
   bubbleTheirs: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 5 },
   senderName: { color: colors.textMuted, fontSize: 11, ...typography.label },
   bubbleText: { color: colors.text, fontSize: 15, lineHeight: 20, ...typography.body },
-  bubbleTextMine: { color: "#FFFFFF" },
+  bubbleTextMine: { color: colors.accentText },
   bubbleTime: { alignSelf: "flex-end", color: colors.textMuted, fontSize: 10, ...typography.label },
-  bubbleTimeMine: { color: "rgba(255,255,255,0.78)" },
+  bubbleTimeMine: { color: "rgba(237,246,255,0.78)" },
   messageAttachment: { minWidth: 190, maxWidth: "100%", minHeight: 54, flexDirection: "row", alignItems: "center", gap: 8, overflow: "hidden", borderRadius: 8, marginBottom: 4, backgroundColor: colors.surfaceMuted },
-  messageAttachmentMine: { backgroundColor: "rgba(0,0,0,0.16)" },
+  messageAttachmentMine: { backgroundColor: "rgba(2,11,20,0.18)" },
   messageAttachmentImage: { width: 70, height: 70, backgroundColor: colors.surfaceMuted },
   messageAttachmentIcon: { width: 54, height: 54, alignItems: "center", justifyContent: "center", backgroundColor: colors.accent },
   messageAttachmentCopy: { flex: 1, minWidth: 0, paddingRight: 8 },
@@ -1411,7 +1411,7 @@ const styles = StyleSheet.create({
   composerInput: { flex: 1, minWidth: 0, maxHeight: 82, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8, color: colors.text, fontSize: 15, lineHeight: 20, backgroundColor: colors.surfaceMuted, outlineStyle: "none" as any, ...typography.body },
   sendButton: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.accent },
   sendButtonIdle: { backgroundColor: colors.muted },
-  attachmentBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.54)" },
+  attachmentBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(2,11,20,0.64)" },
   attachmentSheet: { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderWidth: 1, borderBottomWidth: 0, borderColor: colors.border, paddingHorizontal: 16, paddingTop: 8, paddingBottom: Platform.OS === "ios" ? 28 : 18, backgroundColor: colors.surfaceElevated, ...shadows.card },
   attachmentHandle: { alignSelf: "center", width: 38, height: 4, borderRadius: 2, marginBottom: 10, backgroundColor: colors.muted },
   attachmentHeader: { minHeight: 36, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
@@ -1422,7 +1422,7 @@ const styles = StyleSheet.create({
   attachmentIcon: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
   attachmentLabel: { maxWidth: "100%", color: colors.text, fontSize: 12, lineHeight: 15, textAlign: "center", ...typography.label },
   attachmentHelper: { maxWidth: "100%", color: colors.textMuted, fontSize: 9, lineHeight: 12, textAlign: "center", ...typography.body },
-  callOverlay: { flex: 1, alignItems: "center", justifyContent: "space-between", paddingTop: 46, paddingHorizontal: 24, paddingBottom: 34, backgroundColor: "rgba(0,0,0,0.96)" },
+  callOverlay: { flex: 1, alignItems: "center", justifyContent: "space-between", paddingTop: 46, paddingHorizontal: 24, paddingBottom: 34, backgroundColor: "rgba(2,11,20,0.98)" },
   callMinimizeButton: { alignSelf: "flex-start", width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, backgroundColor: colors.surfaceMuted },
   callProfileBlock: { width: "100%", alignItems: "center", gap: 9, paddingTop: 18 },
   callAvatarLarge: { width: 112, height: 112, borderRadius: 56, overflow: "hidden", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.success, backgroundColor: colors.accent },
@@ -1438,13 +1438,13 @@ const styles = StyleSheet.create({
   localWebRtcPreview: { position: "absolute", right: 14, bottom: 88, width: 104, height: 148, borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   callCameraPermission: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 20, backgroundColor: colors.surface },
   callCameraPermissionText: { color: colors.textMuted, fontSize: 13, lineHeight: 18, textAlign: "center", ...typography.body },
-  remoteVideoCard: { position: "absolute", left: 12, right: 12, top: 12, minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: "rgba(0,0,0,0.68)" },
+  remoteVideoCard: { position: "absolute", left: 12, right: 12, top: 12, minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: "rgba(2,11,20,0.72)" },
   remoteAvatarSmall: { width: 38, height: 38, borderRadius: 19, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: colors.accent },
   remoteAvatarText: { color: colors.accentText, fontSize: 12, ...typography.button },
   remoteCopy: { flex: 1, minWidth: 0 },
   remoteName: { color: colors.text, fontSize: 14, lineHeight: 18, ...typography.title },
   remoteStatus: { color: colors.textMuted, fontSize: 11, lineHeight: 15, marginTop: 1, ...typography.body },
-  flipCameraButton: { position: "absolute", right: 14, bottom: 14, width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 23, backgroundColor: "rgba(0,0,0,0.68)" },
+  flipCameraButton: { position: "absolute", right: 14, bottom: 14, width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 23, backgroundColor: "rgba(2,11,20,0.72)" },
   callControls: { width: "100%", flexDirection: "row", justifyContent: "space-between", gap: 10 },
   callControlButton: { flex: 1, minHeight: 68, alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 8, backgroundColor: colors.surfaceMuted },
   callControlButtonActive: { backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: "rgba(229,9,20,0.34)" },

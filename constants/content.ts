@@ -11,7 +11,6 @@ type QuickAction = {
 export const quickActions: QuickAction[] = [
   { title: "Search homes", subtitle: "Find verified rentals", icon: "search-outline", href: "/", roles: ["tenant"] },
   { title: "Apply for rental", subtitle: "Use tenant profile", icon: "send-outline", href: "/", roles: ["tenant"] },
-  { title: "Pay rent", subtitle: "Record tenant payment", icon: "card-outline", href: "/payments", roles: ["tenant"] },
   { title: "Log maintenance", subtitle: "Create a repair ticket", icon: "construct-outline", href: "/maintenance", roles: ["tenant"] },
   { title: "Post property", subtitle: "Add a verified listing", icon: "add-circle-outline", href: "/listings", roles: ["landlord", "agent"] },
   { title: "Create lease", subtitle: "Draft a digital contract", icon: "document-text-outline", href: "/leases", roles: ["landlord"] },
@@ -73,13 +72,11 @@ export const categories = [
 export const accountSections = [
   { title: "Verification center", meta: "ID, selfie, agency registration, and ownership proof", icon: "shield-checkmark-outline" },
   { title: "Lease documents", meta: "Generate contracts and keep signatures organized", icon: "document-text-outline" },
-  { title: "Payment settings", meta: "EcoCash, ZIPIT, bank transfer, and card support", icon: "card-outline" },
   { title: "Reporting", meta: "Disputes, platform health, and moderation workflow", icon: "analytics-outline" },
 ];
 
 export const supportQueue = [
   { title: "Maintenance", meta: "Plumbing, electrical, roofing, painting" },
-  { title: "Payments", meta: "EcoCash, ZIPIT, bank, Visa/Mastercard" },
   { title: "Disputes", meta: "Escalations, verifications, and fake listings" },
 ];
 

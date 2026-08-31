@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   panel: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: spacing.sm, ...shadows.card },
   panelTitle: { color: colors.text, fontSize: 16, lineHeight: 21, ...typography.title },
   input: { backgroundColor: colors.background, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, color: colors.text, minHeight: 44, paddingHorizontal: 11, outlineStyle: "none" as any, ...typography.body },
-  lockedInput: { color: colors.textMuted, backgroundColor: "#101010" },
+  lockedInput: { color: colors.textMuted, backgroundColor: colors.surfaceMuted },
   textArea: { minHeight: 82, paddingTop: 11, textAlignVertical: "top" },
   categoryRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   categoryChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: colors.background },

@@ -153,7 +153,7 @@ export default function ProfileScreen() {
                 <ImageBackground source={{ uri: selectedCoverPhoto }} resizeMode="cover" style={styles.editCoverImage}>
                   <View style={styles.coverShade} />
                   <View style={styles.coverChangePill}>
-                    <Ionicons name="camera" size={14} color="#FFFFFF" />
+                    <Ionicons name="camera" size={14} color={colors.accentText} />
                     <Text style={styles.coverChangeText}>Change</Text>
                   </View>
                 </ImageBackground>
@@ -174,7 +174,7 @@ export default function ProfileScreen() {
                 <Text style={styles.editAvatarText}>{avatarText(nameDraft || authUser?.name)}</Text>
               )}
               <View style={styles.editAvatarCamera}>
-                <Ionicons name="camera" size={22} color="#FFFFFF" />
+                <Ionicons name="camera" size={22} color={colors.accentText} />
               </View>
             </Pressable>
           </View>
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
   profileHeroPressed: { borderColor: "rgba(229,9,20,0.46)", backgroundColor: colors.surfaceMuted },
   profileHeroImage: { minHeight: 154, justifyContent: "flex-end" },
   profileHeroEmpty: { backgroundColor: colors.surfaceElevated },
-  profileHeroShade: { flex: 1, flexDirection: "row", alignItems: "flex-end", gap: 12, padding: spacing.md, backgroundColor: "rgba(0,0,0,0.54)" },
+  profileHeroShade: { flex: 1, flexDirection: "row", alignItems: "flex-end", gap: 12, padding: spacing.md, backgroundColor: "rgba(2,11,20,0.62)" },
   avatarLarge: { width: 66, height: 66, borderRadius: 33, overflow: "hidden", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.accent, backgroundColor: colors.background },
   avatarImage: { width: "100%", height: "100%" },
   avatarLargeText: { color: colors.accent, fontSize: 16, ...typography.button },
@@ -455,10 +455,10 @@ const styles = StyleSheet.create({
   name: { flex: 1, color: colors.text, fontSize: 19, lineHeight: 24, ...typography.title },
   subtitle: { color: colors.textMuted, fontSize: 13, lineHeight: 18, ...typography.body },
   profileMetaRow: { flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" },
-  rolePill: { overflow: "hidden", borderRadius: 999, borderWidth: 1, borderColor: colors.border, color: colors.text, backgroundColor: "rgba(0,0,0,0.72)", paddingHorizontal: 9, paddingVertical: 5, fontSize: 11, ...typography.button },
+  rolePill: { overflow: "hidden", borderRadius: 999, borderWidth: 1, borderColor: colors.border, color: colors.text, backgroundColor: colors.surfaceMuted, paddingHorizontal: 9, paddingVertical: 5, fontSize: 11, ...typography.button },
   editPill: { minHeight: 27, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, backgroundColor: colors.accent },
   editPillText: { color: colors.accentText, fontSize: 11, ...typography.button },
-  coverShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(17,19,21,0.16)" },
+  coverShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(2,11,20,0.12)" },
   groupWrap: { gap: spacing.xs },
   groupLabel: { color: colors.accent, fontSize: 12, lineHeight: 16, paddingHorizontal: 2, paddingTop: 2, ...typography.label },
   settingsGroup: { overflow: "hidden", borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.surfaceElevated, ...shadows.soft },
@@ -511,11 +511,11 @@ const styles = StyleSheet.create({
   editCoverImage: { flex: 1, justifyContent: "flex-end", padding: 10 },
   editCoverEmpty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 5 },
   editCoverEmptyText: { color: colors.textMuted, fontSize: 12, ...typography.label },
-  coverChangePill: { alignSelf: "flex-end", minHeight: 30, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 10, backgroundColor: "rgba(0,0,0,0.78)" },
-  coverChangeText: { color: "#FFFFFF", fontSize: 12, ...typography.button },
+  coverChangePill: { alignSelf: "flex-end", minHeight: 30, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 10, backgroundColor: "rgba(2,11,20,0.72)" },
+  coverChangeText: { color: colors.accentText, fontSize: 12, ...typography.button },
   editSaveButton: { minHeight: 46, alignItems: "center", justifyContent: "center", marginHorizontal: 20, marginTop: 14, borderRadius: 8, backgroundColor: colors.accent },
-  editSaveText: { color: "#FFFFFF", fontSize: 15, ...typography.button },
-  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.64)" },
+  editSaveText: { color: colors.accentText, fontSize: 15, ...typography.button },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(2,11,20,0.72)" },
   sheetWrap: { position: "absolute", left: 0, right: 0, bottom: 0, borderTopLeftRadius: 18, borderTopRightRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated, paddingHorizontal: spacing.md, paddingTop: 10, paddingBottom: 22, gap: 8, ...shadows.card },
   sheetHandle: { alignSelf: "center", width: 38, height: 4, borderRadius: 999, backgroundColor: colors.muted, marginBottom: 8 },
   sheetTitle: { color: colors.text, fontSize: 17, lineHeight: 22, ...typography.title },

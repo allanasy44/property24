@@ -99,7 +99,6 @@ export default function PropertyDetailScreen() {
             {isTenant && lifecycle.applicationApproved && !lifecycle.activeLease ? <Text style={styles.readOnlyNote}>Application approved. The landlord or agent must generate and sign the lease before payment opens.</Text> : null}
             {isTenant && lifecycle.activeLease ? (
               <View style={styles.finalActionRow}>
-                <Link href="/payments" asChild><Text style={styles.primaryAction}>Go to payments</Text></Link>
                 <Link href="/maintenance" asChild><Text style={styles.secondaryLink}>Maintenance</Text></Link>
               </View>
             ) : null}

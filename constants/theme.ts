@@ -1,6 +1,10 @@
-import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { Platform, useColorScheme } from "react-native";
 
-export const colors = {
+export type ThemeMode = "light" | "dark";
+
+const lightPalette = {
   background: "#f7f9fc",
   surface: "#ffffff",
   surfaceElevated: "#ffffff",
@@ -22,6 +26,108 @@ export const colors = {
   infoSoft: "rgba(148,163,184,0.10)",
   muted: "#94a3b8",
 };
+
+const darkPalette = {
+  background: "#020b14",
+  surface: "#0b1622",
+  surfaceElevated: "#122334",
+  surfaceMuted: "#1a2f42",
+  text: "#f4f9ff",
+  textMuted: "#c7d7eb",
+  border: "#2a4058",
+  accent: "#edf6ff",
+  accentStrong: "#f8fbff",
+  accentSoft: "rgba(237,246,255,0.12)",
+  accentText: "#071421",
+  success: "#8af0c0",
+  successSoft: "rgba(138,240,192,0.14)",
+  warning: "#ffd166",
+  warningSoft: "rgba(255,209,102,0.14)",
+  danger: "#ff7d7d",
+  dangerSoft: "rgba(255,125,125,0.14)",
+  info: "#cfe3ff",
+  infoSoft: "rgba(207,227,255,0.12)",
+  muted: "#dfe9f7",
+};
+
+export const colors = { ...lightPalette };
+
+export type ThemeContextValue = {
+  mode: ThemeMode;
+  colors: typeof colors;
+  toggleTheme: () => void;
+  setThemeMode: (mode: ThemeMode) => void;
+};
+
+const THEME_STORAGE_KEY = "property24-theme-mode";
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const systemMode = useColorScheme() === "dark" ? "dark" : "light";
+  const [mode, setMode] = useState<ThemeMode>(systemMode);
+
+  useEffect(() => {
+    let isMounted = true;
+    AsyncStorage.getItem(THEME_STORAGE_KEY)
+      .then((storedMode) => {
+        if (!isMounted) return;
+        if (storedMode === "dark" || storedMode === "light") {
+          setMode(storedMode);
+        } else {
+          setMode(systemMode);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setMode(systemMode);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [systemMode]);
+
+  useEffect(() => {
+    const palette = mode === "dark" ? darkPalette : lightPalette;
+    Object.keys(colors).forEach((key) => {
+      const typedKey = key as keyof typeof colors;
+      colors[typedKey] = palette[typedKey];
+    });
+    AsyncStorage.setItem(THEME_STORAGE_KEY, mode).catch(() => undefined);
+  }, [mode]);
+
+  const value = useMemo<ThemeContextValue>(() => ({
+    mode,
+    colors: colors as typeof colors,
+    toggleTheme: () => setMode((current) => (current === "dark" ? "light" : "dark")),
+    setThemeMode: (nextMode) => setMode(nextMode),
+  }), [mode]);
+
+  return React.createElement(ThemeContext.Provider, { value }, children);
+}
+
+export function useTheme() {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error("useTheme must be used inside ThemeProvider");
+  }
+  return context;
+}
+
+export function useAppTheme() {
+  const { mode, colors: activeColors, toggleTheme, setThemeMode } = useTheme();
+  return { mode, colors: activeColors, toggleTheme, setThemeMode };
+}
+
+export function getGreetingFromTime(date = new Date()) {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+export function formatDashboardTime(date = new Date()) {
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
 
 export const spacing = {
   xs: 4,

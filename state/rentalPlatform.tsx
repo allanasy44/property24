@@ -486,13 +486,13 @@ const defaultAccountRole: AccountRole = "tenant";
 
 export const accountContexts: Record<AccountRole, Omit<AccountContext, "accountType" | "hiddenSections" | "isVerified" | "emailVerified" | "phoneVerified" | "accountOnboardingComplete" | "fullVerificationRequired">> = {
   tenant: {
-    visibleSections: ["index", "inbox", "profile", "payments", "maintenance", "leases", "verification"],
-    capabilities: ["search_properties", "save_properties", "submit_tenant_verification", "apply_for_rentals", "pay_rent", "view_rental_history", "report_maintenance", "sign_leases", "message_landlord_or_agent"],
+    visibleSections: ["index", "inbox", "profile", "maintenance", "leases", "verification"],
+    capabilities: ["search_properties", "save_properties", "submit_tenant_verification", "apply_for_rentals", "view_rental_history", "report_maintenance", "sign_leases", "message_landlord_or_agent"],
     onboardingRequirements: ["email_verification"],
   },
   landlord: {
-    visibleSections: ["index", "listings", "inbox", "profile", "payments", "maintenance", "leases", "analytics", "verification"],
-    capabilities: ["add_properties", "upload_property_media", "create_agents", "submit_landlord_verification", "approve_tenants", "receive_rent", "manage_maintenance", "view_landlord_reports", "message_tenants"],
+    visibleSections: ["index", "listings", "inbox", "profile", "maintenance", "leases", "analytics", "verification"],
+    capabilities: ["add_properties", "upload_property_media", "create_agents", "submit_landlord_verification", "approve_tenants", "manage_maintenance", "view_landlord_reports", "message_tenants"],
     onboardingRequirements: ["email_verification"],
   },
   agent: {
@@ -501,8 +501,8 @@ export const accountContexts: Record<AccountRole, Omit<AccountContext, "accountT
     onboardingRequirements: ["email_verification"],
   },
   admin: {
-    visibleSections: ["index", "profile", "verification", "operations", "payments", "analytics"],
-    capabilities: ["verify_users", "remove_fake_listings", "resolve_disputes", "manage_payments", "review_reports", "manage_all_accounts"],
+    visibleSections: ["index", "profile", "verification", "operations", "analytics"],
+    capabilities: ["verify_users", "remove_fake_listings", "resolve_disputes", "review_reports", "manage_all_accounts"],
     onboardingRequirements: [],
   },
 };

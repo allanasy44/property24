@@ -2,11 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, ImageBackground, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AccessGuard } from "../../components/AccessGuard";
 import { PropertyCard } from "../../components/PropertyCard";
 import { Screen } from "../../components/Screen";
-import { SectionHeader } from "../../components/SectionHeader";
 import { colors, radius, shadows, spacing, typography } from "../../constants/theme";
 import { AccountMediaFile, AuthUser, useRentalPlatform } from "../../state/rentalPlatform";
 
@@ -17,10 +16,6 @@ export default function ListingsScreen() {
   const { state, addProperty, updateProperty, deleteProperty, authUser, authLoading, authError, createLandlordAgent, fetchLandlordAgents, hasCapability } = useRentalPlatform();
   const canCreateListing = hasCapability("add_properties") || hasCapability("list_properties");
   const canCreateAgents = authUser?.role === "landlord" && Boolean(authUser?.verified) && hasCapability("create_agents");
-  const workspaceLabel = authUser?.role === "agent" ? "Agent listing workspace" : "Landlord workspace";
-  const workspaceSubtitle = authUser?.role === "agent"
-    ? "Manage assigned listings with the access your landlord has given you."
-    : "Manage rentals, listing media, map pins, and assigned agents from one landlord account.";
   const [agentForm, setAgentForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [agents, setAgents] = useState<AuthUser[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState("");
@@ -32,6 +27,12 @@ export default function ListingsScreen() {
   const [videoFiles, setVideoFiles] = useState<AccountMediaFile[]>([]);
   const [formOpen, setFormOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [keepAddressPrivate, setKeepAddressPrivate] = useState(true);
+  const [intakeStep, setIntakeStep] = useState<1 | 2>(1);
+  const [successVisible, setSuccessVisible] = useState(false);
+  const [editedListingIds, setEditedListingIds] = useState<string[]>([]);
+  const [deletedListings, setDeletedListings] = useState<Array<{ id: string; title: string; address: string }>>([]);
+  const [listingFilter, setListingFilter] = useState<"all" | "vacant" | "occupied" | "attention">("all");
 
   const [form, setForm] = useState({
     title: "",
@@ -189,6 +190,8 @@ export default function ListingsScreen() {
     setVideoFiles([]);
     setSelectedAgentId("");
     setEditingId(null);
+    setKeepAddressPrivate(true);
+    setIntakeStep(1);
   };
 
   const openEditForm = (property: (typeof state.properties)[number]) => {
@@ -263,10 +266,12 @@ export default function ListingsScreen() {
 
       if (editingId) {
         await updateProperty(editingId, payload);
+        setEditedListingIds((current) => current.includes(editingId) ? current : [editingId, ...current]);
         setListingNotice("Property updated and saved.");
       } else {
         await addProperty(payload);
         setListingNotice("Property saved with media. It will appear publicly after verification.");
+        setSuccessVisible(true);
       }
 
       resetForm();
@@ -280,25 +285,32 @@ export default function ListingsScreen() {
     setListingNotice("");
     setListingError("");
     try {
+      const deletedProperty = state.properties.find((property) => property.id === propertyId);
       await deleteProperty(propertyId);
+      if (deletedProperty) setDeletedListings((current) => [{ id: deletedProperty.id, title: deletedProperty.title, address: deletedProperty.address }, ...current].slice(0, 3));
       setListingNotice("Property deleted.");
     } catch (error) {
       setListingError(error instanceof Error ? error.message : "Property could not be deleted.");
     }
   };
 
+  const visibleProperties = state.properties.filter((property) => {
+    const status = listingStatus(property, state.leases);
+    return listingFilter === "all" || (listingFilter === "vacant" && status === "vacant") || (listingFilter === "occupied" && status === "occupied") || (listingFilter === "attention" && (status === "pending" || editedListingIds.includes(property.id)));
+  });
+
   return (
     <AccessGuard section="listings" roles={["landlord", "agent"]}>
       <Screen>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <Text style={styles.eyebrow}>{workspaceLabel}</Text>
-            <Text style={styles.title}>Listings</Text>
-            <Text style={styles.subtitle}>{workspaceSubtitle}</Text>
-            <View style={styles.summaryRow}>
-              <SummaryTile icon="home-outline" value={`${state.properties.length}`} label="Properties" />
-              <SummaryTile icon="shield-checkmark-outline" value={`${state.properties.filter((item) => item.verified).length}`} label="Verified" />
-              <SummaryTile icon="image-outline" value="10" label="Max photos" />
+            <View style={styles.headerTopLine}><Text style={styles.title}>My properties</Text></View>
+            <View style={styles.statusRail}>
+              {(["all", "vacant", "occupied", "attention"] as const).map((filter) => (
+                <Pressable key={filter} onPress={() => setListingFilter(filter)} style={[styles.statusFilter, listingFilter === filter && styles.statusFilterActive]}>
+                  <Text style={[styles.statusFilterText, listingFilter === filter && styles.statusFilterTextActive]}>{filter === "all" ? "All listings" : filter === "attention" ? "Needs attention" : filter === "vacant" ? "Vacant" : "Occupied"}</Text>
+                </Pressable>
+              ))}
             </View>
           </View>
 
@@ -335,41 +347,49 @@ export default function ListingsScreen() {
               <View style={styles.formHeaderBar}>
                 <View style={styles.formTitleRow}>
                   <View>
-                    <Text style={styles.formTitle}>{editingId ? "Edit listing" : "New listing intake"}</Text>
-                    <Text style={styles.formSubtitle}>{editingId ? "Update the listing details and media." : "Photos, videos, GPS, rent, deposit, utilities, and assigned agent."}</Text>
-                  </View>
-                  <View style={styles.formIcon}>
-                    <Ionicons name={editingId ? "create-outline" : "add"} size={18} color={colors.accent} />
+                    {editingId ? <Text style={styles.formTitle}>Edit property</Text> : null}
                   </View>
                 </View>
-                <Pressable onPress={() => { setFormOpen((current) => !current); if (!formOpen) resetForm(); }} style={styles.collapseButton}>
-                  <Text style={styles.collapseText}>{formOpen ? "Hide" : "Show"}</Text>
-                </Pressable>
               </View>
 
               {formOpen ? (
                 <>
-                  <Input label="Title" value={form.title} onChangeText={(value) => setForm((current) => ({ ...current, title: value }))} />
+                  {intakeStep === 1 ? (
+                    <>
+                      <Text style={styles.referenceLabel}>Property for</Text>
+                      <View style={styles.saleRentRow}>
+                        <View style={[styles.saleRentOption, styles.saleRentActive]}><Text style={[styles.saleRentText, styles.saleRentTextActive]}>Rent</Text></View>
+                      </View>
+                      <Text style={styles.referenceLabel}>Property details</Text>
+                      <Input label="Enter title" value={form.title} onChangeText={(value) => setForm((current) => ({ ...current, title: value }))} />
+                      <Input label="Enter details here..." value={form.description} onChangeText={(value) => setForm((current) => ({ ...current, description: value }))} multiline />
+                      <View style={styles.selectField}><Text style={styles.selectText}>{form.city || "Select locality"}</Text><Ionicons name="chevron-down" size={16} color={colors.textMuted} /></View>
+                      <View style={styles.addressField}><View style={styles.addressIcon}><Ionicons name="location-sharp" size={18} color={colors.text} /></View><TextInput value={form.address} onChangeText={(value) => setForm((current) => ({ ...current, address: value }))} placeholder="Enter house address" placeholderTextColor={colors.textMuted} style={styles.addressInput} /></View>
+                      <Pressable onPress={() => setKeepAddressPrivate((value) => !value)} style={styles.privateRow}><Text style={styles.privateText}>Keep this house address <Text style={styles.privateAccent}>Private</Text></Text><View style={[styles.switchTrack, keepAddressPrivate && styles.switchTrackActive]}><View style={[styles.switchThumb, keepAddressPrivate && styles.switchThumbActive]} /></View></Pressable>
+                      <Pressable onPress={() => { if (!form.title.trim()) { setListingError("Enter a property title."); return; } setListingError(""); setIntakeStep(2); }} style={styles.continueButton}><Text style={styles.continueText}>Continue</Text></Pressable>
+                    </>
+                  ) : (
+                    <>
+                  <Text style={styles.inputLabel}>Property type</Text>
+                  <View style={styles.optionRow}>
+                    {propertyTypes.map((type) => <Pressable key={type} onPress={() => setForm((current) => ({ ...current, type }))} style={[styles.optionChip, form.type === type && styles.optionChipActive]}><Text style={[styles.optionText, form.type === type && styles.optionTextActive]}>{shortType(type)}</Text></Pressable>)}
+                  </View>
+                  <Text style={styles.referenceLabel}>Enter more details about property</Text>
+                  <CounterRow label="BHK" value={form.bedrooms} onChange={(value) => setForm((current) => ({ ...current, bedrooms: value }))} />
+                  <CounterRow label="Bathrooms" value={form.bathrooms} onChange={(value) => setForm((current) => ({ ...current, bathrooms: value }))} />
                   <Input label="Address" value={form.address} onChangeText={(value) => setForm((current) => ({ ...current, address: value }))} />
+                  <Input label="Price" value={form.price} onChangeText={(value) => setForm((current) => ({ ...current, price: value }))} />
+                  <Text style={styles.referenceLabel}>Upload property image <Text style={styles.referenceHint}>(Max 10 photos)</Text></Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRail}>
+                    {photoFiles.map((file) => <View key={file.uri} style={styles.photoThumb}><ImageBackground source={{ uri: file.uri }} resizeMode="cover" style={styles.photoThumbImage} /><Pressable onPress={() => setPhotoFiles((current) => current.filter((item) => item.uri !== file.uri))} style={styles.photoRemove}><Ionicons name="trash-outline" size={12} color={colors.accentText} /></Pressable></View>)}
+                    <Pressable onPress={pickPhotos} disabled={photoFiles.length >= maxPhotos || authLoading} style={styles.addPhoto}><Ionicons name="add" size={24} color={colors.textMuted} /></Pressable>
+                  </ScrollView>
+                  <View style={styles.referenceDivider} />
                   <View style={styles.formRow}>
                     <Input label="City" value={form.city} onChangeText={(value) => setForm((current) => ({ ...current, city: value }))} />
                     <Input label="Suburb" value={form.suburb} onChangeText={(value) => setForm((current) => ({ ...current, suburb: value }))} />
                   </View>
-                  <View style={styles.formRow}>
-                    <Input label="Price" value={form.price} onChangeText={(value) => setForm((current) => ({ ...current, price: value }))} />
-                    <Input label="Deposit" value={form.deposit} onChangeText={(value) => setForm((current) => ({ ...current, deposit: value }))} />
-                  </View>
-                  <View style={styles.optionRow}>
-                    {propertyTypes.map((type) => (
-                      <Pressable key={type} onPress={() => setForm((current) => ({ ...current, type }))} style={[styles.optionChip, form.type === type && styles.optionChipActive]}>
-                        <Text style={[styles.optionText, form.type === type && styles.optionTextActive]}>{shortType(type)}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  <View style={styles.formRow}>
-                    <Input label="Bedrooms" keyboardType="number-pad" value={form.bedrooms} onChangeText={(value) => setForm((current) => ({ ...current, bedrooms: value }))} />
-                    <Input label="Bathrooms" keyboardType="number-pad" value={form.bathrooms} onChangeText={(value) => setForm((current) => ({ ...current, bathrooms: value }))} />
-                  </View>
+                  <Input label="Deposit" value={form.deposit} onChangeText={(value) => setForm((current) => ({ ...current, deposit: value }))} />
                   <Input label="Furnished" value={form.furnished} onChangeText={(value) => setForm((current) => ({ ...current, furnished: value }))} />
                   <Input label="Parking" value={form.parking} onChangeText={(value) => setForm((current) => ({ ...current, parking: value }))} />
                   <Input label="Power" value={form.power} onChangeText={(value) => setForm((current) => ({ ...current, power: value }))} />
@@ -396,18 +416,6 @@ export default function ListingsScreen() {
 
                   <View style={styles.mediaPanel}>
                     <View style={styles.mediaHeader}>
-                      <Text style={styles.inputLabel}>Pictures</Text>
-                      <Text style={styles.mediaCount}>{photoFiles.length}/{maxPhotos}</Text>
-                    </View>
-                    <Pressable onPress={pickPhotos} disabled={photoFiles.length >= maxPhotos || authLoading} style={[styles.mediaButton, (photoFiles.length >= maxPhotos || authLoading) && styles.buttonDisabled]}>
-                      <Ionicons name="images-outline" size={17} color={colors.accent} />
-                      <Text style={styles.mediaButtonText}>{photoFiles.length ? "Add more photos" : "Upload photos"}</Text>
-                    </Pressable>
-                    {photoFiles.length ? <Text style={styles.mediaMeta}>{photoFiles.map((file) => file.name).join(" · ")}</Text> : null}
-                  </View>
-
-                  <View style={styles.mediaPanel}>
-                    <View style={styles.mediaHeader}>
                       <Text style={styles.inputLabel}>Videos</Text>
                       <Text style={styles.mediaCount}>{videoFiles.length}</Text>
                     </View>
@@ -428,6 +436,7 @@ export default function ListingsScreen() {
                   {listingNotice ? <Text style={styles.agentNotice}>{listingNotice}</Text> : null}
                   {listingError || authError ? <Text style={styles.agentError}>{listingError || authError}</Text> : null}
                   <View style={styles.actionRow}>
+                    <Pressable onPress={() => setIntakeStep(1)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Back</Text></Pressable>
                     {editingId ? (
                       <Pressable onPress={() => { resetForm(); setFormOpen(false); }} style={[styles.secondaryButton, authLoading && styles.buttonDisabled]}>
                         <Text style={styles.secondaryButtonText}>Cancel</Text>
@@ -438,16 +447,25 @@ export default function ListingsScreen() {
                       <Text style={styles.buttonText}>{authLoading ? (editingId ? "Updating..." : "Saving...") : editingId ? "Update property" : "Save property"}</Text>
                     </Pressable>
                   </View>
+                    </>
+                  )}
                 </>
               ) : null}
             </View>
           ) : null}
 
-          <SectionHeader title="Current properties" subtitle="Rendered from live account data and used by Home, Inbox, and supplier profiles." />
+          <View style={styles.inventoryHeader}><View><Text style={styles.inventoryTitle}>Property inventory</Text><Text style={styles.inventorySubtitle}>{visibleProperties.length} active {visibleProperties.length === 1 ? "listing" : "listings"}</Text></View><Ionicons name="options-outline" size={20} color={colors.textMuted} /></View>
           <View style={styles.listStack}>
-            {state.properties.length ? (
-              state.properties.map((property) => (
+            {visibleProperties.length ? (
+              visibleProperties.map((property) => (
                 <View key={property.id} style={styles.propertyCardShell}>
+                  <View style={styles.propertyStatusHeader}>
+                    <View style={styles.statusIdentity}><View style={[styles.statusDot, { backgroundColor: listingStatusColor(listingStatus(property, state.leases)) }]} /><Text style={styles.statusName}>{listingStatusLabel(listingStatus(property, state.leases))}</Text></View>
+                    <View style={styles.flagRow}>
+                      {editedListingIds.includes(property.id) ? <Text style={styles.editedFlag}>Edited</Text> : null}
+                      {property.verified ? <Text style={styles.verifiedFlag}>Verified</Text> : <Text style={styles.reviewFlag}>Review</Text>}
+                    </View>
+                  </View>
                   <PropertyCard property={property} />
                   <View style={styles.cardActionRow}>
                     <Pressable onPress={() => openEditForm(property)} style={styles.softAction}>
@@ -468,9 +486,23 @@ export default function ListingsScreen() {
               </View>
             )}
           </View>
+          {deletedListings.length ? <View style={styles.deletedPanel}><View style={styles.deletedHeader}><Ionicons name="archive-outline" size={17} color={colors.textMuted} /><Text style={styles.deletedTitle}>Recently removed</Text></View>{deletedListings.map((property) => <View key={property.id} style={styles.deletedRow}><View style={{ flex: 1 }}><Text style={styles.deletedName}>{property.title}</Text><Text style={styles.deletedMeta}>{property.address}</Text></View><Text style={styles.deletedFlag}>Deleted</Text></View>)}</View> : null}
         </ScrollView>
+        <Modal visible={successVisible} transparent animationType="fade" onRequestClose={() => setSuccessVisible(false)}>
+          <View style={styles.successOverlay}><View style={styles.successModal}><Pressable onPress={() => setSuccessVisible(false)} style={styles.successClose}><Ionicons name="close" size={18} color={colors.text} /></Pressable><View style={styles.successIcon}><Ionicons name="checkmark" size={28} color={colors.accentText} /></View><Text style={styles.successTitle}>Congratulations!</Text><Text style={styles.successBody}>Your property listed successfully.</Text><Pressable onPress={() => setSuccessVisible(false)} style={styles.continueButton}><Text style={styles.continueText}>Continue</Text></Pressable></View></View>
+        </Modal>
       </Screen>
     </AccessGuard>
+  );
+}
+
+function CounterRow({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const numericValue = Number(value) || 1;
+  return (
+    <View style={styles.counterRow}>
+      <View style={styles.counterLabel}><Ionicons name={label === "BHK" ? "bed-outline" : "water-outline"} size={14} color={colors.textMuted} /><Text style={styles.counterText}>{label}</Text></View>
+      <View style={styles.counterControls}><Pressable onPress={() => onChange(String(Math.max(1, numericValue - 1)))} style={styles.counterButton}><Text style={styles.counterMinus}>−</Text></Pressable><Text style={styles.counterValue}>{value || "1"}</Text><Pressable onPress={() => onChange(String(numericValue + 1))} style={styles.counterButtonLight}><Text style={styles.counterPlus}>+</Text></Pressable></View>
+    </View>
   );
 }
 
@@ -500,12 +532,13 @@ function ToggleChip({ label, active, onPress }: { label: string; active: boolean
   );
 }
 
-function SummaryTile({ icon, value, label }: { icon: keyof typeof Ionicons.glyphMap; value: string; label: string }) {
+function IntakeStep({ number, label, active = false }: { number: string; label: string; active?: boolean }) {
   return (
-    <View style={styles.summaryTile}>
-      <Ionicons name={icon} size={15} color={colors.accent} />
-      <Text style={styles.summaryValue}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
+    <View style={styles.intakeStep}>
+      <View style={[styles.stepNumber, active && styles.stepNumberActive]}>
+        <Text style={[styles.stepNumberText, active && styles.stepNumberTextActive]}>{number}</Text>
+      </View>
+      <Text style={[styles.stepLabel, active && styles.stepLabelActive]}>{label}</Text>
     </View>
   );
 }
@@ -540,43 +573,111 @@ function imageAssetToUpload(asset: ImagePicker.ImagePickerAsset, label: string):
   };
 }
 
+function listingStatus(property: { id: string; title: string; verified: boolean }, leases: Array<{ propertyId?: string; property?: string; status: string }>) {
+  const occupied = leases.some((lease) => isActiveLease(lease) && (lease.propertyId === property.id || lease.property === property.title));
+  if (occupied) return "occupied" as const;
+  return property.verified ? "vacant" as const : "pending" as const;
+}
+
+function isActiveLease(lease: { status: string }) {
+  return lease.status.toLowerCase().replace(/\s+/g, "_") === "active";
+}
+
+function listingStatusLabel(status: "vacant" | "occupied" | "pending") {
+  return status === "occupied" ? "Occupied" : status === "pending" ? "Needs review" : "Vacant";
+}
+
+function listingStatusColor(status: "vacant" | "occupied" | "pending") {
+  return status === "occupied" ? colors.info : status === "pending" ? colors.warning : colors.success;
+}
+
 const styles = StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.md, backgroundColor: colors.background },
   header: { gap: spacing.sm, marginBottom: spacing.sm },
-  eyebrow: { color: colors.accent, fontSize: 12, textTransform: "uppercase", ...typography.label },
+  headerTopLine: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   title: { color: colors.text, fontSize: 26, lineHeight: 32, ...typography.display },
-  subtitle: { color: colors.textMuted, lineHeight: 22, ...typography.body },
-  summaryRow: { flexDirection: "row", gap: spacing.sm },
-  summaryTile: { flex: 1, minHeight: 76, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.sm, gap: 3, backgroundColor: colors.surface, ...shadows.soft },
-  summaryValue: { color: colors.text, fontSize: 17, ...typography.title },
-  summaryLabel: { color: colors.textMuted, fontSize: 10, textTransform: "uppercase", ...typography.label },
-  formCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.sm, ...shadows.card },
+  statusRail: { flexDirection: "row", gap: 5, marginTop: spacing.sm },
+  statusFilter: { alignItems: "center", backgroundColor: colors.background, borderColor: colors.border, borderRadius: 999, borderWidth: 1, flex: 1, justifyContent: "center", minWidth: 0, paddingHorizontal: 4, paddingVertical: 8 },
+  statusFilterActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  statusFilterText: { color: colors.textMuted, fontSize: 10, textAlign: "center", ...typography.button },
+  statusFilterTextActive: { color: colors.accentText },
+  formCard: { backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: 28, borderWidth: 1, padding: spacing.md, gap: 14, ...shadows.card },
   formHeaderBar: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm },
   agentCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, borderWidth: 1, borderColor: "rgba(229,9,20,0.34)", padding: spacing.md, gap: spacing.sm, ...shadows.card },
-  agentGrid: { flexDirection: "row", gap: spacing.sm },
+  agentGrid: { flexDirection: "row", gap: 7 },
   agentNotice: { color: colors.success, fontSize: 12, lineHeight: 18, ...typography.label },
   agentError: { color: colors.warning, fontSize: 12, lineHeight: 18, ...typography.label },
   formTitleRow: { flex: 1, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md, marginBottom: 2 },
   formTitleCopy: { flex: 1, minWidth: 0 },
-  formTitle: { color: colors.text, fontSize: 17, ...typography.title },
+  formKicker: { color: colors.accent, fontSize: 10, marginBottom: 3, ...typography.label },
+  intakeStep: { alignItems: "center", gap: 4 },
+  stepNumber: { alignItems: "center", backgroundColor: colors.surfaceMuted, borderRadius: 999, height: 27, justifyContent: "center", width: 27 },
+  stepNumberActive: { backgroundColor: colors.accent },
+  stepNumberText: { color: colors.textMuted, fontSize: 9, ...typography.label },
+  stepNumberTextActive: { color: colors.accentText },
+  stepLabel: { color: colors.textMuted, fontSize: 9, ...typography.label },
+  stepLabelActive: { color: colors.text },
+  formTitle: { color: colors.text, fontSize: 18, ...typography.title },
+  saleRentRow: { backgroundColor: colors.background, borderColor: colors.border, borderRadius: 999, borderWidth: 1, flexDirection: "row", padding: 2 },
+  saleRentOption: { alignItems: "center", borderRadius: 999, flex: 1, justifyContent: "center", minHeight: 34 },
+  saleRentActive: { backgroundColor: colors.accent },
+  saleRentText: { color: colors.textMuted, fontSize: 11, ...typography.button },
+  saleRentTextActive: { color: colors.accentText },
+  selectField: { alignItems: "center", backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: "row", justifyContent: "space-between", minHeight: 42, paddingHorizontal: 11 },
+  selectText: { color: colors.textMuted, fontSize: 12, ...typography.body },
+  addressField: { alignItems: "center", backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: "row", minHeight: 42, overflow: "hidden" },
+  addressIcon: { alignItems: "center", backgroundColor: colors.accentSoft, borderRadius: 10, height: 34, justifyContent: "center", marginLeft: 4, width: 34 },
+  addressInput: { color: colors.text, flex: 1, fontSize: 12, paddingHorizontal: 12, ...typography.body },
+  privateRow: { alignItems: "center", backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: "row", justifyContent: "space-between", minHeight: 42, paddingHorizontal: 11 },
+  privateText: { color: colors.textMuted, fontSize: 11, ...typography.body },
+  privateAccent: { color: colors.success, ...typography.button },
+  switchTrack: { backgroundColor: colors.border, borderRadius: 999, height: 20, justifyContent: "center", paddingHorizontal: 2, width: 40 },
+  switchTrackActive: { backgroundColor: colors.successSoft },
+  switchThumb: { backgroundColor: colors.textMuted, borderRadius: 999, height: 16, width: 16 },
+  switchThumbActive: { alignSelf: "flex-end", backgroundColor: colors.success },
+  continueButton: { alignItems: "center", backgroundColor: colors.accent, borderRadius: radius.lg, justifyContent: "center", minHeight: 48, paddingVertical: 12, width: "100%" },
+  continueText: { color: colors.accentText, fontSize: 12, ...typography.button },
+  successOverlay: { alignItems: "center", backgroundColor: "rgba(2,11,20,0.78)", flex: 1, justifyContent: "center", padding: spacing.lg },
+  successModal: { alignItems: "center", backgroundColor: colors.surfaceElevated, borderColor: colors.border, borderRadius: 24, borderWidth: 1, gap: 10, maxWidth: 360, padding: spacing.lg, position: "relative", width: "100%" },
+  successClose: { alignItems: "center", backgroundColor: colors.surfaceMuted, borderRadius: 999, height: 32, justifyContent: "center", position: "absolute", right: 12, top: 12, width: 32 },
+  successIcon: { alignItems: "center", backgroundColor: colors.success, borderRadius: 999, height: 52, justifyContent: "center", marginTop: 14, shadowColor: colors.success, shadowOpacity: 0.3, shadowRadius: 18, width: 52 },
+  successTitle: { color: colors.text, fontSize: 17, marginTop: 6, ...typography.title },
+  successBody: { color: colors.textMuted, fontSize: 11, ...typography.body },
+    referenceLabel: { color: colors.text, fontSize: 12, marginTop: 2, ...typography.label },
+    referenceHint: { color: colors.textMuted, fontSize: 11, ...typography.body },
+    counterRow: { alignItems: "center", backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md, borderWidth: 1, flexDirection: "row", justifyContent: "space-between", minHeight: 42, paddingLeft: 11, paddingRight: 5 },
+    counterLabel: { alignItems: "center", flexDirection: "row", gap: 8 },
+    counterText: { color: colors.textMuted, fontSize: 11, ...typography.body },
+    counterControls: { alignItems: "center", flexDirection: "row", gap: 9 },
+    counterButton: { alignItems: "center", backgroundColor: colors.surfaceMuted, borderColor: colors.border, borderRadius: 999, borderWidth: 1, height: 29, justifyContent: "center", width: 29 },
+    counterButtonLight: { alignItems: "center", backgroundColor: colors.accent, borderRadius: 999, height: 29, justifyContent: "center", width: 29 },
+    counterMinus: { color: colors.textMuted, fontSize: 19, lineHeight: 21 },
+    counterPlus: { color: colors.accentText, fontSize: 20, lineHeight: 21 },
+    counterValue: { color: colors.text, fontSize: 13, minWidth: 12, textAlign: "center", ...typography.button },
+    photoRail: { gap: 8 },
+    photoThumb: { borderRadius: 13, height: 56, overflow: "hidden", position: "relative", width: 84 },
+    photoThumbImage: { flex: 1 },
+    photoRemove: { alignItems: "center", backgroundColor: "rgba(10,10,10,0.78)", borderRadius: 999, height: 22, justifyContent: "center", position: "absolute", right: 5, top: 5, width: 22 },
+    addPhoto: { alignItems: "center", backgroundColor: colors.accentSoft, borderColor: colors.border, borderRadius: 13, borderWidth: 1, height: 56, justifyContent: "center", width: 66 },
+    referenceDivider: { backgroundColor: colors.border, height: 1, marginVertical: 2 },
   formSubtitle: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 2, ...typography.body },
   formIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.accentSoft },
-  collapseButton: { minHeight: 32, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, paddingHorizontal: 12, justifyContent: "center" },
+  collapseButton: { minHeight: 36, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, paddingHorizontal: 15, justifyContent: "center" },
   collapseText: { color: colors.text, fontSize: 12, ...typography.button },
-  formRow: { flexDirection: "row", gap: spacing.sm },
-  optionRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  optionChip: { backgroundColor: colors.background, borderRadius: 8, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, paddingVertical: 8 },
-  optionChipActive: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-  optionText: { color: colors.text, fontSize: 12, ...typography.button },
-  optionTextActive: { color: colors.accent },
-  inputLabel: { color: colors.textMuted, fontSize: 12, textTransform: "uppercase", ...typography.label },
-  gpsPanel: { gap: 8 },
-  gpsButton: { minHeight: 42, borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(229,9,20,0.36)", backgroundColor: colors.accentSoft, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  formRow: { flexDirection: "row", gap: 7 },
+  optionRow: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
+  optionChip: { alignItems: "center", backgroundColor: colors.background, borderColor: colors.border, borderRadius: 999, borderWidth: 1, justifyContent: "center", paddingHorizontal: 8, paddingVertical: 8 },
+  optionChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  optionText: { color: colors.textMuted, fontSize: 10, textAlign: "center", ...typography.button },
+  optionTextActive: { color: colors.accentText },
+  inputLabel: { color: colors.textMuted, fontSize: 11, textTransform: "uppercase", ...typography.label },
+  gpsPanel: { gap: 7 },
+  gpsButton: { minHeight: 42, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.accentSoft, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   gpsButtonText: { color: colors.text, fontSize: 13, ...typography.button },
   mediaPanel: { gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.background, padding: spacing.sm },
   mediaHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   mediaCount: { color: colors.accent, fontSize: 12, ...typography.label },
-  mediaButton: { minHeight: 42, borderRadius: radius.md, borderWidth: 1, borderColor: "rgba(229,9,20,0.36)", backgroundColor: colors.accentSoft, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  mediaButton: { minHeight: 42, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.accentSoft, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 11 },
   mediaButtonText: { color: colors.text, fontSize: 13, ...typography.button },
   mediaMeta: { color: colors.textMuted, fontSize: 11, lineHeight: 16, ...typography.body },
   input: {
@@ -587,19 +688,31 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingHorizontal: 12,
     paddingVertical: 12,
+    minHeight: 42,
     fontSize: 14,
     outlineStyle: "none" as any,
     ...typography.body,
   },
   textArea: { minHeight: 96, textAlignVertical: "top" },
   actionRow: { flexDirection: "row", justifyContent: "space-between", gap: spacing.sm },
-  button: { flex: 1, minHeight: 44, flexDirection: "row", gap: 8, backgroundColor: colors.accent, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", paddingVertical: 12 },
+  button: { flex: 1, minHeight: 48, flexDirection: "row", gap: 8, backgroundColor: colors.accent, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingVertical: 12 },
   buttonCompact: { flex: 1 },
-  secondaryButton: { flex: 1, minHeight: 44, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", paddingVertical: 12 },
+  secondaryButton: { flex: 1, minHeight: 48, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", paddingVertical: 12 },
   secondaryButtonText: { color: colors.text, ...typography.button },
   buttonDisabled: { opacity: 0.55 },
   buttonText: { color: colors.accentText, ...typography.button },
+  inventoryHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginTop: spacing.sm },
+  inventoryTitle: { color: colors.text, fontSize: 20, ...typography.title },
+  inventorySubtitle: { color: colors.textMuted, fontSize: 12, marginTop: 3, ...typography.body },
   propertyCardShell: { gap: 8 },
+  propertyStatusHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 3 },
+  statusIdentity: { alignItems: "center", flexDirection: "row", gap: 7 },
+  statusDot: { borderRadius: 999, height: 8, width: 8 },
+  statusName: { color: colors.text, fontSize: 12, ...typography.button },
+  flagRow: { alignItems: "center", flexDirection: "row", gap: 6 },
+  editedFlag: { backgroundColor: colors.accentSoft, borderRadius: 999, color: colors.text, fontSize: 10, overflow: "hidden", paddingHorizontal: 8, paddingVertical: 4, ...typography.label },
+  verifiedFlag: { backgroundColor: colors.successSoft, borderRadius: 999, color: colors.success, fontSize: 10, overflow: "hidden", paddingHorizontal: 8, paddingVertical: 4, ...typography.label },
+  reviewFlag: { backgroundColor: colors.warningSoft, borderRadius: 999, color: colors.warning, fontSize: 10, overflow: "hidden", paddingHorizontal: 8, paddingVertical: 4, ...typography.label },
   cardActionRow: { flexDirection: "row", justifyContent: "space-between", gap: spacing.sm },
   softAction: { flex: 1, minHeight: 40, borderRadius: 12, backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   softActionText: { color: colors.accent, fontSize: 12, ...typography.button },
@@ -609,4 +722,11 @@ const styles = StyleSheet.create({
   emptyCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.lg, gap: 8, ...shadows.soft },
   emptyTitle: { color: colors.text, ...typography.title },
   emptyBody: { color: colors.textMuted, lineHeight: 20, ...typography.body },
+  deletedPanel: { backgroundColor: colors.surfaceMuted, borderColor: colors.border, borderRadius: radius.lg, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
+  deletedHeader: { alignItems: "center", flexDirection: "row", gap: 7 },
+  deletedTitle: { color: colors.text, fontSize: 14, ...typography.title },
+  deletedRow: { alignItems: "center", borderTopColor: colors.border, borderTopWidth: 1, flexDirection: "row", gap: spacing.sm, paddingTop: spacing.sm },
+  deletedName: { color: colors.text, fontSize: 12, ...typography.button },
+  deletedMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2, ...typography.body },
+  deletedFlag: { color: colors.danger, fontSize: 10, ...typography.label },
 });
