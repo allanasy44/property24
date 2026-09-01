@@ -4,7 +4,7 @@ import { Tabs } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { colors, radius, shadows } from "../../constants/theme";
+import { colors, radius, shadows, useTheme } from "../../constants/theme";
 import { useRentalPlatform } from "../../state/rentalPlatform";
 
 export default function TabsLayout() {
@@ -32,6 +32,7 @@ export default function TabsLayout() {
 
 function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { mode, colors: themeColors } = useTheme();
   const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
     index: "compass-outline",
     listings: "business-outline",
@@ -42,7 +43,7 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
   return (
     <View pointerEvents="box-none" style={[styles.host, { bottom: Math.max(insets.bottom, 10) }]}>
-      <BlurView intensity={58} tint="light" style={styles.dock}>
+      <BlurView intensity={58} tint={mode === "dark" ? "dark" : "light"} style={[styles.dock, { backgroundColor: mode === "dark" ? "rgba(11,22,34,0.82)" : "rgba(238,242,255,0.30)" }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.items}>
           {state.routes.map((route, index) => {
             const descriptor = descriptors[route.key];
@@ -54,7 +55,7 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             };
             return (
               <Pressable key={route.key} accessibilityLabel={String(label)} accessibilityRole="tab" accessibilityState={{ selected: focused }} onPress={onPress} style={styles.item}>
-                <View style={[styles.iconCircle, focused && styles.iconCircleActive]}><Ionicons name={iconMap[route.name] ?? "ellipse-outline"} size={24} color={colors.text} /></View>
+                <View style={[styles.iconCircle, focused && styles.iconCircleActive, { backgroundColor: focused ? (mode === "dark" ? "rgba(148,163,184,0.18)" : "rgba(238,242,255,0.42)") : (mode === "dark" ? "rgba(148,163,184,0.10)" : "rgba(238,242,255,0.16)") }]}><Ionicons name={iconMap[route.name] ?? "ellipse-outline"} size={24} color={themeColors.text} /></View>
               </Pressable>
             );
           })}

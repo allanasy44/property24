@@ -3,7 +3,7 @@ import { Link, useLocalSearchParams, type Href } from "expo-router";
 import { useMemo, useState } from "react";
 import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Screen } from "../../components/Screen";
-import { colors, radius, shadows, spacing, typography } from "../../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../../constants/theme";
 import { AccountRole, Property, useRentalPlatform } from "../../state/rentalPlatform";
 
 type SupplierProfile = {
@@ -21,8 +21,64 @@ export default function SupplierProfileScreen() {
   const supplierId = normalizeParam(id);
   const selectedPropertyId = normalizeParam(propertyId);
   const { state, authToken, hasCapability, toggleSupplierFollow } = useRentalPlatform();
+  const { colors: themeColors } = useTheme();
   const [following, setFollowing] = useState(false);
   const [notice, setNotice] = useState("");
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        content: { paddingBottom: spacing.xl, backgroundColor: themeColors.background },
+        profileHeader: { backgroundColor: themeColors.surface },
+        cover: { height: 142, justifyContent: "flex-start", padding: 12, backgroundColor: themeColors.border },
+        coverShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(17,19,21,0.22)" },
+        backButton: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(17,19,21,0.68)" },
+        identityBlock: { paddingHorizontal: 14, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: themeColors.border, backgroundColor: themeColors.surface },
+        avatar: { width: 76, height: 76, borderRadius: 38, overflow: "hidden", alignItems: "center", justifyContent: "center", marginTop: -38, borderWidth: 4, borderColor: themeColors.surface, backgroundColor: themeColors.text },
+        avatarImage: { width: "100%", height: "100%" },
+        avatarText: { color: "#FFFFFF", fontSize: 24, ...typography.display },
+        nameRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
+        nameCopy: { flex: 1, minWidth: 0 },
+        verifiedNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+        name: { flexShrink: 1, color: themeColors.text, fontSize: 23, lineHeight: 29, ...typography.display },
+        handle: { color: themeColors.textMuted, fontSize: 12, marginTop: 2, ...typography.label },
+        followButton: { minHeight: 34, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: themeColors.accent, paddingHorizontal: 16, backgroundColor: themeColors.accent },
+        followButtonActive: { borderColor: themeColors.accent, backgroundColor: "transparent" },
+        followText: { color: "#FFFFFF", fontSize: 12, ...typography.button },
+        followTextActive: { color: themeColors.accent },
+        bio: { color: themeColors.text, fontSize: 13, lineHeight: 20, marginTop: 12, ...typography.body },
+        notice: { color: themeColors.success, fontSize: 12, marginTop: 8, ...typography.label },
+        actionRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 13 },
+        primaryAction: { flex: 1, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 8, backgroundColor: themeColors.accent },
+        primaryText: { color: themeColors.accentText, fontSize: 13, ...typography.button },
+        iconAction: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: themeColors.border, backgroundColor: themeColors.surface },
+        statsBand: { flexDirection: "row", alignItems: "center", marginTop: 10, borderTopWidth: 1, borderBottomWidth: 1, borderColor: themeColors.border, backgroundColor: themeColors.surface },
+        stat: { flex: 1, minHeight: 62, alignItems: "center", justifyContent: "center", gap: 2 },
+        statValue: { color: themeColors.text, fontSize: 16, ...typography.title },
+        statLabel: { color: themeColors.textMuted, fontSize: 10, textTransform: "uppercase", ...typography.label },
+        detailSection: { paddingHorizontal: 14, paddingVertical: 14, gap: 10, backgroundColor: themeColors.surface, borderBottomWidth: 1, borderBottomColor: themeColors.border },
+        sectionTitle: { color: themeColors.text, fontSize: 17, lineHeight: 22, ...typography.title },
+        detailRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+        detailIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: themeColors.accentSoft },
+        detailCopy: { flex: 1, minWidth: 0 },
+        detailLabel: { color: themeColors.text, fontSize: 12, ...typography.label },
+        detailValue: { color: themeColors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 1, ...typography.body },
+        listingSection: { paddingHorizontal: 14, paddingTop: 14, gap: 10 },
+        sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+        sectionMeta: { color: themeColors.success, fontSize: 12, ...typography.button },
+        listingItem: { minHeight: 86, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: themeColors.border, borderRadius: radius.lg, padding: 8, backgroundColor: themeColors.surface, ...shadows.soft },
+        listingImage: { width: 72, height: 66, borderRadius: 8, overflow: "hidden", justifyContent: "flex-end", alignItems: "flex-start", padding: 6, backgroundColor: themeColors.border },
+        videoBadge: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(17,19,21,0.78)" },
+        listingCopy: { flex: 1, minWidth: 0, gap: 3 },
+        listingTitle: { color: themeColors.text, fontSize: 14, ...typography.title },
+        listingMeta: { color: themeColors.textMuted, fontSize: 12, ...typography.body },
+        listingTrust: { color: themeColors.success, fontSize: 11, ...typography.label },
+        missingCard: { flex: 1, margin: spacing.lg, alignItems: "flex-start", justifyContent: "center", borderRadius: radius.lg, padding: spacing.lg, gap: 8, backgroundColor: themeColors.surfaceElevated, ...shadows.card },
+        missingTitle: { color: themeColors.text, fontSize: 20, ...typography.title },
+        missingBody: { color: themeColors.textMuted, lineHeight: 20, ...typography.body },
+        homeLink: { color: themeColors.accent, marginTop: 4, ...typography.button },
+      }),
+    [themeColors]
+  );
 
   const supplierProperties = useMemo(
     () =>
@@ -151,18 +207,18 @@ export default function SupplierProfileScreen() {
         </View>
 
         <View style={styles.statsBand}>
-          <Stat value={`${supplierProperties.length}`} label="Listings" />
-          <Stat value={`${listingViews}`} label="Views" />
-          <Stat value={`${savedCount}`} label="Saved" />
-          <Stat value={`${applicationsCount}`} label="Applications" />
+          <Stat value={`${supplierProperties.length}`} label="Listings" styles={styles} />
+          <Stat value={`${listingViews}`} label="Views" styles={styles} />
+          <Stat value={`${savedCount}`} label="Saved" styles={styles} />
+          <Stat value={`${applicationsCount}`} label="Applications" styles={styles} />
         </View>
 
         <View style={styles.detailSection}>
           <Text style={styles.sectionTitle}>Profile details</Text>
-          <DetailRow icon="shield-checkmark-outline" label="Verification" value="National ID, selfie, phone and listing authority approved" />
-          <DetailRow icon="call-outline" label="Phone" value="Hidden until both sides move through the rental flow" />
-          <DetailRow icon="business-outline" label="Account type" value={roleLabel(supplier.role)} />
-          <DetailRow icon="home-outline" label="Main listing" value={selectedProperty.title} />
+          <DetailRow icon="shield-checkmark-outline" label="Verification" value="National ID, selfie, phone and listing authority approved" styles={styles} themeColors={themeColors} />
+          <DetailRow icon="call-outline" label="Phone" value="Hidden until both sides move through the rental flow" styles={styles} themeColors={themeColors} />
+          <DetailRow icon="business-outline" label="Account type" value={roleLabel(supplier.role)} styles={styles} themeColors={themeColors} />
+          <DetailRow icon="home-outline" label="Main listing" value={selectedProperty.title} styles={styles} themeColors={themeColors} />
         </View>
 
         <View style={styles.listingSection}>
@@ -195,7 +251,7 @@ export default function SupplierProfileScreen() {
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat({ value, label, styles }: { value: string; label: string; styles: any }) {
   return (
     <View style={styles.stat}>
       <Text style={styles.statValue}>{value}</Text>
@@ -204,11 +260,11 @@ function Stat({ value, label }: { value: string; label: string }) {
   );
 }
 
-function DetailRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
+function DetailRow({ icon, label, value, styles, themeColors }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; styles: any; themeColors: any }) {
   return (
     <View style={styles.detailRow}>
       <View style={styles.detailIcon}>
-        <Ionicons name={icon} size={17} color={colors.accent} />
+        <Ionicons name={icon} size={17} color={themeColors.accent} />
       </View>
       <View style={styles.detailCopy}>
         <Text style={styles.detailLabel}>{label}</Text>
@@ -301,54 +357,3 @@ function imageFor(property?: Property) {
   return "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1000&q=80&auto=format&fit=crop";
 }
 
-const styles = StyleSheet.create({
-  content: { paddingBottom: spacing.xl, backgroundColor: colors.background },
-  profileHeader: { backgroundColor: colors.surface },
-  cover: { height: 142, justifyContent: "flex-start", padding: 12, backgroundColor: colors.border },
-  coverShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(17,19,21,0.22)" },
-  backButton: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(17,19,21,0.68)" },
-  identityBlock: { paddingHorizontal: 14, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
-  avatar: { width: 76, height: 76, borderRadius: 38, overflow: "hidden", alignItems: "center", justifyContent: "center", marginTop: -38, borderWidth: 4, borderColor: colors.surface, backgroundColor: colors.text },
-  avatarImage: { width: "100%", height: "100%" },
-  avatarText: { color: "#FFFFFF", fontSize: 24, ...typography.display },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
-  nameCopy: { flex: 1, minWidth: 0 },
-  verifiedNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  name: { flexShrink: 1, color: colors.text, fontSize: 23, lineHeight: 29, ...typography.display },
-  handle: { color: colors.textMuted, fontSize: 12, marginTop: 2, ...typography.label },
-  followButton: { minHeight: 34, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 16, backgroundColor: colors.accent },
-  followButtonActive: { borderColor: colors.accent, backgroundColor: "transparent" },
-  followText: { color: "#FFFFFF", fontSize: 12, ...typography.button },
-  followTextActive: { color: colors.accent },
-  bio: { color: colors.text, fontSize: 13, lineHeight: 20, marginTop: 12, ...typography.body },
-  notice: { color: colors.success, fontSize: 12, marginTop: 8, ...typography.label },
-  actionRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 13 },
-  primaryAction: { flex: 1, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 8, backgroundColor: colors.accent },
-  primaryText: { color: colors.accentText, fontSize: 13, ...typography.button },
-  iconAction: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  statsBand: { flexDirection: "row", alignItems: "center", marginTop: 10, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  stat: { flex: 1, minHeight: 62, alignItems: "center", justifyContent: "center", gap: 2 },
-  statValue: { color: colors.text, fontSize: 16, ...typography.title },
-  statLabel: { color: colors.textMuted, fontSize: 10, textTransform: "uppercase", ...typography.label },
-  detailSection: { paddingHorizontal: 14, paddingVertical: 14, gap: 10, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
-  sectionTitle: { color: colors.text, fontSize: 17, lineHeight: 22, ...typography.title },
-  detailRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  detailIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.accentSoft },
-  detailCopy: { flex: 1, minWidth: 0 },
-  detailLabel: { color: colors.text, fontSize: 12, ...typography.label },
-  detailValue: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 1, ...typography.body },
-  listingSection: { paddingHorizontal: 14, paddingTop: 14, gap: 10 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sectionMeta: { color: colors.success, fontSize: 12, ...typography.button },
-  listingItem: { minHeight: 86, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: 8, backgroundColor: colors.surface, ...shadows.soft },
-  listingImage: { width: 72, height: 66, borderRadius: 8, overflow: "hidden", justifyContent: "flex-end", alignItems: "flex-start", padding: 6, backgroundColor: colors.border },
-  videoBadge: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(17,19,21,0.78)" },
-  listingCopy: { flex: 1, minWidth: 0, gap: 3 },
-  listingTitle: { color: colors.text, fontSize: 14, ...typography.title },
-  listingMeta: { color: colors.textMuted, fontSize: 12, ...typography.body },
-  listingTrust: { color: colors.success, fontSize: 11, ...typography.label },
-  missingCard: { flex: 1, margin: spacing.lg, alignItems: "flex-start", justifyContent: "center", borderRadius: radius.lg, padding: spacing.lg, gap: 8, backgroundColor: colors.surfaceElevated, ...shadows.card },
-  missingTitle: { color: colors.text, fontSize: 20, ...typography.title },
-  missingBody: { color: colors.textMuted, lineHeight: 20, ...typography.body },
-  homeLink: { color: colors.accent, marginTop: 4, ...typography.button },
-});

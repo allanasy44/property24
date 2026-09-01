@@ -2,19 +2,58 @@ import { Link, useLocalSearchParams } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, radius, shadows, spacing, typography } from "../../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../../constants/theme";
 import { Screen } from "../../components/Screen";
 import { useRentalPlatform } from "../../state/rentalPlatform";
 
 export default function PropertyDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { state, addApplication, addViewing, authError, authUser, hasCapability, account } = useRentalPlatform();
+  const { colors: themeColors } = useTheme();
   const [notice, setNotice] = useState("");
   const property = state.properties.find((entry) => entry.id === id);
   const canApply = hasCapability("apply_for_rentals");
   const canMessage = hasCapability("message_landlord_or_agent") || hasCapability("message_tenants") || hasCapability("message_clients");
   const lifecycle = usePropertyLifecycle(state, property?.id, authUser?.id, authUser?.name);
   const isTenant = account.accountType === "tenant";
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        content: { padding: spacing.lg, gap: spacing.md, backgroundColor: themeColors.background },
+        hero: { backgroundColor: themeColors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.sm, ...shadows.card },
+        badge: { color: themeColors.success, backgroundColor: themeColors.successSoft, alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, ...typography.button },
+        title: { color: themeColors.text, fontSize: 28, lineHeight: 34, ...typography.display },
+        meta: { color: themeColors.textMuted, ...typography.body },
+        address: { color: themeColors.text, ...typography.label },
+        price: { color: themeColors.accent, fontSize: 26, lineHeight: 31, marginTop: 6, ...typography.display },
+        deposit: { color: themeColors.textMuted, ...typography.label },
+        description: { color: themeColors.textMuted, lineHeight: 22, ...typography.body },
+        mediaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+        detailPill: { backgroundColor: themeColors.background, color: themeColors.text, borderWidth: 1, borderColor: themeColors.border, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, fontSize: 12, ...typography.label },
+        gpsCard: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: themeColors.background, borderRadius: radius.lg, paddingHorizontal: 12, paddingVertical: 10 },
+        gpsText: { color: themeColors.textMuted, ...typography.body },
+        lifecycleCard: { backgroundColor: themeColors.surfaceElevated, borderRadius: radius.lg, borderWidth: 1, borderColor: themeColors.border, padding: spacing.md, gap: spacing.sm, marginTop: spacing.sm },
+        lifecycleTitle: { color: themeColors.text, fontSize: 16, ...typography.title },
+        lifecycleText: { color: themeColors.textMuted, fontSize: 12, lineHeight: 18, ...typography.body },
+        stepStack: { gap: 8 },
+        stepRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+        stepText: { flex: 1, color: themeColors.textMuted, fontSize: 12, ...typography.label },
+        stepTextDone: { color: themeColors.text },
+        actionStack: { gap: spacing.sm, marginTop: spacing.sm },
+        finalActionRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+        primaryAction: { overflow: "hidden", backgroundColor: themeColors.accent, color: themeColors.accentText, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, textAlign: "center", ...typography.button },
+        secondaryButton: { backgroundColor: themeColors.surface, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: themeColors.border },
+        secondaryText: { color: themeColors.text, textAlign: "center", ...typography.button },
+        secondaryLink: { overflow: "hidden", backgroundColor: themeColors.surface, color: themeColors.text, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: themeColors.border, textAlign: "center", ...typography.button },
+        notice: { color: themeColors.success, lineHeight: 18, ...typography.label },
+        errorText: { color: themeColors.warning, lineHeight: 18, ...typography.label },
+        readOnlyNote: { flex: 1, color: themeColors.textMuted, lineHeight: 20, ...typography.body },
+        missingCard: { flex: 1, margin: spacing.lg, backgroundColor: themeColors.surfaceElevated, borderRadius: radius.lg, padding: spacing.lg, gap: 8, ...shadows.card },
+        missingTitle: { color: themeColors.text, fontSize: 20, ...typography.title },
+        missingBody: { color: themeColors.textMuted, lineHeight: 20, ...typography.body },
+      }),
+    [themeColors]
+  );
 
   if (!property) {
     return (
@@ -54,17 +93,17 @@ export default function PropertyDetailScreen() {
           <Text style={styles.description}>{property.description}</Text>
 
           <View style={styles.mediaRow}>
-            <DetailPill label={`${property.bedrooms} bedrooms`} />
-            <DetailPill label={`${property.bathrooms} bathrooms`} />
-            <DetailPill label={property.furnished} />
-            <DetailPill label={`${property.videoCount} videos`} />
-            <DetailPill label={property.tourAvailable ? "360 tour ready" : "360 tour future"} />
-            <DetailPill label={property.type} />
-            <DetailPill label={property.water} />
-            <DetailPill label={property.solarPower ? "Solar power" : "No solar"} />
-            <DetailPill label={property.borehole ? "Borehole" : "No borehole"} />
-            <DetailPill label={property.petFriendly ? "Pet friendly" : "No pets"} />
-            <DetailPill label={`${property.applicationsCount ?? 0} applications`} />
+            <DetailPill label={`${property.bedrooms} bedrooms`} styles={styles} />
+            <DetailPill label={`${property.bathrooms} bathrooms`} styles={styles} />
+            <DetailPill label={property.furnished} styles={styles} />
+            <DetailPill label={`${property.videoCount} videos`} styles={styles} />
+            <DetailPill label={property.tourAvailable ? "360 tour ready" : "360 tour future"} styles={styles} />
+            <DetailPill label={property.type} styles={styles} />
+            <DetailPill label={property.water} styles={styles} />
+            <DetailPill label={property.solarPower ? "Solar power" : "No solar"} styles={styles} />
+            <DetailPill label={property.borehole ? "Borehole" : "No borehole"} styles={styles} />
+            <DetailPill label={property.petFriendly ? "Pet friendly" : "No pets"} styles={styles} />
+            <DetailPill label={`${property.applicationsCount ?? 0} applications`} styles={styles} />
           </View>
 
           <View style={styles.gpsCard}>
@@ -72,7 +111,7 @@ export default function PropertyDetailScreen() {
             <Text style={styles.gpsText}>{property.gps}</Text>
           </View>
 
-          {isTenant ? <LifecyclePanel lifecycle={lifecycle} /> : null}
+          {isTenant ? <LifecyclePanel lifecycle={lifecycle} styles={styles} themeColors={themeColors} /> : null}
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
           {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
 
@@ -121,7 +160,7 @@ function usePropertyLifecycle(state: ReturnType<typeof useRentalPlatform>["state
   }, [propertyId, state.applications, state.leases, state.viewings, userId, userName]);
 }
 
-function LifecyclePanel({ lifecycle }: { lifecycle: ReturnType<typeof usePropertyLifecycle> }) {
+function LifecyclePanel({ lifecycle, styles, themeColors }: { lifecycle: ReturnType<typeof usePropertyLifecycle>; styles: any; themeColors: any }) {
   const steps = [
     { label: "Request and physically complete viewing", done: lifecycle.viewed, active: !lifecycle.viewing },
     { label: "Apply only after viewing", done: lifecycle.applicationApproved, active: lifecycle.viewed && !lifecycle.application },
@@ -129,14 +168,14 @@ function LifecyclePanel({ lifecycle }: { lifecycle: ReturnType<typeof usePropert
     { label: "Signed active lease unlocks payment", done: Boolean(lifecycle.activeLease), active: lifecycle.applicationApproved && !lifecycle.activeLease },
   ];
   return (
-    <View style={styles.lifecycleCard}>
-      <Text style={styles.lifecycleTitle}>Safe rental flow</Text>
-      <Text style={styles.lifecycleText}>No deposit or repair request should happen from an advert alone. The app needs proof of viewing, approval, and lease status.</Text>
+    <View style={[styles.lifecycleCard, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }] }>
+      <Text style={[styles.lifecycleTitle, { color: themeColors.text }]}>Safe rental flow</Text>
+      <Text style={[styles.lifecycleText, { color: themeColors.textMuted }]}>No deposit or repair request should happen from an advert alone. The app needs proof of viewing, approval, and lease status.</Text>
       <View style={styles.stepStack}>
         {steps.map((step) => (
           <View key={step.label} style={styles.stepRow}>
-            <Ionicons name={step.done ? "checkmark-circle" : step.active ? "radio-button-on" : "ellipse-outline"} size={16} color={step.done ? colors.success : step.active ? colors.accent : colors.textMuted} />
-            <Text style={[styles.stepText, step.done && styles.stepTextDone]}>{step.label}</Text>
+            <Ionicons name={step.done ? "checkmark-circle" : step.active ? "radio-button-on" : "ellipse-outline"} size={16} color={step.done ? themeColors.success : step.active ? themeColors.accent : themeColors.textMuted} />
+            <Text style={[styles.stepText, step.done && styles.stepTextDone, { color: step.done ? themeColors.text : themeColors.textMuted }]}>{step.label}</Text>
           </View>
         ))}
       </View>
@@ -156,41 +195,7 @@ function isStatus(value: string, expected: string) {
   return value.toLowerCase().replace(/\s+/g, "_") === expected;
 }
 
-function DetailPill({ label }: { label: string }) {
+function DetailPill({ label, styles }: { label: string; styles: any }) {
   return <Text style={styles.detailPill}>{label}</Text>;
 }
 
-const styles = StyleSheet.create({
-  content: { padding: spacing.lg, gap: spacing.md },
-  hero: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.sm, ...shadows.card },
-  badge: { color: colors.success, backgroundColor: colors.successSoft, alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, ...typography.button },
-  title: { color: colors.text, fontSize: 28, lineHeight: 34, ...typography.display },
-  meta: { color: colors.textMuted, ...typography.body },
-  address: { color: colors.text, ...typography.label },
-  price: { color: colors.accent, fontSize: 26, lineHeight: 31, marginTop: 6, ...typography.display },
-  deposit: { color: colors.textMuted, ...typography.label },
-  description: { color: colors.textMuted, lineHeight: 22, ...typography.body },
-  mediaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
-  detailPill: { backgroundColor: colors.background, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, fontSize: 12, ...typography.label },
-  gpsCard: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.background, borderRadius: radius.lg, paddingHorizontal: 12, paddingVertical: 10 },
-  gpsText: { color: colors.textMuted, ...typography.body },
-  lifecycleCard: { backgroundColor: "#0B0B0B", borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.sm, marginTop: spacing.sm },
-  lifecycleTitle: { color: colors.text, fontSize: 16, ...typography.title },
-  lifecycleText: { color: colors.textMuted, fontSize: 12, lineHeight: 18, ...typography.body },
-  stepStack: { gap: 8 },
-  stepRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  stepText: { flex: 1, color: colors.textMuted, fontSize: 12, ...typography.label },
-  stepTextDone: { color: colors.text },
-  actionStack: { gap: spacing.sm, marginTop: spacing.sm },
-  finalActionRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  primaryAction: { overflow: "hidden", backgroundColor: colors.accent, color: colors.accentText, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, textAlign: "center", ...typography.button },
-  secondaryButton: { backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
-  secondaryText: { color: colors.text, textAlign: "center", ...typography.button },
-  secondaryLink: { overflow: "hidden", backgroundColor: colors.surface, color: colors.text, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border, textAlign: "center", ...typography.button },
-  notice: { color: colors.success, lineHeight: 18, ...typography.label },
-  errorText: { color: colors.warning, lineHeight: 18, ...typography.label },
-  readOnlyNote: { flex: 1, color: colors.textMuted, lineHeight: 20, ...typography.body },
-  missingCard: { flex: 1, margin: spacing.lg, backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.lg, gap: 8, ...shadows.card },
-  missingTitle: { color: colors.text, fontSize: 20, ...typography.title },
-  missingBody: { color: colors.textMuted, lineHeight: 20, ...typography.body },
-});

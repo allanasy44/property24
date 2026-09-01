@@ -51,6 +51,10 @@ const darkPalette = {
 };
 
 export const colors = { ...lightPalette };
+export const themePalettes = {
+  light: lightPalette,
+  dark: darkPalette,
+} as const;
 
 export type ThemeContextValue = {
   mode: ThemeMode;
@@ -65,6 +69,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemMode = useColorScheme() === "dark" ? "dark" : "light";
   const [mode, setMode] = useState<ThemeMode>(systemMode);
+  const activePalette = useMemo(() => (mode === "dark" ? darkPalette : lightPalette), [mode]);
 
   useEffect(() => {
     let isMounted = true;
@@ -87,20 +92,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [systemMode]);
 
   useEffect(() => {
-    const palette = mode === "dark" ? darkPalette : lightPalette;
     Object.keys(colors).forEach((key) => {
       const typedKey = key as keyof typeof colors;
-      colors[typedKey] = palette[typedKey];
+      colors[typedKey] = activePalette[typedKey];
     });
     AsyncStorage.setItem(THEME_STORAGE_KEY, mode).catch(() => undefined);
-  }, [mode]);
+  }, [activePalette, mode]);
 
   const value = useMemo<ThemeContextValue>(() => ({
     mode,
-    colors: colors as typeof colors,
+    colors: { ...activePalette } as typeof colors,
     toggleTheme: () => setMode((current) => (current === "dark" ? "light" : "dark")),
     setThemeMode: (nextMode) => setMode(nextMode),
-  }), [mode]);
+  }), [activePalette, mode]);
 
   return React.createElement(ThemeContext.Provider, { value }, children);
 }

@@ -82,7 +82,8 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, profileSt
             <Text style={styles.greetingTitle}>{greeting}, {displayName}</Text>
           </View>
           <Pressable onPress={toggleTheme} style={[styles.avatarBadge, { backgroundColor: themeColors.accentSoft, borderColor: themeColors.border }]}>
-            <Ionicons name={mode === "dark" ? "moon-outline" : "sunny-outline"} size={16} color={themeColors.accentStrong} />          </Pressable>
+            <Ionicons name={mode === "dark" ? "moon-outline" : "sunny-outline"} size={16} color={themeColors.accentStrong} />
+          </Pressable>
         </View>
 
         <View style={styles.filterRail}>
@@ -100,9 +101,9 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, profileSt
           <ImageBackground source={{ uri: featuredImage }} resizeMode="cover" style={styles.featureImage}>
             <View style={styles.featureGradient} />
             <View style={styles.featureHeaderRow}>
-              <View style={styles.featureBadge}><Text style={styles.featureBadgeText}>Featured</Text></View>
-              <View style={styles.featureMetaBadge}>
-                <Ionicons name="shield-checkmark" size={13} color={colors.success} />
+                  <View style={[styles.featureBadge, { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.28)" }]}><Text style={styles.featureBadgeText}>Featured</Text></View>
+              <View style={[styles.featureMetaBadge, { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.28)" }]}>
+                <Ionicons name="shield-checkmark" size={13} color={themeColors.success} />
                 <Text style={styles.featureMetaText}>{featured.verified ? "Verified" : "Review"}</Text>
               </View>
             </View>
@@ -112,7 +113,7 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, profileSt
                 <Text style={styles.featureTitle}>{featured.title}</Text>
                 <Text style={styles.featureLocation}>{featured.city || "Harare, Zimbabwe"}</Text>
               </View>
-              <View style={styles.priceBubble}>
+              <View style={[styles.priceBubble, { backgroundColor: "rgba(255,255,255,0.14)", borderColor: "rgba(255,255,255,0.30)" }]}>
                 <Text style={styles.priceBubbleText}>{featured.price || "$450,000"}</Text>
               </View>
             </View>
@@ -257,8 +258,8 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
       <ScrollView contentContainerStyle={[styles.tenantContent, { backgroundColor: themeColors.background }]} showsVerticalScrollIndicator={false}>
         <View style={styles.tenantTopBar}>
           <View>
-            <Text style={styles.tenantKicker}>{formatDashboardTime(now)} · Tenant workspace</Text>
-            <Text style={styles.tenantTitle}>{greeting}, {displayName}</Text>
+            <Text style={[styles.tenantKicker, { color: themeColors.textMuted }]}>{formatDashboardTime(now)} · Tenant workspace</Text>
+            <Text style={[styles.tenantTitle, { color: themeColors.text }]}>{greeting}, {displayName}</Text>
           </View>
           <Pressable onPress={toggleTheme} style={[styles.avatarBadge, { backgroundColor: themeColors.accentSoft, borderColor: themeColors.border }]}>
             <Ionicons name={mode === "dark" ? "moon-outline" : "sunny-outline"} size={16} color={themeColors.accentStrong} />
@@ -266,8 +267,8 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
         </View>
 
         <View style={styles.filterRail}>
-          <View style={[styles.filterChip, styles.filterChipActive]}>
-            <Text style={[styles.filterChipText, styles.filterChipTextActive]}>Overview</Text>
+          <View style={[styles.filterChip, styles.filterChipActive, { backgroundColor: themeColors.accent, borderColor: themeColors.accent }]}>
+            <Text style={[styles.filterChipText, styles.filterChipTextActive, { color: themeColors.accentText }]}>Overview</Text>
           </View>
         </View>
 
@@ -284,7 +285,7 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
             />
             {query ? (
               <Pressable onPress={() => setQuery("")} hitSlop={10}>
-                <Ionicons name="close-circle" size={18} color={colors.muted} />
+                <Ionicons name="close-circle" size={18} color={themeColors.muted} />
               </Pressable>
             ) : (
               <Ionicons name="options-outline" size={18} color={themeColors.text} />
@@ -292,13 +293,13 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
           </View>
 
           <View style={styles.tenantFilterRow}>
-            <View style={[styles.tenantFilterChip, styles.tenantFilterChipActive]}>
-              <Ionicons name="shield-checkmark-outline" size={15} color={colors.accent} />
-              <Text style={[styles.tenantFilterText, styles.tenantFilterTextActive]}>Verified suppliers</Text>
+            <View style={[styles.tenantFilterChip, styles.tenantFilterChipActive, { backgroundColor: themeColors.accentSoft, borderColor: themeColors.accent }]}>
+              <Ionicons name="shield-checkmark-outline" size={15} color={themeColors.accent} />
+              <Text style={[styles.tenantFilterText, styles.tenantFilterTextActive, { color: themeColors.accent }]}>Verified suppliers</Text>
             </View>
-            <View style={styles.tenantRentInputWrap}>
-              <Text style={styles.tenantCurrency}>$</Text>
-              <TextInput value={maxRent} onChangeText={setMaxRent} keyboardType="number-pad" placeholder="Max rent" placeholderTextColor={colors.textMuted} style={styles.tenantRentInput} />
+            <View style={[styles.tenantRentInputWrap, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }]}>
+              <Text style={[styles.tenantCurrency, { color: themeColors.text }]}>$</Text>
+              <TextInput value={maxRent} onChangeText={setMaxRent} keyboardType="number-pad" placeholder="Max rent" placeholderTextColor={themeColors.textMuted} style={[styles.tenantRentInput, { color: themeColors.text }]} />
             </View>
           </View>
 
@@ -309,18 +310,18 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.tenantHorizontalFilters}
             renderItem={({ item }) => (
-              <Pressable onPress={() => setSelectedType(item)} style={[styles.tenantTypeChip, selectedType === item && styles.tenantTypeChipActive]}>
-                <Text style={[styles.tenantTypeText, selectedType === item && styles.tenantTypeTextActive]}>{shortType(item)}</Text>
+              <Pressable onPress={() => setSelectedType(item)} style={[styles.tenantTypeChip, selectedType === item && styles.tenantTypeChipActive, selectedType === item && { backgroundColor: themeColors.accent, borderColor: themeColors.accent }]}>
+                <Text style={[styles.tenantTypeText, selectedType === item && styles.tenantTypeTextActive, { color: selectedType === item ? themeColors.accentText : themeColors.textMuted }]}>{shortType(item)}</Text>
               </Pressable>
             )}
           />
 
           <View style={styles.tenantBedroomBlock}>
-            <Text style={styles.tenantFilterLabel}>Bedrooms</Text>
+            <Text style={[styles.tenantFilterLabel, { color: themeColors.textMuted }]}>Bedrooms</Text>
             <View style={styles.tenantBedroomChips}>
               {bedroomFilters.map((item) => (
-                <Pressable key={item} onPress={() => setBedrooms(item)} style={[styles.tenantBedroomChip, bedrooms === item && styles.tenantBedroomChipActive]}>
-                  <Text style={[styles.tenantBedroomText, bedrooms === item && styles.tenantBedroomTextActive]}>{item}</Text>
+                <Pressable key={item} onPress={() => setBedrooms(item)} style={[styles.tenantBedroomChip, bedrooms === item && styles.tenantBedroomChipActive, bedrooms === item && { backgroundColor: themeColors.accentSoft, borderColor: themeColors.accent }]}>
+                  <Text style={[styles.tenantBedroomText, bedrooms === item && styles.tenantBedroomTextActive, { color: bedrooms === item ? themeColors.accent : themeColors.textMuted }]}>{item}</Text>
                 </Pressable>
               ))}
             </View>
@@ -369,26 +370,26 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
           <TrustPill icon="receipt" label="Rent history" />
         </View>
 
-        <View style={styles.tenantStatusPanel}>
+        <View style={[styles.tenantStatusPanel, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }]}>
           <View style={styles.statusMetric}>
-            <Text style={styles.statusValue}>{verified ? "Verified" : "Pending"}</Text>
-            <Text style={styles.statusLabel}>Profile checks</Text>
+            <Text style={[styles.statusValue, { color: themeColors.text }]}>{verified ? "Verified" : "Pending"}</Text>
+            <Text style={[styles.statusLabel, { color: themeColors.textMuted }]}>Profile checks</Text>
           </View>
-          <View style={styles.statusDivider} />
+          <View style={[styles.statusDivider, { backgroundColor: themeColors.border }]} />
           <View style={styles.statusMetric}>
-            <Text style={styles.statusValue}>{state.applications.length}</Text>
-            <Text style={styles.statusLabel}>Applications</Text>
+            <Text style={[styles.statusValue, { color: themeColors.text }]}>{state.applications.length}</Text>
+            <Text style={[styles.statusLabel, { color: themeColors.textMuted }]}>Applications</Text>
           </View>
-          <View style={styles.statusDivider} />
+          <View style={[styles.statusDivider, { backgroundColor: themeColors.border }]} />
           <View style={styles.statusMetric}>
-            <Text style={styles.statusValue}>{openMaintenance}</Text>
-            <Text style={styles.statusLabel}>Maintenance</Text>
+            <Text style={[styles.statusValue, { color: themeColors.text }]}>{openMaintenance}</Text>
+            <Text style={[styles.statusLabel, { color: themeColors.textMuted }]}>Maintenance</Text>
           </View>
         </View>
 
         <View style={styles.tenantSectionRow}>
-          <Text style={styles.tenantSectionTitle}>Available house posts</Text>
-          <Text style={styles.tenantSeeAll}>{filteredProperties.length} homes</Text>
+          <Text style={[styles.tenantSectionTitle, { color: themeColors.text }]}>Available house posts</Text>
+          <Text style={[styles.tenantSeeAll, { color: themeColors.accent }]}>{filteredProperties.length} homes</Text>
         </View>
         <View style={styles.propertyStack}>
           {featured.length ? (
