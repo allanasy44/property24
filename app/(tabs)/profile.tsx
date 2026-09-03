@@ -5,7 +5,7 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import { ImageBackground, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Screen } from "../../components/Screen";
-import { colors, radius, shadows, spacing, typography } from "../../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../../constants/theme";
 import { AccountMediaFile, AccountRole, useRentalPlatform } from "../../state/rentalPlatform";
 
 type SettingsRowProps = {
@@ -22,6 +22,9 @@ type PhotoTarget = "profile" | "cover";
 type ProfileTextTarget = "name" | "about";
 
 export default function ProfileScreen() {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const { account, authUser, authLoading, authError, signOut, updateAccountProfile } = useRentalPlatform();
   const [nameDraft, setNameDraft] = useState(authUser?.name || "");
   const [bioDraft, setBioDraft] = useState(authUser?.bio || "");
@@ -256,6 +259,9 @@ export default function ProfileScreen() {
 }
 
 function EditField({ children, icon, label }: { children: React.ReactNode; icon: keyof typeof Ionicons.glyphMap; label: string }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <View style={styles.editField}>
       <Ionicons name={icon} size={21} color={colors.textMuted} />
@@ -268,6 +274,7 @@ function EditField({ children, icon, label }: { children: React.ReactNode; icon:
 }
 
 function SettingsGroup({ children, title }: { children: React.ReactNode; title?: string }) {
+  const styles = createStyles(useTheme().colors);
   return (
     <View style={styles.groupWrap}>
       {title ? <Text style={styles.groupLabel}>{title}</Text> : null}
@@ -277,6 +284,7 @@ function SettingsGroup({ children, title }: { children: React.ReactNode; title?:
 }
 
 function FocusedTextEditor({ onChangeText, onDone, target, value }: { onChangeText: (value: string) => void; onDone: () => void; target: ProfileTextTarget; value: string }) {
+  const styles = createStyles(useTheme().colors);
   const isAbout = target === "about";
   return (
     <View style={styles.focusEditor}>
@@ -304,6 +312,7 @@ function FocusedTextEditor({ onChangeText, onDone, target, value }: { onChangeTe
 }
 
 function EditableTextRow({ active, emptyText, onEdit, value }: { active: boolean; emptyText: string; onEdit: () => void; value: string }) {
+  const styles = createStyles(useTheme().colors);
   const textValue = value.trim();
   return (
     <View style={[styles.aboutDisplayRow, active && styles.editableRowActive]}>
@@ -316,6 +325,9 @@ function EditableTextRow({ active, emptyText, onEdit, value }: { active: boolean
 }
 
 function PhotoActionSheet({ hasPhoto, onClose, onPick, onRemove, target, visible }: { hasPhoto: boolean; onClose: () => void; onPick: (target: PhotoTarget) => void; onRemove: (target: PhotoTarget) => void; target: PhotoTarget | null; visible: boolean }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   if (!target) return null;
   const title = target === "cover" ? "Cover photo" : "Profile photo";
 
@@ -345,6 +357,9 @@ function PhotoActionSheet({ hasPhoto, onClose, onPick, onRemove, target, visible
 }
 
 function ProfileHeroContent({ accountType, bio, email, name, phone, profilePicture, verified }: { accountType: AccountRole; bio?: string; email?: string; name?: string; phone?: string; profilePicture: string; verified: boolean }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <View style={styles.profileHeroShade}>
       <View style={styles.avatarLarge}>
@@ -374,6 +389,9 @@ function ProfileHeroContent({ accountType, bio, email, name, phone, profilePictu
 }
 
 function SettingsRow({ disabled, href, icon, meta, onPress, title, tone = "default" }: SettingsRowProps) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const router = useRouter();
   const handlePress = () => {
     if (onPress) {
@@ -437,7 +455,9 @@ function isErrorNotice(value: string) {
   return normalized.includes("could not") || normalized.includes("failed") || normalized.includes("required");
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  const colors = themeColors;
+  return StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.md, backgroundColor: colors.background },
   settingsHeader: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   screenTitle: { color: colors.text, fontSize: 24, lineHeight: 29, ...typography.display },
@@ -527,4 +547,5 @@ const styles = StyleSheet.create({
   sheetDangerText: { color: colors.danger },
   sheetCancel: { minHeight: 46, alignItems: "center", justifyContent: "center", borderRadius: radius.md, marginTop: 4, backgroundColor: colors.background },
   sheetCancelText: { color: colors.text, fontSize: 14, ...typography.button },
-});
+  });
+}

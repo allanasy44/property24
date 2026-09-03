@@ -6,10 +6,13 @@ import { AccessGuard } from "../components/AccessGuard";
 import { Screen } from "../components/Screen";
 import { SectionHeader } from "../components/SectionHeader";
 import { verificationChecks } from "../constants/content";
-import { colors, radius, shadows, spacing, typography } from "../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../constants/theme";
 import { AccountMediaFile, AccountRole, useRentalPlatform } from "../state/rentalPlatform";
 
 export default function VerificationScreen() {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const { state, account, authUser, authError, authLoading, reviewVerification, hasCapability, submitVerification, extractVerificationId } = useRentalPlatform();
   const isAdmin = hasCapability("verify_users");
   const [notice, setNotice] = useState("");
@@ -184,6 +187,9 @@ export default function VerificationScreen() {
 }
 
 function EvidenceButton({ done, icon, label, onPress }: { done: boolean; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <Pressable onPress={onPress} style={[styles.evidenceButton, done && styles.evidenceButtonDone]}>
       <Ionicons name={done ? "checkmark-circle" : icon} size={18} color={done ? colors.success : colors.accent} />
@@ -204,6 +210,9 @@ function imageAssetToUpload(asset: ImagePicker.ImagePickerAsset, label: string):
 }
 
 function Toggle({ label, value, onPress }: { label: string; value: boolean; onPress: () => void }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <Pressable onPress={onPress} style={[styles.toggle, value && styles.toggleActive]}>
       <Ionicons name={value ? "checkmark-circle" : "ellipse-outline"} size={18} color={value ? colors.accent : colors.textMuted} />
@@ -217,7 +226,9 @@ function roleLabel(role: AccountRole) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  const colors = themeColors;
+  return StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg },
   hero: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.sm, ...shadows.card },
   kicker: { color: colors.accent, ...typography.label },
@@ -256,4 +267,5 @@ const styles = StyleSheet.create({
   requirementRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   requirementText: { color: colors.text, flex: 1, ...typography.body },
   empty: { color: colors.textMuted, ...typography.body },
-});
+  });
+}

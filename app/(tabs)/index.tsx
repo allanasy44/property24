@@ -44,6 +44,7 @@ type DashboardPanel = {
 
 function RoleDashboard({ role, state, stats, visibleActions, userName, profileStatus, verified, themeColors }: { role: Exclude<AccountRole, "tenant">; state: RentalPlatformState; stats: ReturnType<typeof useRentalPlatformStats>; visibleActions: typeof quickActions; userName?: string; profileStatus?: string; verified: boolean; themeColors: typeof colors }) {
   const { mode, toggleTheme } = useTheme();
+  const styles = createStyles(themeColors);
   const [now, setNow] = useState(new Date());
   const dashboard = getRoleDashboard(role, state, stats);
   const statusText = verified ? "Verified account" : profileStatus === "account_ready" ? "Basic account" : "Verification pending";
@@ -122,15 +123,15 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, profileSt
 
         <View style={styles.featureDetailRow}>
           <View style={styles.featureDetailPill}>
-            <Ionicons name="bed-outline" size={14} color={colors.textMuted} />
+            <Ionicons name="bed-outline" size={14} color={themeColors.textMuted} />
             <Text style={styles.featureDetailText}>{featured.bedrooms || 3} beds</Text>
           </View>
           <View style={styles.featureDetailPill}>
-            <Ionicons name="water-outline" size={14} color={colors.textMuted} />
+            <Ionicons name="water-outline" size={14} color={themeColors.textMuted} />
             <Text style={styles.featureDetailText}>{featured.borehole ? "Borehole" : featured.water || "Mains water"}</Text>
           </View>
           <View style={styles.featureDetailPill}>
-            <Ionicons name="flash-outline" size={14} color={colors.textMuted} />
+            <Ionicons name="flash-outline" size={14} color={themeColors.textMuted} />
             <Text style={styles.featureDetailText}>{featured.solarPower ? "Solar" : featured.power || "Grid"}</Text>
           </View>
         </View>
@@ -139,7 +140,7 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, profileSt
           {dashboard.metrics.map((metric) => (
             <View key={metric.label} style={styles.metricCard}>
               <View style={styles.metricCardTop}>
-                <Ionicons name={metric.icon} size={18} color={colors.accentStrong} />
+                <Ionicons name={metric.icon} size={18} color={themeColors.accentStrong} />
                 <Text style={styles.metricCardValue}>{metric.value}</Text>
               </View>
               <Text style={styles.metricLabel}>{metric.label}</Text>
@@ -220,6 +221,7 @@ function getRoleDashboard(role: Exclude<AccountRole, "tenant">, state: RentalPla
 
 function TenantHome({ state, visibleActions, userName, verified, themeColors }: { state: ReturnType<typeof useRentalPlatform>["state"]; visibleActions: typeof quickActions; userName?: string; verified: boolean; themeColors: typeof colors }) {
   const { mode, toggleTheme } = useTheme();
+  const styles = createStyles(themeColors);
   const [now, setNow] = useState(new Date());
   const tenantVisibleProperties = useMemo(() => state.properties.filter(isVerifiedSupplierListing), [state.properties]);
   const verifiedCount = tenantVisibleProperties.length;
@@ -352,7 +354,7 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
                 </ImageBackground>
                 ) : (
                   <View style={[styles.storyImage, styles.storyImageEmpty]}>
-                    <Ionicons name="image-outline" size={14} color={colors.textMuted} />
+                    <Ionicons name="image-outline" size={14} color={themeColors.textMuted} />
                   </View>
                 )}
                 <View style={styles.storyCopy}>
@@ -410,13 +412,13 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
             <Link key={action.title} href={action.href} asChild>
               <Pressable style={styles.tenantActionItem}>
                 <View style={styles.tenantActionIcon}>
-                  <Ionicons name={action.icon as keyof typeof Ionicons.glyphMap} size={18} color={colors.text} />
+                  <Ionicons name={action.icon as keyof typeof Ionicons.glyphMap} size={18} color={themeColors.text} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.tenantActionTitle}>{action.title}</Text>
                   <Text style={styles.tenantActionSubtitle} numberOfLines={1}>{action.subtitle}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+                <Ionicons name="chevron-forward" size={17} color={themeColors.muted} />
               </Pressable>
             </Link>
           ))}
@@ -427,9 +429,11 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
 }
 
 function TrustPill({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   return (
     <View style={styles.trustPill}>
-      <Ionicons name={icon} size={14} color={colors.success} />
+      <Ionicons name={icon} size={14} color={themeColors.success} />
       <Text style={styles.trustPillText}>{label}</Text>
     </View>
   );
@@ -469,7 +473,9 @@ function storyImage(photo?: string) {
   return photo?.startsWith("http") ? photo : "";
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  const colors = themeColors;
+  return StyleSheet.create({
   landlordContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: spacing.xl, gap: 12, backgroundColor: colors.background },
   landlordTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
   timeStamp: { color: colors.muted, fontSize: 12, ...typography.label },
@@ -520,12 +526,12 @@ const styles = StyleSheet.create({
   filterPillTextActive: { color: "#ffffff" },
   featuredCard: { backgroundColor: colors.surfaceElevated, borderRadius: 32, borderWidth: 1, borderColor: colors.border, padding: 22, gap: 14, ...shadows.card },
   featuredTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  badgeForSale: { backgroundColor: "#eef2ff", borderRadius: 40, paddingHorizontal: 14, paddingVertical: 5 },
-  badgeText: { color: "#1e293b", fontSize: 12, fontWeight: "500" },
+  badgeForSale: { backgroundColor: colors.accentSoft, borderRadius: 40, paddingHorizontal: 14, paddingVertical: 5 },
+  badgeText: { color: colors.accentStrong, fontSize: 12, fontWeight: "500" },
   featuredPriceText: { color: colors.textMuted, fontSize: 14, ...typography.body },
   priceRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
   priceLarge: { color: colors.text, fontSize: 30, lineHeight: 35, ...typography.display },
-  estimateText: { color: "#475569", fontSize: 14, ...typography.body },
+  estimateText: { color: colors.textMuted, fontSize: 14, ...typography.body },
   propertyAddress: { color: colors.text, fontSize: 16, ...typography.body },
   detailRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   detailText: { color: colors.text, fontSize: 13, ...typography.body },
@@ -535,10 +541,10 @@ const styles = StyleSheet.create({
   detailLabel: { color: colors.textMuted, fontSize: 11, ...typography.label },
   detailValue: { color: colors.text, fontSize: 14, marginTop: 4, ...typography.body },
   primaryActionsRow: { flexDirection: "row", gap: 12 },
-  primaryButton: { flex: 1, minHeight: 46, borderRadius: 999, backgroundColor: "#1e293b", alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
-  primaryButtonText: { color: "#ffffff", fontSize: 14, fontWeight: "500" },
-  secondaryButton: { flex: 1, minHeight: 46, borderRadius: 999, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#e2e8f0", alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
-  secondaryButtonText: { color: "#1e293b", fontSize: 14, fontWeight: "500" },
+  primaryButton: { flex: 1, minHeight: 46, borderRadius: 999, backgroundColor: colors.accent, alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
+  primaryButtonText: { color: colors.accentText, fontSize: 14, fontWeight: "500" },
+  secondaryButton: { flex: 1, minHeight: 46, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
+  secondaryButtonText: { color: colors.text, fontSize: 14, fontWeight: "500" },
   sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4 },
   sectionTitle: { color: colors.text, fontSize: 17, ...typography.title },
   sectionAction: { color: colors.accent, fontSize: 12, ...typography.label },
@@ -669,4 +675,5 @@ const styles = StyleSheet.create({
   trustCard: { flexGrow: 1, minWidth: "46%", backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: 8, ...shadows.soft },
   trustTitle: { color: colors.text, fontSize: 15, ...typography.title },
   trustDescription: { color: colors.textMuted, lineHeight: 20, fontSize: 13, ...typography.body },
-});
+  });
+}

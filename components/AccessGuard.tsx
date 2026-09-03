@@ -2,7 +2,7 @@ import { Link } from "expo-router";
 import { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, radius, shadows, spacing, typography } from "../constants/theme";
+import { radius, shadows, spacing, typography, useTheme } from "../constants/theme";
 import { AccountRole, useRentalPlatform } from "../state/rentalPlatform";
 import { Screen } from "./Screen";
 
@@ -14,6 +14,15 @@ type AccessGuardProps = {
 
 export function AccessGuard({ section, roles, children }: AccessGuardProps) {
   const { account, canAccessSection } = useRentalPlatform();
+  const { colors } = useTheme();
+  const styles = StyleSheet.create({
+    wrap: { flex: 1, padding: spacing.lg, justifyContent: "center" },
+    card: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.md, alignItems: "flex-start", ...shadows.card },
+    iconWrap: { width: 48, height: 48, borderRadius: 16, backgroundColor: colors.accentSoft, alignItems: "center", justifyContent: "center" },
+    title: { color: colors.text, fontSize: 22, lineHeight: 28, ...typography.display },
+    body: { color: colors.textMuted, lineHeight: 22, ...typography.body },
+    action: { color: colors.accent, ...typography.button },
+  });
   const allowedByRole = !roles || roles.includes(account.accountType);
 
   if (allowedByRole && canAccessSection(section)) {
@@ -39,12 +48,3 @@ export function AccessGuard({ section, roles, children }: AccessGuardProps) {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { flex: 1, padding: spacing.lg, justifyContent: "center" },
-  card: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.md, alignItems: "flex-start", ...shadows.card },
-  iconWrap: { width: 48, height: 48, borderRadius: 16, backgroundColor: colors.accentSoft, alignItems: "center", justifyContent: "center" },
-  title: { color: colors.text, fontSize: 22, lineHeight: 28, ...typography.display },
-  body: { color: colors.textMuted, lineHeight: 22, ...typography.body },
-  action: { color: colors.accent, ...typography.button },
-});

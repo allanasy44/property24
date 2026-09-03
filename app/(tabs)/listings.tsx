@@ -6,13 +6,16 @@ import { ActivityIndicator, ImageBackground, Modal, Pressable, ScrollView, Style
 import { AccessGuard } from "../../components/AccessGuard";
 import { PropertyCard } from "../../components/PropertyCard";
 import { Screen } from "../../components/Screen";
-import { colors, radius, shadows, spacing, typography } from "../../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../../constants/theme";
 import { AccountMediaFile, AuthUser, useRentalPlatform } from "../../state/rentalPlatform";
 
 const propertyTypes = ["House", "Flat", "Cottage", "Student accommodation", "Commercial property"];
 const maxPhotos = 10;
 
 export default function ListingsScreen() {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const { state, addProperty, updateProperty, deleteProperty, authUser, authLoading, authError, createLandlordAgent, fetchLandlordAgents, hasCapability } = useRentalPlatform();
   const canCreateListing = hasCapability("add_properties") || hasCapability("list_properties");
   const canCreateAgents = authUser?.role === "landlord" && Boolean(authUser?.verified) && hasCapability("create_agents");
@@ -460,7 +463,7 @@ export default function ListingsScreen() {
               visibleProperties.map((property) => (
                 <View key={property.id} style={styles.propertyCardShell}>
                   <View style={styles.propertyStatusHeader}>
-                    <View style={styles.statusIdentity}><View style={[styles.statusDot, { backgroundColor: listingStatusColor(listingStatus(property, state.leases)) }]} /><Text style={styles.statusName}>{listingStatusLabel(listingStatus(property, state.leases))}</Text></View>
+                    <View style={styles.statusIdentity}><View style={[styles.statusDot, { backgroundColor: listingStatusColor(listingStatus(property, state.leases), colors) }]} /><Text style={styles.statusName}>{listingStatusLabel(listingStatus(property, state.leases))}</Text></View>
                     <View style={styles.flagRow}>
                       {editedListingIds.includes(property.id) ? <Text style={styles.editedFlag}>Edited</Text> : null}
                       {property.verified ? <Text style={styles.verifiedFlag}>Verified</Text> : <Text style={styles.reviewFlag}>Review</Text>}
@@ -497,6 +500,9 @@ export default function ListingsScreen() {
 }
 
 function CounterRow({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const numericValue = Number(value) || 1;
   return (
     <View style={styles.counterRow}>
@@ -507,6 +513,9 @@ function CounterRow({ label, value, onChange }: { label: string; value: string; 
 }
 
 function Input({ autoCapitalize, label, multiline, keyboardType, secureTextEntry, value, onChangeText }: { autoCapitalize?: "none" | "sentences" | "words" | "characters"; label: string; multiline?: boolean; keyboardType?: "default" | "number-pad" | "email-address" | "phone-pad"; secureTextEntry?: boolean; value: string; onChangeText: (value: string) => void }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <View style={{ flex: 1, gap: 6 }}>
       <Text style={styles.inputLabel}>{label}</Text>
@@ -525,6 +534,7 @@ function Input({ autoCapitalize, label, multiline, keyboardType, secureTextEntry
 }
 
 function ToggleChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  const styles = createStyles(useTheme().colors);
   return (
     <Pressable onPress={onPress} style={[styles.optionChip, active && styles.optionChipActive]}>
       <Text style={[styles.optionText, active && styles.optionTextActive]}>{label}</Text>
@@ -533,6 +543,7 @@ function ToggleChip({ label, active, onPress }: { label: string; active: boolean
 }
 
 function IntakeStep({ number, label, active = false }: { number: string; label: string; active?: boolean }) {
+  const styles = createStyles(useTheme().colors);
   return (
     <View style={styles.intakeStep}>
       <View style={[styles.stepNumber, active && styles.stepNumberActive]}>
@@ -587,11 +598,13 @@ function listingStatusLabel(status: "vacant" | "occupied" | "pending") {
   return status === "occupied" ? "Occupied" : status === "pending" ? "Needs review" : "Vacant";
 }
 
-function listingStatusColor(status: "vacant" | "occupied" | "pending") {
-  return status === "occupied" ? colors.info : status === "pending" ? colors.warning : colors.success;
+function listingStatusColor(status: "vacant" | "occupied" | "pending", themeColors: typeof colors) {
+  return status === "occupied" ? themeColors.info : status === "pending" ? themeColors.warning : themeColors.success;
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  const colors = themeColors;
+  return StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.md, backgroundColor: colors.background },
   header: { gap: spacing.sm, marginBottom: spacing.sm },
   headerTopLine: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
@@ -729,4 +742,5 @@ const styles = StyleSheet.create({
   deletedName: { color: colors.text, fontSize: 12, ...typography.button },
   deletedMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2, ...typography.body },
   deletedFlag: { color: colors.danger, fontSize: 10, ...typography.label },
-});
+  });
+}

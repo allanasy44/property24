@@ -2,11 +2,13 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Screen } from "../components/Screen";
 import { SectionHeader } from "../components/SectionHeader";
 import { MetricCard } from "../components/MetricCard";
-import { colors, radius, shadows, spacing, typography } from "../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../constants/theme";
 import { useRentalPlatform, useRentalPlatformStats } from "../state/rentalPlatform";
 import { AccessGuard } from "../components/AccessGuard";
 
 export default function AnalyticsScreen() {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   const { state } = useRentalPlatform();
   const stats = useRentalPlatformStats();
   const rentalIncome = state.payments.reduce((total, payment) => total + parseMoney(payment.amount), 0);
@@ -75,17 +77,19 @@ function parseMoney(value: string) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  return StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg },
-  hero: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.sm, ...shadows.card },
-  kicker: { color: colors.accent, ...typography.label },
-  title: { color: colors.text, fontSize: 28, lineHeight: 34, ...typography.display },
-  subtitle: { color: colors.textMuted, lineHeight: 22, ...typography.body },
+  hero: { backgroundColor: themeColors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.sm, ...shadows.card },
+  kicker: { color: themeColors.accent, ...typography.label },
+  title: { color: themeColors.text, fontSize: 28, lineHeight: 34, ...typography.display },
+  subtitle: { color: themeColors.textMuted, lineHeight: 22, ...typography.body },
   summaryRow: { flexDirection: "row", gap: spacing.sm },
-  summaryCard: { flex: 1, backgroundColor: colors.surfaceElevated, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md, ...shadows.soft },
-  summaryLabel: { color: colors.textMuted, fontSize: 10, ...typography.label },
-  summaryValue: { color: colors.text, fontSize: 20, marginTop: 6, ...typography.display },
+  summaryCard: { flex: 1, backgroundColor: themeColors.surfaceElevated, borderRadius: radius.md, borderWidth: 1, borderColor: themeColors.border, padding: spacing.md, ...shadows.soft },
+  summaryLabel: { color: themeColors.textMuted, fontSize: 10, ...typography.label },
+  summaryValue: { color: themeColors.text, fontSize: 20, marginTop: 6, ...typography.display },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  reportCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: 8, ...shadows.soft },
-  reportItem: { color: colors.text, lineHeight: 20, ...typography.body },
-});
+  reportCard: { backgroundColor: themeColors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: 8, ...shadows.soft },
+  reportItem: { color: themeColors.text, lineHeight: 20, ...typography.body },
+  });
+}

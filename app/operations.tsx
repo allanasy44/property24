@@ -5,12 +5,14 @@ import { Screen } from "../components/Screen";
 import { SectionHeader } from "../components/SectionHeader";
 import { LiveFeed } from "../components/LiveFeed";
 import { RoleChip } from "../components/RoleChip";
-import { colors, radius, shadows, spacing, typography } from "../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../constants/theme";
 import { journeyPoints, roleCards } from "../constants/content";
 import { useRentalPlatform, useRentalPlatformStats } from "../state/rentalPlatform";
 import { AccessGuard } from "../components/AccessGuard";
 
 export default function OperationsScreen() {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   const [clock, setClock] = useState(new Date());
   const { state } = useRentalPlatform();
   const stats = useRentalPlatformStats();
@@ -38,7 +40,7 @@ export default function OperationsScreen() {
               <Text style={styles.title}>Everything in one mobile control center.</Text>
             </View>
             <View style={styles.clockBadge}>
-              <Ionicons name="pulse" size={16} color={colors.success} />
+              <Ionicons name="pulse" size={16} color={themeColors.success} />
               <Text style={styles.clockText}>{clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</Text>
             </View>
           </View>
@@ -73,22 +75,24 @@ export default function OperationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  return StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg },
-  hero: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.md, ...shadows.card },
+  hero: { backgroundColor: themeColors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.md, ...shadows.card },
   heroTop: { flexDirection: "row", justifyContent: "space-between", gap: spacing.md },
-  kicker: { color: colors.accent, marginBottom: 6, ...typography.label },
-  title: { color: colors.text, fontSize: 30, lineHeight: 36, maxWidth: 270, ...typography.display },
-  subtitle: { color: colors.textMuted, lineHeight: 22, ...typography.body },
-  clockBadge: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", backgroundColor: colors.successSoft, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999 },
-  clockText: { color: colors.success, ...typography.label },
+  kicker: { color: themeColors.accent, marginBottom: 6, ...typography.label },
+  title: { color: themeColors.text, fontSize: 30, lineHeight: 36, maxWidth: 270, ...typography.display },
+  subtitle: { color: themeColors.textMuted, lineHeight: 22, ...typography.body },
+  clockBadge: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", backgroundColor: themeColors.successSoft, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999 },
+  clockText: { color: themeColors.success, ...typography.label },
   roleGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  metricCard: { width: "48%", backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: 4, ...shadows.soft },
-  metricLabel: { color: colors.textMuted, ...typography.label },
-  metricValue: { color: colors.text, fontSize: 24, lineHeight: 29, ...typography.display },
+  metricCard: { width: "48%", backgroundColor: themeColors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: 4, ...shadows.soft },
+  metricLabel: { color: themeColors.textMuted, ...typography.label },
+  metricValue: { color: themeColors.text, fontSize: 24, lineHeight: 29, ...typography.display },
   metricChange: { ...typography.label },
-  warning: { color: colors.warning },
-  success: { color: colors.success },
-  info: { color: colors.info },
-});
+  warning: { color: themeColors.warning },
+  success: { color: themeColors.success },
+  info: { color: themeColors.info },
+  });
+}

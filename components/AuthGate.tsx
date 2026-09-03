@@ -4,7 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as WebBrowser from "expo-web-browser";
 import { ComponentProps, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, BackHandler, Easing, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
-import { colors, spacing, typography } from "../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../constants/theme";
 import { AccountMediaFile, AccountRole, PublicAccountRole, useRentalPlatform } from "../state/rentalPlatform";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -29,6 +29,9 @@ const passwordMaxLength = 128;
 const passwordControlCharPattern = /[\x00-\x1F\x7F]/;
 
 export function AuthGate({ children }: AuthGateProps) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const { ready, authUser, authToken, authError, authLoading, account, signIn, registerAccount, googleSignIn, sendVerificationEmailOtp, verifyVerificationEmailOtp } = useRentalPlatform();
   const { width } = useWindowDimensions();
   const compact = width < 680;
@@ -201,7 +204,7 @@ export function AuthGate({ children }: AuthGateProps) {
                 <View style={[styles.roleGrid, compact && styles.roleGridCompact]}>
                   {publicRoles.map((role) => (
                     <Pressable key={role} onPress={() => setAccountType(role)} style={[styles.roleCard, compact && styles.roleCardCompact, accountType === role && styles.roleCardActive]}>
-                      <Ionicons name={roleIcon(role)} size={compact ? 14 : 16} color={accountType === role ? "#E50914" : "#A3A3A3"} />
+                      <Ionicons name={roleIcon(role)} size={compact ? 14 : 16} color={accountType === role ? colors.accent : colors.textMuted} />
                       <Text style={[styles.roleTitle, compact && styles.roleTitleCompact]}>{roleLabel(role)}</Text>
                     </Pressable>
                   ))}
@@ -235,7 +238,7 @@ export function AuthGate({ children }: AuthGateProps) {
                 maxLength={passwordMaxLength}
                 rightAccessory={
                   <Pressable onPress={() => setShowPassword((value) => !value)} hitSlop={10} style={styles.eyeButton}>
-                    <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#B3B3B3" />
+                    <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={colors.textMuted} />
                   </Pressable>
                 }
               />
@@ -253,7 +256,7 @@ export function AuthGate({ children }: AuthGateProps) {
                   maxLength={passwordMaxLength}
                   rightAccessory={
                     <Pressable onPress={() => setShowConfirmPassword((value) => !value)} hitSlop={10} style={styles.eyeButton}>
-                      <Ionicons name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#B3B3B3" />
+                      <Ionicons name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} size={20} color={colors.textMuted} />
                     </Pressable>
                   }
                 />
@@ -322,6 +325,9 @@ function AccountOnboardingGate({
   sendEmailOtp: ReturnType<typeof useRentalPlatform>["sendVerificationEmailOtp"];
   verifyEmailOtp: ReturnType<typeof useRentalPlatform>["verifyVerificationEmailOtp"];
 }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const [emailChallengeId, setEmailChallengeId] = useState("");
   const [emailOtp, setEmailOtp] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -424,19 +430,25 @@ function AccountOnboardingGate({
 }
 
 function ComplianceCheck({ checked, label, onPress }: { checked: boolean; label: string; onPress: () => void }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <Pressable onPress={onPress} style={[styles.complianceRow, checked && styles.complianceRowActive]}>
-      <Ionicons name={checked ? "checkbox" : "square-outline"} size={20} color={checked ? "#E50914" : "#A3A3A3"} />
+      <Ionicons name={checked ? "checkbox" : "square-outline"} size={20} color={checked ? colors.accent : colors.textMuted} />
       <Text style={styles.complianceText}>{label}</Text>
     </Pressable>
   );
 }
 
 function VerificationScreenCard({ children, icon, title }: { children: ReactNode; icon: keyof typeof Ionicons.glyphMap; title: string }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <View style={styles.verificationScreenCard}>
       <View style={styles.verificationIconCircle}>
-        <Ionicons name={icon} size={30} color="#E50914" />
+        <Ionicons name={icon} size={30} color={colors.accent} />
       </View>
       <Text style={styles.verificationScreenTitle}>{title}</Text>
       <View style={styles.verificationScreenBody}>{children}</View>
@@ -445,6 +457,9 @@ function VerificationScreenCard({ children, icon, title }: { children: ReactNode
 }
 
 function CaptureScreen({ button, done, icon, onPress, title }: { button: string; done: boolean; icon: keyof typeof Ionicons.glyphMap; onPress: () => void; title: string }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <VerificationScreenCard title={title} icon={done ? "checkmark-circle" : icon}>
       <View style={[styles.captureFrame, done && styles.captureFrameDone]}>
@@ -458,6 +473,9 @@ function CaptureScreen({ button, done, icon, onPress, title }: { button: string;
 }
 
 function StatusPill({ done, label }: { done: boolean; label: string }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <View style={[styles.statusPill, done && styles.statusPillDone]}>
       <Ionicons name={done ? "checkmark-circle" : "ellipse-outline"} size={16} color={done ? colors.success : colors.textMuted} />
@@ -492,6 +510,9 @@ function imageAssetToVerificationUpload(asset: ImagePicker.ImagePickerAsset, lab
 }
 
 function PostLoginIntro({ onDone }: { onDone: () => void }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const opacity = useRef(new Animated.Value(1)).current;
   const wordScale = useRef(new Animated.Value(1.08)).current;
   const barScale = useRef(new Animated.Value(0)).current;
@@ -547,6 +568,9 @@ function PostLoginIntro({ onDone }: { onDone: () => void }) {
 }
 
 function Field(props: ComponentProps<typeof TextInput> & { compact?: boolean; icon: keyof typeof Ionicons.glyphMap; rightAccessory?: ReactNode }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const { compact, icon, rightAccessory, style, ...rest } = props;
   return (
     <View style={[styles.field, compact && styles.fieldCompact]}>
@@ -554,27 +578,16 @@ function Field(props: ComponentProps<typeof TextInput> & { compact?: boolean; ic
         autoCorrect={false}
         spellCheck={false}
         importantForAutofill="yes"
-        cursorColor="#E50914"
-        placeholderTextColor="#8C8C8C"
-        selectionColor="#E50914"
-        style={[styles.input, webInputChrome, compact && styles.inputCompact, style]}
+        cursorColor={colors.accent}
+        placeholderTextColor={colors.textMuted}
+        selectionColor={colors.accent}
+        style={[styles.input, Platform.OS === "web" && ({ boxShadow: "none", caretColor: colors.accent, outlineColor: "transparent", outlineStyle: "none", WebkitAppearance: "none", WebkitBoxShadow: `0 0 0 1000px ${colors.surface} inset`, WebkitTextFillColor: colors.text } as any), compact && styles.inputCompact, style]}
         {...rest}
       />
       {rightAccessory}
     </View>
   );
 }
-
-const webInputChrome = Platform.OS === "web" ? ({
-  backgroundColor: "transparent",
-  boxShadow: "none",
-  caretColor: "#E50914",
-  outlineColor: "transparent",
-  outlineStyle: "none",
-  WebkitAppearance: "none",
-  WebkitBoxShadow: "0 0 0 1000px #171717 inset",
-  WebkitTextFillColor: "#FFFFFF",
-} as any) : null;
 
 function roleLabel(role: AccountRole) {
   return role.charAt(0).toUpperCase() + role.slice(1);
@@ -589,49 +602,51 @@ function isValidDocumentNumber(value: string) {
   return /^[A-Za-z0-9][A-Za-z0-9\-/ ]{4,63}$/.test(value.trim());
 }
 
-const styles = StyleSheet.create({
-  loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#000000" },
-  wrap: { flex: 1, backgroundColor: "#000000" },
-  content: { flexGrow: 1, minHeight: "100%", alignItems: "center", justifyContent: "center", paddingHorizontal: 14, paddingVertical: 22, backgroundColor: "#000000" },
+function createStyles(themeColors: typeof colors) {
+  const colors = themeColors;
+  return StyleSheet.create({
+  loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
+  wrap: { flex: 1, backgroundColor: colors.background },
+  content: { flexGrow: 1, minHeight: "100%", alignItems: "center", justifyContent: "center", paddingHorizontal: 14, paddingVertical: 22, backgroundColor: colors.background },
   contentCompact: { justifyContent: "center", paddingHorizontal: 14, paddingTop: 22, paddingBottom: 22 },
-  verificationContent: { flexGrow: 1, minHeight: "100%", alignItems: "center", justifyContent: "center", paddingHorizontal: 14, paddingVertical: 22, backgroundColor: "#000000" },
+  verificationContent: { flexGrow: 1, minHeight: "100%", alignItems: "center", justifyContent: "center", paddingHorizontal: 14, paddingVertical: 22, backgroundColor: colors.background },
   verificationPanel: { width: "100%", maxWidth: 430, borderRadius: 2, paddingHorizontal: 22, paddingVertical: 28, gap: 12, backgroundColor: "rgba(0,0,0,0.82)" },
-  verificationCopy: { color: "#B3B3B3", fontSize: 13, lineHeight: 18, ...typography.body },
+  verificationCopy: { color: colors.textMuted, fontSize: 13, lineHeight: 18, ...typography.body },
   verificationBrandCenter: { width: "100%", textAlign: "center", alignSelf: "center", marginBottom: 2 },
   verificationScreenCard: { minHeight: 430, justifyContent: "center", gap: 14 },
   verificationIconCircle: { alignSelf: "center", width: 74, height: 74, borderRadius: 37, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(229,9,20,0.34)", backgroundColor: "rgba(229,9,20,0.10)" },
-  verificationScreenTitle: { color: "#FFFFFF", fontSize: 24, lineHeight: 30, textAlign: "center", ...typography.display },
+  verificationScreenTitle: { color: colors.text, fontSize: 24, lineHeight: 30, textAlign: "center", ...typography.display },
   verificationScreenBody: { gap: 10 },
-  stageBackButton: { position: "absolute", top: 26, left: 16, zIndex: 5, width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "#171717", borderWidth: 1, borderColor: "#292929" },
-  otpSentTo: { color: "#B3B3B3", fontSize: 13, textAlign: "center", ...typography.label },
+  stageBackButton: { position: "absolute", top: 26, left: 16, zIndex: 5, width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border },
+  otpSentTo: { color: colors.textMuted, fontSize: 13, textAlign: "center", ...typography.label },
   otpCountdownBox: { alignSelf: "center", minWidth: 92, minHeight: 46, alignItems: "center", justifyContent: "center", borderRadius: 23, borderWidth: 1, borderColor: "rgba(229,9,20,0.38)", backgroundColor: "rgba(229,9,20,0.10)" },
-  otpCountdownText: { color: "#FFFFFF", fontSize: 19, ...typography.title },
+  otpCountdownText: { color: colors.text, fontSize: 19, ...typography.title },
   stageButtonMuted: { opacity: 0.55 },
   captureStatusRow: { flexDirection: "row", gap: 8 },
-  statusPill: { flex: 1, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 4, borderWidth: 1, borderColor: "#242424", backgroundColor: "#171717" },
+  statusPill: { flex: 1, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 4, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
   statusPillDone: { borderColor: "rgba(70,211,105,0.48)", backgroundColor: "rgba(70,211,105,0.08)" },
-  statusPillText: { color: "#FFFFFF", fontSize: 13, ...typography.label },
+  statusPillText: { color: colors.text, fontSize: 13, ...typography.label },
   choiceStack: { gap: 7 },
-  optionRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 9, borderWidth: 1, borderColor: "#242424", borderRadius: 4, paddingHorizontal: 12, backgroundColor: "#111111" },
+  optionRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 9, borderWidth: 1, borderColor: colors.border, borderRadius: 4, paddingHorizontal: 12, backgroundColor: colors.surfaceMuted },
   optionRowActive: { borderColor: "rgba(229,9,20,0.62)", backgroundColor: "rgba(229,9,20,0.12)" },
-  optionRowText: { flex: 1, minWidth: 0, color: "#FFFFFF", fontSize: 13, ...typography.label },
-  complianceRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 9, borderWidth: 1, borderColor: "#242424", borderRadius: 4, paddingHorizontal: 12, backgroundColor: "#111111" },
+  optionRowText: { flex: 1, minWidth: 0, color: colors.text, fontSize: 13, ...typography.label },
+  complianceRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 9, borderWidth: 1, borderColor: colors.border, borderRadius: 4, paddingHorizontal: 12, backgroundColor: colors.surfaceMuted },
   complianceRowActive: { borderColor: "rgba(229,9,20,0.55)", backgroundColor: "rgba(229,9,20,0.10)" },
-  complianceText: { flex: 1, minWidth: 0, color: "#FFFFFF", fontSize: 12, lineHeight: 17, ...typography.body },
+  complianceText: { flex: 1, minWidth: 0, color: colors.text, fontSize: 12, lineHeight: 17, ...typography.body },
 
-  shell: { width: "100%", maxWidth: 430, flexDirection: "column", borderRadius: 2, overflow: "hidden", paddingHorizontal: 22, paddingVertical: 28, backgroundColor: "rgba(0,0,0,0.76)" },
-  shellCompact: { maxWidth: 430, flexDirection: "column", borderRadius: 2, paddingHorizontal: 22, paddingVertical: 28 },
+  shell: { width: "100%", maxWidth: 430, flexDirection: "column", borderRadius: radius.xl, overflow: "hidden", paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border, ...shadows.card },
+  shellCompact: { maxWidth: 430, flexDirection: "column", borderRadius: radius.xl, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
   identityPanel: { flex: 0, minWidth: 0, flexDirection: "column", alignItems: "flex-start", justifyContent: "flex-start", paddingHorizontal: 0, paddingTop: 0, paddingBottom: 22, gap: 6, backgroundColor: "transparent" },
   identityPanelCompact: { flex: 0, minWidth: 0, flexDirection: "column", alignItems: "flex-start", justifyContent: "flex-start", paddingHorizontal: 0, paddingVertical: 0, gap: 6 },
   brandMark: { display: "none" },
   brandMarkCompact: { display: "none" },
   identityCopy: { flex: 1, minWidth: 0, gap: 4 },
   identityCopyCompact: { gap: 2 },
-  brand: { color: "#E50914", fontSize: 24, lineHeight: 29, textTransform: "uppercase", ...typography.display },
+  brand: { color: colors.accent, fontSize: 24, lineHeight: 29, textTransform: "uppercase", ...typography.display },
   brandCompact: { fontSize: 24, lineHeight: 29 },
-  headline: { color: "#FFFFFF", fontSize: 28, lineHeight: 34, maxWidth: 330, marginTop: 10, ...typography.display },
+  headline: { color: colors.text, fontSize: 28, lineHeight: 34, maxWidth: 330, marginTop: 10, ...typography.display },
   headlineCompact: { fontSize: 28, lineHeight: 34, maxWidth: 330, marginTop: 10 },
-  subhead: { color: "#B3B3B3", fontSize: 13, lineHeight: 18, maxWidth: 300, ...typography.body },
+  subhead: { color: colors.textMuted, fontSize: 13, lineHeight: 18, maxWidth: 300, ...typography.body },
   subheadCompact: { fontSize: 13, lineHeight: 18, maxWidth: 300 },
   rail: { display: "none" },
   railItem: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 24 },
@@ -641,85 +656,85 @@ const styles = StyleSheet.create({
   formPanelCompact: { flex: 0, minWidth: 0, paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0, gap: 10 },
   roleGrid: { flexDirection: "row", flexWrap: "nowrap", gap: 6 },
   roleGridCompact: { flexWrap: "nowrap", gap: 6 },
-  roleCard: { flex: 1, minHeight: 38, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, borderWidth: 1, borderColor: "#333333", borderRadius: 4, paddingHorizontal: 6, paddingVertical: 7, backgroundColor: "#191919" },
+  roleCard: { flex: 1, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 6, paddingVertical: 7, backgroundColor: colors.surfaceMuted },
   roleCardCompact: { flex: 1, minHeight: 38, paddingHorizontal: 6, paddingVertical: 7, gap: 4 },
-  roleCardActive: { borderColor: "#E50914", backgroundColor: "rgba(229,9,20,0.16)" },
-  roleTitle: { color: "#FFFFFF", fontSize: 11, ...typography.button },
+  roleCardActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  roleTitle: { color: colors.text, fontSize: 11, ...typography.button },
   roleTitleCompact: { fontSize: 11 },
   googleRoleWrap: { gap: 7 },
-  googleRoleLabel: { color: "#A3A3A3", fontSize: 11, lineHeight: 14, textTransform: "uppercase", ...typography.label },
+  googleRoleLabel: { color: colors.textMuted, fontSize: 11, lineHeight: 14, textTransform: "uppercase", ...typography.label },
   form: { gap: 10 },
-  field: { minHeight: 50, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#242424", borderRadius: 4, paddingHorizontal: 13, backgroundColor: "#171717" },
-  fieldCompact: { minHeight: 50, borderRadius: 4, paddingHorizontal: 13 },
-  input: { flex: 1, minWidth: 0, color: "#FFFFFF", fontSize: 14, backgroundColor: "transparent", outlineStyle: "none" as any, ...typography.body },
+  field: { minHeight: 50, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 13, backgroundColor: colors.background },
+  fieldCompact: { minHeight: 50, borderRadius: radius.md, paddingHorizontal: 13 },
+  input: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, backgroundColor: "transparent", outlineStyle: "none" as any, ...typography.body },
   eyeButton: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
   inputCompact: { fontSize: 14 },
-  error: { color: "#FFA00A", lineHeight: 20, fontSize: 12, ...typography.label },
-  noticeText: { color: "#46D369", lineHeight: 20, fontSize: 12, ...typography.label },
-  verifyToggle: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: 9, borderRadius: 4, borderWidth: 1, borderColor: "#242424", paddingHorizontal: 13, backgroundColor: "#171717" },
-  verifyToggleActive: { borderColor: "#E50914", backgroundColor: "rgba(229,9,20,0.14)" },
-  verifyToggleText: { flex: 1, minWidth: 0, color: "#FFFFFF", fontSize: 13, ...typography.label },
+  error: { color: colors.danger, lineHeight: 20, fontSize: 12, ...typography.label },
+  noticeText: { color: colors.success, lineHeight: 20, fontSize: 12, ...typography.label },
+  verifyToggle: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: 9, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 13, backgroundColor: colors.surfaceMuted },
+  verifyToggleActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  verifyToggleText: { flex: 1, minWidth: 0, color: colors.text, fontSize: 13, ...typography.label },
   verificationStep: { gap: 8 },
-  stepTitle: { color: "#A3A3A3", fontSize: 11, textTransform: "uppercase", ...typography.label },
+  stepTitle: { color: colors.textMuted, fontSize: 11, textTransform: "uppercase", ...typography.label },
   stepActions: { gap: 8 },
-  stepButton: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 4, borderWidth: 1, borderColor: "#333333", backgroundColor: "#171717" },
-  stepButtonDone: { borderColor: "#E50914", backgroundColor: "rgba(229,9,20,0.14)" },
-  stepButtonText: { color: "#FFFFFF", fontSize: 13, ...typography.button },
-  stepBadge: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(229,9,20,0.18)" },
-  stepBadgeText: { color: "#E50914", fontSize: 12, ...typography.button },
-  stageCard: { borderWidth: 1, borderColor: "#242424", borderRadius: 6, backgroundColor: "#0F0F0F", padding: 12, gap: 10 },
+  stepButton: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
+  stepButtonDone: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  stepButtonText: { color: colors.text, fontSize: 13, ...typography.button },
+  stepBadge: { width: 24, height: 24, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.accentSoft },
+  stepBadgeText: { color: colors.accent, fontSize: 12, ...typography.button },
+  stageCard: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.surfaceElevated, padding: 12, gap: 10 },
   stageHeader: { gap: 3, marginBottom: 2 },
-  stageEyebrow: { color: "#E50914", fontSize: 11, textTransform: "uppercase", ...typography.label },
-  stageTitle: { color: "#FFFFFF", fontSize: 18, lineHeight: 23, ...typography.title },
-  stageSubtitle: { color: "#B3B3B3", fontSize: 12, lineHeight: 17, ...typography.body },
-  stagePrimaryButton: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 4, borderWidth: 1, borderColor: "#333333", backgroundColor: "#171717" },
-  stagePrimaryText: { color: "#FFFFFF", fontSize: 14, ...typography.button },
+  stageEyebrow: { color: colors.accent, fontSize: 11, textTransform: "uppercase", ...typography.label },
+  stageTitle: { color: colors.text, fontSize: 18, lineHeight: 23, ...typography.title },
+  stageSubtitle: { color: colors.textMuted, fontSize: 12, lineHeight: 17, ...typography.body },
+  stagePrimaryButton: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
+  stagePrimaryText: { color: colors.text, fontSize: 14, ...typography.button },
   progressRail: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginVertical: 2 },
-  progressItem: { minHeight: 34, maxWidth: "48%", flexGrow: 1, flexBasis: "30%", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#242424", borderRadius: 4, paddingHorizontal: 7, backgroundColor: "#111111" },
-  progressItemActive: { borderColor: "#E50914", backgroundColor: "rgba(229,9,20,0.12)" },
-  progressItemDone: { borderColor: "rgba(70,211,105,0.42)" },
+  progressItem: { minHeight: 34, maxWidth: "48%", flexGrow: 1, flexBasis: "30%", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 7, backgroundColor: colors.surfaceMuted },
+  progressItemActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  progressItemDone: { borderColor: colors.success },
   progressItemLocked: { opacity: 0.42 },
-  progressDot: { width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#242424" },
-  progressDotActive: { backgroundColor: "#E50914" },
-  progressDotDone: { backgroundColor: "#46D369" },
-  progressDotText: { color: "#FFFFFF", fontSize: 10, ...typography.button },
-  progressText: { flex: 1, minWidth: 0, color: "#A3A3A3", fontSize: 11, ...typography.label },
-  progressTextActive: { color: "#FFFFFF" },
+  progressDot: { width: 20, height: 20, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.border },
+  progressDotActive: { backgroundColor: colors.accent },
+  progressDotDone: { backgroundColor: colors.success },
+  progressDotText: { color: colors.accentText, fontSize: 10, ...typography.button },
+  progressText: { flex: 1, minWidth: 0, color: colors.textMuted, fontSize: 11, ...typography.label },
+  progressTextActive: { color: colors.text },
   stageNavRow: { flexDirection: "row", gap: 8 },
-  stageNavButton: { flex: 1, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 4, borderWidth: 1, borderColor: "#333333", backgroundColor: "#171717" },
+  stageNavButton: { flex: 1, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
   stageNavButtonDisabled: { opacity: 0.35 },
-  stageNavText: { color: "#FFFFFF", fontSize: 13, ...typography.button },
-  captureFrame: { minHeight: 138, alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: "#242424", borderRadius: 6, backgroundColor: "#070707" },
+  stageNavText: { color: colors.text, fontSize: 13, ...typography.button },
+  captureFrame: { minHeight: 138, alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.background },
   captureFrameDone: { borderColor: "rgba(70,211,105,0.5)", backgroundColor: "rgba(70,211,105,0.08)" },
-  captureFrameText: { color: "#FFFFFF", fontSize: 13, ...typography.label },
-  extractedBox: { borderWidth: 1, borderColor: "#242424", borderRadius: 4, backgroundColor: "#171717", padding: 12, gap: 4 },
-  extractedLabel: { color: "#A3A3A3", fontSize: 11, textTransform: "uppercase", ...typography.label },
-  extractedValue: { color: "#FFFFFF", fontSize: 16, ...typography.title },
-  reviewStack: { borderWidth: 1, borderColor: "#242424", borderRadius: 6, overflow: "hidden" },
-  reviewRowItem: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: "#242424", paddingHorizontal: 10, backgroundColor: "#111111" },
-  reviewRowText: { color: "#FFFFFF", fontSize: 13, ...typography.label },
+  captureFrameText: { color: colors.text, fontSize: 13, ...typography.label },
+  extractedBox: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surfaceMuted, padding: 12, gap: 4 },
+  extractedLabel: { color: colors.textMuted, fontSize: 11, textTransform: "uppercase", ...typography.label },
+  extractedValue: { color: colors.text, fontSize: 16, ...typography.title },
+  reviewStack: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, overflow: "hidden" },
+  reviewRowItem: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: colors.border, paddingHorizontal: 10, backgroundColor: colors.surfaceMuted },
+  reviewRowText: { color: colors.text, fontSize: 13, ...typography.label },
     otpHint: { color: "#B3B3B3", fontSize: 12, lineHeight: 17, textAlign: "center", ...typography.body },
   switchPrompt: { minHeight: 32, flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap" },
-  switchMuted: { color: "#737373", fontSize: 14, lineHeight: 19, ...typography.body },
-  switchAction: { color: "#FFFFFF", fontSize: 14, lineHeight: 19, ...typography.button },
-  submitButton: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 4, backgroundColor: "#E50914" },
+  switchMuted: { color: colors.textMuted, fontSize: 14, lineHeight: 19, ...typography.body },
+  switchAction: { color: colors.accent, fontSize: 14, lineHeight: 19, ...typography.button },
+  submitButton: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: colors.accent, ...shadows.soft },
   submitButtonDisabled: { opacity: 0.45 },
-  submitText: { color: "#FFFFFF", fontSize: 16, ...typography.button },
+  submitText: { color: colors.accentText, fontSize: 16, ...typography.button },
   dividerRow: { minHeight: 20, flexDirection: "row", alignItems: "center", gap: 10 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: "#272727" },
-  dividerText: { color: "#777777", fontSize: 12, ...typography.label },
-  googleButton: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: 4, borderWidth: 1, borderColor: "#333333", backgroundColor: "#171717" },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { color: colors.textMuted, fontSize: 12, ...typography.label },
+  googleButton: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   googleButtonDisabled: { opacity: 0.5 },
-  googleMark: { width: 23, height: 23, alignItems: "center", justifyContent: "center", borderRadius: 12, borderWidth: 1, borderColor: "rgba(229,9,20,0.45)", backgroundColor: "rgba(229,9,20,0.12)" },
-  googleMarkText: { color: "#E50914", fontSize: 16, lineHeight: 20, fontWeight: "900" },
-  googleButtonText: { color: "#FFFFFF", fontSize: 15, ...typography.button },
+  googleMark: { width: 23, height: 23, alignItems: "center", justifyContent: "center", borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.accentSoft },
+  googleMarkText: { color: colors.accent, fontSize: 16, lineHeight: 20, fontWeight: "900" },
+  googleButtonText: { color: colors.text, fontSize: 15, ...typography.button },
   introOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1000,
     elevation: 1000,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#000000",
+    backgroundColor: colors.background,
   },
   introLogoWrap: { alignItems: "center", justifyContent: "center", paddingHorizontal: 18 },
   introWord: {
@@ -730,8 +745,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  introLetter: { color: "#E50914", fontSize: 34, lineHeight: 42, textAlign: "center", textTransform: "uppercase", ...typography.display },
-  introNumber: { color: "#E50914" },
-  introUnderlineTrack: { width: 184, height: 2, marginTop: 14, overflow: "hidden", backgroundColor: "rgba(229,9,20,0.18)" },
-  introUnderline: { width: "100%", height: "100%", backgroundColor: "#E50914" },
-});
+  introLetter: { color: colors.accent, fontSize: 34, lineHeight: 42, textAlign: "center", textTransform: "uppercase", ...typography.display },
+  introNumber: { color: colors.accent },
+  introUnderlineTrack: { width: 184, height: 2, marginTop: spacing.sm, overflow: "hidden", backgroundColor: colors.accentSoft },
+  introUnderline: { width: "100%", height: "100%", backgroundColor: colors.accent },
+  });
+}

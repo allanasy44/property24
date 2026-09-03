@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Href, Link } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, radius, shadows, spacing, typography } from "../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../constants/theme";
 
 type ActionCardProps = {
   title: string;
@@ -11,11 +11,13 @@ type ActionCardProps = {
 };
 
 export function ActionCard({ title, subtitle, icon, href }: ActionCardProps) {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   return (
     <Link href={href} asChild>
       <Pressable style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
         <View style={styles.iconWrap}>
-          <Ionicons name={icon} size={18} color={colors.accentStrong} />
+          <Ionicons name={icon} size={18} color={themeColors.accentStrong} />
         </View>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle}>{subtitle}</Text>
@@ -24,13 +26,14 @@ export function ActionCard({ title, subtitle, icon, href }: ActionCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  return StyleSheet.create({
   card: {
     width: "48%",
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: themeColors.surfaceElevated,
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: themeColors.border,
     padding: spacing.md,
     gap: 10,
     minHeight: 118,
@@ -38,7 +41,7 @@ const styles = StyleSheet.create({
   },
   cardPressed: {
     transform: [{ scale: 0.99 }],
-    borderColor: colors.border,
+    borderColor: themeColors.border,
     shadowOpacity: 0.08,
   },
   iconWrap: {
@@ -47,20 +50,21 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.accentSoft,
+    backgroundColor: themeColors.accentSoft,
     borderWidth: 1,
     borderColor: "rgba(30,41,59,0.08)",
   },
   title: {
-    color: colors.text,
+    color: themeColors.text,
     fontSize: 15,
     lineHeight: 19,
     ...typography.title,
   },
   subtitle: {
-    color: colors.textMuted,
+    color: themeColors.textMuted,
     lineHeight: 18,
     fontSize: 12,
     ...typography.body,
   },
-});
+  });
+}

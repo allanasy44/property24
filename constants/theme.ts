@@ -50,7 +50,7 @@ const darkPalette = {
   muted: "#dfe9f7",
 };
 
-export const colors = { ...lightPalette };
+export const colors = lightPalette;
 export const themePalettes = {
   light: lightPalette,
   dark: darkPalette,
@@ -92,10 +92,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [systemMode]);
 
   useEffect(() => {
-    Object.keys(colors).forEach((key) => {
-      const typedKey = key as keyof typeof colors;
-      colors[typedKey] = activePalette[typedKey];
-    });
     AsyncStorage.setItem(THEME_STORAGE_KEY, mode).catch(() => undefined);
   }, [activePalette, mode]);
 

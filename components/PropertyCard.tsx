@@ -3,7 +3,7 @@ import { Link, type Href } from "expo-router";
 import * as Linking from "expo-linking";
 import { useEffect, useState } from "react";
 import { FlatList, ImageBackground, KeyboardAvoidingView, Modal, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors, radius, shadows, spacing, typography } from "../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../constants/theme";
 import { useRentalPlatform, type Property, type PropertyCommentItem } from "../state/rentalPlatform";
 
 type PropertyCardProps = {
@@ -12,6 +12,9 @@ type PropertyCardProps = {
 };
 
 export function PropertyCard({ property, variant = "default" }: PropertyCardProps) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const { addPropertyComment, authToken, authUser, fetchPropertyComments, toggleSupplierFollow } = useRentalPlatform();
   const imageUri = property.photos?.find((photo) => photo?.startsWith("http")) || "";
   const photoCount = property.photos?.filter((photo) => photo?.startsWith("http")).length ?? 0;
@@ -298,6 +301,9 @@ function CommentSheet({
   property: Property;
   visible: boolean;
 }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const canPostComment = Boolean(commentDraft.trim());
   const commentTotal = comments.length;
 
@@ -414,6 +420,9 @@ function CommentSheet({
 }
 
 function FeedMetric({ icon, value, active, activeColor, onPress }: { active?: boolean; activeColor?: string; icon: keyof typeof Ionicons.glyphMap; value: string; onPress?: () => void }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const color = active ? activeColor || colors.accent : colors.textMuted;
   return (
     <Pressable onPress={onPress} disabled={!onPress} style={styles.feedMetric}>
@@ -424,9 +433,11 @@ function FeedMetric({ icon, value, active, activeColor, onPress }: { active?: bo
 }
 
 function Fact({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   return (
     <View style={styles.fact}>
-      <Ionicons name={icon} size={14} color={colors.textMuted} />
+      <Ionicons name={icon} size={14} color={themeColors.textMuted} />
       <Text style={styles.factText} numberOfLines={1}>{label}</Text>
     </View>
   );
@@ -446,7 +457,9 @@ function supplierHandle(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 18) || "supplier";
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  const colors = themeColors;
+  return StyleSheet.create({
   card: {
     backgroundColor: colors.surfaceElevated,
     borderRadius: radius.xl,
@@ -550,7 +563,7 @@ const styles = StyleSheet.create({
   mediaText: { color: "#FFFFFF", fontSize: 12, ...typography.button },
   priceBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surfaceElevated,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -599,26 +612,26 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 18,
     borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: "#242424",
+    borderColor: colors.border,
     paddingHorizontal: 14,
     paddingTop: 8,
     paddingBottom: 10,
-    backgroundColor: "#050505",
+    backgroundColor: colors.surfaceElevated,
   },
-  sheetHandle: { alignSelf: "center", width: 44, height: 4, borderRadius: 2, backgroundColor: "#3A3A3A", marginBottom: 8 },
+  sheetHandle: { alignSelf: "center", width: 44, height: 4, borderRadius: 2, backgroundColor: colors.muted, marginBottom: 8 },
   sheetHeader: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   sheetTitleWrap: { flex: 1, minWidth: 0 },
   sheetTitle: { color: colors.text, fontSize: 18, lineHeight: 23, ...typography.title },
   sheetSubtitle: { color: colors.textMuted, fontSize: 12, lineHeight: 16, ...typography.body },
-  sheetClose: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17, backgroundColor: "#161616" },
+  sheetClose: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17, backgroundColor: colors.surfaceMuted },
   commentMediaRow: {
     flexDirection: "row",
     gap: 10,
     borderWidth: 1,
-    borderColor: "#202020",
+    borderColor: colors.border,
     borderRadius: 10,
     padding: 8,
-    backgroundColor: "#0B0B0B",
+    backgroundColor: colors.surfaceMuted,
   },
   commentMediaThumb: { width: 74, height: 74, justifyContent: "flex-end", alignItems: "flex-start", padding: 6, borderRadius: 8, overflow: "hidden", backgroundColor: colors.border },
   commentMediaEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted },
@@ -628,17 +641,17 @@ const styles = StyleSheet.create({
   commentMediaTitle: { color: colors.text, fontSize: 14, lineHeight: 18, ...typography.title },
   commentMediaMeta: { color: colors.textMuted, fontSize: 12, lineHeight: 16, ...typography.body },
   commentMediaTrust: { color: colors.success, fontSize: 11, ...typography.button },
-  commentStatsRow: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 1, borderBottomColor: "#171717" },
+  commentStatsRow: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   commentStat: { flexDirection: "row", alignItems: "center", gap: 5 },
   commentStatText: { color: colors.textMuted, fontSize: 11, ...typography.label },
   commentList: { maxHeight: 310 },
   commentListContent: { paddingTop: 12, paddingBottom: 10, gap: 12 },
   commentListEmptyContent: { minHeight: 190, justifyContent: "center" },
   commentItem: { flexDirection: "row", gap: 9, alignItems: "flex-start" },
-  commentAvatar: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "#1D1D1D", borderWidth: 1, borderColor: "#303030" },
+  commentAvatar: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border },
   commentAvatarText: { color: colors.text, fontSize: 11, ...typography.button },
   commentBubbleWrap: { flex: 1, minWidth: 0, gap: 5 },
-  commentBubble: { alignSelf: "flex-start", maxWidth: "100%", borderRadius: 14, borderTopLeftRadius: 4, paddingHorizontal: 11, paddingVertical: 9, backgroundColor: "#151515" },
+  commentBubble: { alignSelf: "flex-start", maxWidth: "100%", borderRadius: 14, borderTopLeftRadius: 4, paddingHorizontal: 11, paddingVertical: 9, backgroundColor: colors.surfaceMuted },
   commentAuthorRow: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 2 },
   commentAuthor: { color: colors.text, fontSize: 12, ...typography.title },
   commentTime: { color: colors.textMuted, fontSize: 10, ...typography.label },
@@ -649,12 +662,13 @@ const styles = StyleSheet.create({
   emptyComments: { alignItems: "center", gap: 6, paddingHorizontal: 26 },
   emptyCommentTitle: { color: colors.text, fontSize: 15, ...typography.title },
   emptyCommentText: { color: colors.textMuted, fontSize: 12, lineHeight: 17, textAlign: "center", ...typography.body },
-  commentComposer: { minHeight: 48, flexDirection: "row", alignItems: "flex-end", gap: 8, borderTopWidth: 1, borderTopColor: "#171717", paddingTop: 9 },
-  commentComposerAvatar: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "#1D1D1D", borderWidth: 1, borderColor: "#303030", marginBottom: 4 },
+  commentComposer: { minHeight: 48, flexDirection: "row", alignItems: "flex-end", gap: 8, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9 },
+  commentComposerAvatar: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, marginBottom: 4 },
   commentComposerAvatarText: { color: colors.text, fontSize: 11, ...typography.button },
-  commentInputWrap: { flex: 1, minWidth: 0, minHeight: 40, maxHeight: 96, justifyContent: "center", borderRadius: 20, borderWidth: 1, borderColor: "#242424", backgroundColor: "#111111" },
+  commentInputWrap: { flex: 1, minWidth: 0, minHeight: 40, maxHeight: 96, justifyContent: "center", borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
   commentInput: { minHeight: 40, maxHeight: 96, paddingHorizontal: 13, paddingTop: 9, paddingBottom: 9, color: colors.text, fontSize: 13, lineHeight: 18, outlineStyle: "none" as any, ...typography.body },
   commentButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: colors.accent },
   commentButtonDisabled: { opacity: 0.38 },
   type: { color: colors.textMuted, fontSize: 12, ...typography.label },
-});
+  });
+}

@@ -3,11 +3,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Screen } from "../components/Screen";
 import { SectionHeader } from "../components/SectionHeader";
-import { colors, radius, shadows, spacing, typography } from "../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../constants/theme";
 import { useRentalPlatform } from "../state/rentalPlatform";
 import { AccessGuard } from "../components/AccessGuard";
 
 export default function LeasesScreen() {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   const { state, addLease, hasCapability } = useRentalPlatform();
   const canCreateLease = hasCapability("add_properties") || hasCapability("approve_tenants");
   const [property, setProperty] = useState("");
@@ -57,18 +59,18 @@ export default function LeasesScreen() {
         {canCreateLease ? (
           <View style={styles.formCard}>
           <SectionHeader title="Create lease" subtitle="Adds contract to live lease records." />
-          <TextInput value={landlord} onChangeText={setLandlord} placeholder="Landlord" placeholderTextColor={colors.textMuted} style={styles.input} />
-          <TextInput value={tenant} onChangeText={setTenant} placeholder="Tenant" placeholderTextColor={colors.textMuted} style={styles.input} />
-          <TextInput value={property} onChangeText={setProperty} placeholder="Property" placeholderTextColor={colors.textMuted} style={styles.input} />
+          <TextInput value={landlord} onChangeText={setLandlord} placeholder="Landlord" placeholderTextColor={themeColors.textMuted} style={[styles.input, { color: themeColors.text }]} />
+          <TextInput value={tenant} onChangeText={setTenant} placeholder="Tenant" placeholderTextColor={themeColors.textMuted} style={[styles.input, { color: themeColors.text }]} />
+          <TextInput value={property} onChangeText={setProperty} placeholder="Property" placeholderTextColor={themeColors.textMuted} style={[styles.input, { color: themeColors.text }]} />
           <View style={styles.formRow}>
-            <TextInput value={startDate} onChangeText={setStartDate} placeholder="Start date" placeholderTextColor={colors.textMuted} style={[styles.input, { flex: 1 }]} />
-            <TextInput value={endDate} onChangeText={setEndDate} placeholder="End date" placeholderTextColor={colors.textMuted} style={[styles.input, { flex: 1 }]} />
+            <TextInput value={startDate} onChangeText={setStartDate} placeholder="Start date" placeholderTextColor={themeColors.textMuted} style={[styles.input, { flex: 1, color: themeColors.text }]} />
+            <TextInput value={endDate} onChangeText={setEndDate} placeholder="End date" placeholderTextColor={themeColors.textMuted} style={[styles.input, { flex: 1, color: themeColors.text }]} />
           </View>
           <View style={styles.formRow}>
-            <TextInput value={monthlyRent} onChangeText={setMonthlyRent} placeholder="Monthly rent" placeholderTextColor={colors.textMuted} style={[styles.input, { flex: 1 }]} />
-            <TextInput value={deposit} onChangeText={setDeposit} placeholder="Deposit" placeholderTextColor={colors.textMuted} style={[styles.input, { flex: 1 }]} />
+            <TextInput value={monthlyRent} onChangeText={setMonthlyRent} placeholder="Monthly rent" placeholderTextColor={themeColors.textMuted} style={[styles.input, { flex: 1, color: themeColors.text }]} />
+            <TextInput value={deposit} onChangeText={setDeposit} placeholder="Deposit" placeholderTextColor={themeColors.textMuted} style={[styles.input, { flex: 1, color: themeColors.text }]} />
           </View>
-          <TextInput value={term} onChangeText={setTerm} placeholder="Lease term, e.g. 12 Months" placeholderTextColor={colors.textMuted} style={styles.input} />
+          <TextInput value={term} onChangeText={setTerm} placeholder="Lease term, e.g. 12 Months" placeholderTextColor={themeColors.textMuted} style={[styles.input, { color: themeColors.text }]} />
           <Pressable onPress={submit} style={styles.button}><Text style={styles.buttonText}>Save lease</Text></Pressable>
           </View>
         ) : null}
@@ -110,9 +112,11 @@ export default function LeasesScreen() {
 }
 
 function SignatureBubble({ label, signed }: { label: string; signed: boolean }) {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   return (
     <View style={[styles.signatureBubble, signed ? styles.signed : styles.pending]}>
-      <Ionicons name={signed ? "checkmark-circle-outline" : "time-outline"} size={16} color={signed ? colors.success : colors.warning} />
+      <Ionicons name={signed ? "checkmark-circle-outline" : "time-outline"} size={16} color={signed ? themeColors.success : themeColors.warning} />
       <Text style={signed ? styles.signedText : styles.pendingText}>{label}</Text>
     </View>
   );
@@ -124,29 +128,31 @@ function formatMoney(value: string) {
   return cleaned.startsWith("$") ? cleaned : `$${cleaned}`;
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  return StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg },
-  hero: { backgroundColor: colors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.sm, ...shadows.card },
-  kicker: { color: colors.accent, textTransform: "uppercase", fontSize: 12, ...typography.label },
-  title: { color: colors.text, fontSize: 28, lineHeight: 34, ...typography.display },
-  formCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: spacing.sm, ...shadows.soft },
+  hero: { backgroundColor: themeColors.surfaceElevated, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.sm, ...shadows.card },
+  kicker: { color: themeColors.accent, textTransform: "uppercase", fontSize: 12, ...typography.label },
+  title: { color: themeColors.text, fontSize: 28, lineHeight: 34, ...typography.display },
+  formCard: { backgroundColor: themeColors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: spacing.sm, ...shadows.soft },
   formRow: { flexDirection: "row", gap: spacing.sm },
-  input: { backgroundColor: colors.background, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, color: colors.text, paddingHorizontal: 12, paddingVertical: 12, ...typography.body },
-  button: { backgroundColor: colors.accent, borderRadius: radius.lg, alignItems: "center", paddingVertical: 14 },
-  buttonText: { color: colors.accentText, ...typography.button },
+  input: { backgroundColor: themeColors.background, borderRadius: radius.md, borderWidth: 1, borderColor: themeColors.border, color: themeColors.text, paddingHorizontal: 12, paddingVertical: 12, ...typography.body },
+  button: { backgroundColor: themeColors.accent, borderRadius: radius.lg, alignItems: "center", paddingVertical: 14 },
+  buttonText: { color: themeColors.accentText, ...typography.button },
   leaseStack: { gap: spacing.sm },
-  leaseCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: 6, ...shadows.soft },
+  leaseCard: { backgroundColor: themeColors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: 6, ...shadows.soft },
   row: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
-  property: { flex: 1, color: colors.text, ...typography.title },
-  status: { color: colors.accent, ...typography.label },
-  meta: { color: colors.textMuted, lineHeight: 18, ...typography.body },
+  property: { flex: 1, color: themeColors.text, ...typography.title },
+  status: { color: themeColors.accent, ...typography.label },
+  meta: { color: themeColors.textMuted, lineHeight: 18, ...typography.body },
   signatureRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: 4 },
   signatureBubble: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
-  signed: { backgroundColor: colors.successSoft },
-  pending: { backgroundColor: colors.warningSoft },
-  signedText: { color: colors.success, ...typography.label },
-  pendingText: { color: colors.warning, ...typography.label },
-  templateCard: { backgroundColor: colors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: 8, ...shadows.soft },
-  templateLine: { color: colors.text, lineHeight: 20, ...typography.body },
-  empty: { color: colors.textMuted, ...typography.body },
-});
+  signed: { backgroundColor: themeColors.successSoft },
+  pending: { backgroundColor: themeColors.warningSoft },
+  signedText: { color: themeColors.success, ...typography.label },
+  pendingText: { color: themeColors.warning, ...typography.label },
+  templateCard: { backgroundColor: themeColors.surfaceElevated, borderRadius: radius.lg, padding: spacing.md, gap: 8, ...shadows.soft },
+  templateLine: { color: themeColors.text, lineHeight: 20, ...typography.body },
+  empty: { color: themeColors.textMuted, ...typography.body },
+  });
+}

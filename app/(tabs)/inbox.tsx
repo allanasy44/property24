@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ImageBackground, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AccessGuard } from "../../components/AccessGuard";
 import { Screen } from "../../components/Screen";
-import { colors, shadows, spacing, typography } from "../../constants/theme";
+import { colors, shadows, spacing, typography, useTheme } from "../../constants/theme";
 import { ConversationCallSession, ConversationItem, ConversationMessage, MessageAttachmentInput, Property, useRentalPlatform } from "../../state/rentalPlatform";
 
 type WebRtcModule = {
@@ -62,6 +62,9 @@ type ListingThread = {
 };
 
 export default function InboxScreen() {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const { propertyId, intent } = useLocalSearchParams<{ propertyId?: string; intent?: string }>();
   const {
     state,
@@ -953,6 +956,9 @@ function upsertMessages(current: ConversationMessage[], message: ConversationMes
 }
 
 function CallOverlay({ call, cameraFacing, cameraReady, connectionState, contactName, contactOnline, localStreamUrl, muted, onEnd, onFlipCamera, onMessage, onToggleMuted, onToggleSpeaker, profilePicture, remoteStreamUrl, signalStatus, speakerOn, visible }: { call?: ConversationCallSession; cameraFacing: "front" | "back"; cameraReady: boolean; connectionState: string; contactName: string; contactOnline: boolean; localStreamUrl: string; muted: boolean; onEnd: (call: ConversationCallSession) => void; onFlipCamera: () => void; onMessage: () => void; onToggleMuted: () => void; onToggleSpeaker: () => void; profilePicture?: string; remoteStreamUrl: string; signalStatus: string; speakerOn: boolean; visible: boolean }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   if (!call) return null;
   const callLabel = call.mode === "video" ? "Video call" : "Voice call";
   const status = contactOnline ? "Ringing..." : "Calling... contact appears offline";
@@ -1047,6 +1053,9 @@ const attachmentActions: { key: AttachmentActionKey; label: string; helper: stri
 ];
 
 function AttachmentSheet({ onClose, onSelect, visible }: { onClose: () => void; onSelect: (action: AttachmentActionKey) => void; visible: boolean }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
       <Pressable onPress={onClose} style={styles.attachmentBackdrop}>
@@ -1076,6 +1085,9 @@ function AttachmentSheet({ onClose, onSelect, visible }: { onClose: () => void; 
 }
 
 function MessageAttachment({ message, mine }: { message: ConversationMessage; mine: boolean }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   const kind = message.attachmentType || mediaKindFromName(message.attachmentName || message.attachmentUrl || "");
   const isImage = kind === "image";
   const icon = kind === "video" ? "play-circle" : kind === "document" ? "document-text" : kind === "location" ? "location" : "attach";
@@ -1097,6 +1109,9 @@ function MessageAttachment({ message, mine }: { message: ConversationMessage; mi
 }
 
 function ThreadRow({ onPress, selected, thread }: { onPress: () => void; selected: boolean; thread: ListingThread }) {
+  const { colors: themeColors } = useTheme();
+  const colors = themeColors;
+  const styles = createStyles(themeColors);
   return (
     <Pressable onPress={onPress} style={[styles.threadRow, selected && styles.threadRowActive]}>
       <View style={styles.threadAvatar}>
@@ -1313,7 +1328,9 @@ function formatMessageMeta(message: ConversationMessage, mine: boolean) {
   return `${time} · Sent`;
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  const colors = themeColors;
+  return StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.surface },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
   kicker: { color: colors.textMuted, fontSize: 11, textTransform: "uppercase", ...typography.label },
@@ -1450,4 +1467,5 @@ const styles = StyleSheet.create({
   callControlButtonActive: { backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: "rgba(229,9,20,0.34)" },
   callControlText: { color: colors.text, fontSize: 11, ...typography.label },
   callEndLargeButton: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", backgroundColor: colors.danger, transform: [{ rotate: "135deg" }], ...shadows.card },
-});
+  });
+}

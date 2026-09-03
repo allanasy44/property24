@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "../../components/Screen";
-import { colors, radius, shadows, spacing, typography } from "../../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../../constants/theme";
 import { maintenanceCategories } from "../../constants/content";
 import { type MaintenanceItem, useRentalPlatform } from "../../state/rentalPlatform";
 import { AccessGuard } from "../../components/AccessGuard";
 
 export default function MaintenanceScreen() {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   const { state, addMaintenance, hasCapability, account, authUser, authError } = useRentalPlatform();
   const isTenant = account.accountType === "tenant";
   const activeLease = useActiveTenantLease(state, authUser?.id, authUser?.name);
@@ -82,7 +84,7 @@ export default function MaintenanceScreen() {
           {canCreateMaintenance ? (
             <View style={styles.panel}>
               <Text style={styles.panelTitle}>New request</Text>
-              <TextInput value={issue} onChangeText={setIssue} placeholder="Issue" placeholderTextColor={colors.textMuted} style={styles.input} />
+              <TextInput value={issue} onChangeText={setIssue} placeholder="Issue" placeholderTextColor={themeColors.textMuted} style={styles.input} />
               <View style={styles.categoryRow}>
                 {maintenanceCategories.map((entry) => (
                   <Pressable key={entry} onPress={() => setCategory(entry)} style={[styles.categoryChip, category === entry && styles.categoryChipActive]}>
@@ -90,9 +92,9 @@ export default function MaintenanceScreen() {
                   </Pressable>
                 ))}
               </View>
-              <TextInput editable={false} value={property} placeholder="Property" placeholderTextColor={colors.textMuted} style={[styles.input, styles.lockedInput]} />
-              <TextInput value={description} onChangeText={setDescription} placeholder="Details" placeholderTextColor={colors.textMuted} style={[styles.input, styles.textArea]} multiline />
-              <TextInput value={photoCount} onChangeText={setPhotoCount} keyboardType="number-pad" placeholder="Photos" placeholderTextColor={colors.textMuted} style={styles.input} />
+              <TextInput editable={false} value={property} placeholder="Property" placeholderTextColor={themeColors.textMuted} style={[styles.input, styles.lockedInput]} />
+              <TextInput value={description} onChangeText={setDescription} placeholder="Details" placeholderTextColor={themeColors.textMuted} style={[styles.input, styles.textArea]} multiline />
+              <TextInput value={photoCount} onChangeText={setPhotoCount} keyboardType="number-pad" placeholder="Photos" placeholderTextColor={themeColors.textMuted} style={styles.input} />
               <Pressable onPress={submit} style={styles.button}><Text style={styles.buttonText}>Submit</Text></Pressable>
             </View>
           ) : null}
@@ -114,14 +116,16 @@ export default function MaintenanceScreen() {
 }
 
 function OccupancyGate({ ready }: { ready: boolean }) {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   return (
     <View style={[styles.gate, ready && styles.gateReady]}>
       <View style={styles.gateTitleRow}>
-        <Ionicons name={ready ? "shield-checkmark" : "lock-closed-outline"} size={17} color={ready ? colors.success : colors.warning} />
+        <Ionicons name={ready ? "shield-checkmark" : "lock-closed-outline"} size={17} color={ready ? themeColors.success : themeColors.warning} />
         <Text style={styles.gateTitle}>{ready ? "Active lease" : "Locked"}</Text>
       </View>
       <View style={styles.stepRow}>
-        <Ionicons name={ready ? "checkmark-circle" : "ellipse-outline"} size={15} color={ready ? colors.success : colors.textMuted} />
+        <Ionicons name={ready ? "checkmark-circle" : "ellipse-outline"} size={15} color={ready ? themeColors.success : themeColors.textMuted} />
         <Text style={[styles.stepText, ready && styles.stepTextDone]}>Occupancy confirmed</Text>
       </View>
     </View>
@@ -129,10 +133,14 @@ function OccupancyGate({ ready }: { ready: boolean }) {
 }
 
 function StatusPill({ ready }: { ready: boolean }) {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   return <Text style={[styles.statusPill, ready ? styles.statusReady : styles.statusLocked]}>{ready ? "Ready" : "Locked"}</Text>;
 }
 
 function RequestRow({ item }: { item: MaintenanceItem }) {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   return (
     <View style={styles.rowCard}>
       <View style={styles.rowTop}>
@@ -161,7 +169,9 @@ function isStatus(value: string, expected: string) {
   return value.toLowerCase().replace(/\s+/g, "_") === expected;
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  const colors = themeColors;
+  return StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.md, backgroundColor: colors.background },
   topBar: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.surfaceElevated, padding: spacing.md, ...shadows.card },
   summaryStrip: { flexDirection: "row", gap: spacing.sm },
@@ -208,4 +218,5 @@ const styles = StyleSheet.create({
   rowStatus: { color: colors.accent, fontSize: 12, ...typography.label },
   rowTime: { color: colors.textMuted, fontSize: 12, ...typography.body },
   empty: { color: colors.textMuted, ...typography.body },
-});
+  });
+}

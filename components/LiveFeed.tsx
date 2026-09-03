@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
-import { colors, radius, shadows, spacing, typography } from "../constants/theme";
+import { colors, radius, shadows, spacing, typography, useTheme } from "../constants/theme";
 
 type LiveFeedProps = {
   items: Array<{
@@ -12,14 +12,15 @@ type LiveFeedProps = {
   }>;
 };
 
-const toneMap = {
-  success: { backgroundColor: colors.successSoft, color: colors.success, icon: "checkmark-circle-outline" as const },
-  warning: { backgroundColor: colors.warningSoft, color: colors.warning, icon: "time-outline" as const },
-  info: { backgroundColor: colors.infoSoft, color: colors.info, icon: "radio-outline" as const },
-  danger: { backgroundColor: colors.dangerSoft, color: colors.danger, icon: "alert-circle-outline" as const },
-};
-
 export function LiveFeed({ items }: LiveFeedProps) {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
+  const toneMap = {
+    success: { backgroundColor: themeColors.successSoft, color: themeColors.success, icon: "checkmark-circle-outline" as const },
+    warning: { backgroundColor: themeColors.warningSoft, color: themeColors.warning, icon: "time-outline" as const },
+    info: { backgroundColor: themeColors.infoSoft, color: themeColors.info, icon: "radio-outline" as const },
+    danger: { backgroundColor: themeColors.dangerSoft, color: themeColors.danger, icon: "alert-circle-outline" as const },
+  };
   if (!items.length) {
     return null;
   }
@@ -48,27 +49,28 @@ export function LiveFeed({ items }: LiveFeedProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  return StyleSheet.create({
   container: {
     gap: spacing.sm,
   },
   emptyCard: {
     flexDirection: "row",
     gap: 10,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: themeColors.surfaceElevated,
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: themeColors.border,
     padding: spacing.md,
     ...shadows.soft,
   },
   card: {
     flexDirection: "row",
     gap: 12,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: themeColors.surfaceElevated,
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: themeColors.border,
     padding: spacing.md,
     ...shadows.soft,
   },
@@ -93,17 +95,18 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    color: colors.text,
+    color: themeColors.text,
     ...typography.title,
   },
   status: {
-    color: colors.textMuted,
+    color: themeColors.textMuted,
     fontSize: 12,
     ...typography.label,
   },
   meta: {
-    color: colors.textMuted,
+    color: themeColors.textMuted,
     lineHeight: 18,
     ...typography.body,
   },
-});
+  });
+}

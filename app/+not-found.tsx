@@ -1,9 +1,11 @@
 import { Link } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { Screen } from "../components/Screen";
-import { colors, radius, spacing, typography } from "../constants/theme";
+import { colors, radius, spacing, typography, useTheme } from "../constants/theme";
 
 export default function NotFoundScreen() {
+  const { colors: themeColors } = useTheme();
+  const styles = createStyles(themeColors);
   return (
     <Screen>
       <View style={styles.container}>
@@ -17,7 +19,8 @@ export default function NotFoundScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: typeof colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     alignItems: "center",
@@ -26,23 +29,24 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   title: {
-    color: colors.text,
+    color: themeColors.text,
     fontSize: 28,
     lineHeight: 34,
     ...typography.display,
   },
   subtitle: {
-    color: colors.textMuted,
+    color: themeColors.textMuted,
     textAlign: "center",
     lineHeight: 22,
     ...typography.body,
   },
   link: {
-    backgroundColor: colors.accent,
-    color: colors.accentText,
+    backgroundColor: themeColors.accent,
+    color: themeColors.accentText,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: radius.md,
     ...typography.button,
   },
-});
+  });
+}
