@@ -24,7 +24,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: "Home" }} />
       <Tabs.Screen name="listings" options={tabOptions("listings", "Listings")} />
       <Tabs.Screen name="inbox" options={tabOptions("inbox", "Inbox")} />
-      <Tabs.Screen name="maintenance" options={tabOptions("maintenance", "Maintenance")} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
     </Tabs>
   );
@@ -36,7 +35,6 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
     index: "compass-outline",
     listings: "business-outline",
-    maintenance: "build-outline",
     inbox: "chatbubbles-outline",
     profile: "person-outline",
   };

@@ -11,7 +11,6 @@ type QuickAction = {
 export const quickActions: QuickAction[] = [
   { title: "Search homes", subtitle: "Find verified rentals", icon: "search-outline", href: "/", roles: ["tenant"] },
   { title: "Apply for rental", subtitle: "Use tenant profile", icon: "send-outline", href: "/", roles: ["tenant"] },
-  { title: "Log maintenance", subtitle: "Create a repair ticket", icon: "construct-outline", href: "/maintenance", roles: ["tenant"] },
   { title: "Post property", subtitle: "Add a verified listing", icon: "add-circle-outline", href: "/listings", roles: ["landlord", "agent"] },
   { title: "Create lease", subtitle: "Draft a digital contract", icon: "document-text-outline", href: "/leases", roles: ["landlord"] },
   { title: "Open analytics", subtitle: "View portfolio health", icon: "analytics-outline", href: "/analytics", roles: ["landlord", "admin"] },
