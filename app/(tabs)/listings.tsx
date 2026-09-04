@@ -273,7 +273,7 @@ export default function ListingsScreen() {
         setListingNotice("Property updated and saved.");
       } else {
         await addProperty(payload);
-        setListingNotice("Property saved with media. It will appear publicly after verification.");
+        setListingNotice("Property saved with media. It will appear publicly once ready.");
         setSuccessVisible(true);
       }
 
@@ -466,7 +466,6 @@ export default function ListingsScreen() {
                     <View style={styles.statusIdentity}><View style={[styles.statusDot, { backgroundColor: listingStatusColor(listingStatus(property, state.leases), colors) }]} /><Text style={styles.statusName}>{listingStatusLabel(listingStatus(property, state.leases))}</Text></View>
                     <View style={styles.flagRow}>
                       {editedListingIds.includes(property.id) ? <Text style={styles.editedFlag}>Edited</Text> : null}
-                      {property.verified ? <Text style={styles.verifiedFlag}>Verified</Text> : <Text style={styles.reviewFlag}>Review</Text>}
                     </View>
                   </View>
                   <PropertyCard property={property} />

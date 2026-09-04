@@ -112,13 +112,13 @@ export default function SupplierProfileScreen() {
   const toggleFollow = () => {
     if (!supplier?.id) return;
     if (!authToken) {
-      setNotice("Sign in is required before following verified suppliers.");
+      setNotice("Sign in is required before following suppliers.");
       return;
     }
 
     const nextValue = !following;
     setFollowing(nextValue);
-    setNotice(nextValue ? "Following this verified supplier." : "Supplier removed from following.");
+    setNotice(nextValue ? "Following this supplier." : "Supplier removed from following.");
     void toggleSupplierFollow(supplier.id, nextValue).catch((error) => {
       setFollowing(!nextValue);
       setNotice(error instanceof Error ? error.message : "Follow action could not be saved.");
@@ -130,7 +130,7 @@ export default function SupplierProfileScreen() {
       <Screen>
         <View style={styles.missingCard}>
           <Ionicons name="shield-outline" size={28} color={colors.textMuted} />
-          <Text style={styles.missingTitle}>Verified supplier not available</Text>
+          <Text style={styles.missingTitle}>Supplier not available</Text>
           <Text style={styles.missingBody}>This profile is hidden until the landlord or agent passes the required checks.</Text>
           <Link href="/" asChild>
             <Text style={styles.homeLink}>Back to Home</Text>
@@ -163,10 +163,7 @@ export default function SupplierProfileScreen() {
             </View>
             <View style={styles.nameRow}>
               <View style={styles.nameCopy}>
-                <View style={styles.verifiedNameRow}>
-                  <Text numberOfLines={1} style={styles.name}>{supplier.name}</Text>
-                  <Ionicons name="shield-checkmark" size={17} color={colors.success} />
-                </View>
+                <Text numberOfLines={1} style={styles.name}>{supplier.name}</Text>
                 <Text style={styles.handle}>@{supplierHandle(supplier.name)} · {roleLabel(supplier.role)}</Text>
               </View>
               <Pressable onPress={toggleFollow} style={[styles.followButton, following && styles.followButtonActive]}>
@@ -175,7 +172,7 @@ export default function SupplierProfileScreen() {
             </View>
 
             <Text style={styles.bio}>
-              {supplier.bio || `Verified ${roleNoun(supplier.role)} with approved identity checks. Contact stays inside the app until the rental process is appropriate.`}
+              {supplier.bio || `${roleNoun(supplier.role)} with contact details kept inside the app until the rental process is appropriate.`}
             </Text>
             {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
@@ -215,7 +212,6 @@ export default function SupplierProfileScreen() {
 
         <View style={styles.detailSection}>
           <Text style={styles.sectionTitle}>Profile details</Text>
-          <DetailRow icon="shield-checkmark-outline" label="Verification" value="National ID, selfie, phone and listing authority approved" styles={styles} themeColors={themeColors} />
           <DetailRow icon="call-outline" label="Phone" value="Hidden until both sides move through the rental flow" styles={styles} themeColors={themeColors} />
           <DetailRow icon="business-outline" label="Account type" value={roleLabel(supplier.role)} styles={styles} themeColors={themeColors} />
           <DetailRow icon="home-outline" label="Main listing" value={selectedProperty.title} styles={styles} themeColors={themeColors} />
@@ -224,7 +220,6 @@ export default function SupplierProfileScreen() {
         <View style={styles.listingSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Active houses</Text>
-            <Text style={styles.sectionMeta}>Verified only</Text>
           </View>
           {supplierProperties.map((property) => (
             <Link key={property.id} href={`/property/${encodeURIComponent(property.id)}`} asChild>
@@ -287,7 +282,7 @@ function resolveSupplier(property: Property, supplierId: string): SupplierProfil
   if (property.agentId && String(property.agentId) === supplierId) {
     return {
       id: property.agentId,
-      name: property.agentName || property.supplierName || "Verified agent",
+      name: property.agentName || property.supplierName || "Agent",
       role: "agent",
       verified: Boolean(property.agentVerified ?? property.supplierVerified),
       profilePicture: property.agentProfilePicture || property.supplierProfilePicture,
@@ -299,7 +294,7 @@ function resolveSupplier(property: Property, supplierId: string): SupplierProfil
   if (property.ownerId && String(property.ownerId) === supplierId) {
     return {
       id: property.ownerId,
-      name: property.ownerName || property.supplierName || "Verified landlord",
+      name: property.ownerName || property.supplierName || "Landlord",
       role: property.ownerRole || "landlord",
       verified: Boolean(property.ownerVerified ?? property.supplierVerified),
       profilePicture: property.ownerProfilePicture || property.supplierProfilePicture,
@@ -310,7 +305,7 @@ function resolveSupplier(property: Property, supplierId: string): SupplierProfil
 
   return {
     id: property.supplierId || supplierId,
-    name: property.supplierName || property.agentName || property.ownerName || "Verified supplier",
+    name: property.supplierName || property.agentName || property.ownerName || "Supplier",
     role: property.supplierRole || (property.agentName ? "agent" : "landlord"),
     verified: Boolean(property.supplierVerified),
     profilePicture: property.supplierProfilePicture,
@@ -320,9 +315,9 @@ function resolveSupplier(property: Property, supplierId: string): SupplierProfil
 }
 
 function roleLabel(role: AccountRole) {
-  if (role === "agent") return "Verified Agent";
-  if (role === "landlord") return "Verified Landlord";
-  if (role === "tenant") return "Verified Tenant";
+  if (role === "agent") return "Agent";
+  if (role === "landlord") return "Landlord";
+  if (role === "tenant") return "Tenant";
   return "Administrator";
 }
 

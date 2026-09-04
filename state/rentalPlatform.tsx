@@ -257,6 +257,13 @@ export type ConversationCallSession = {
   endedAt?: string;
 };
 
+export type CallHistoryItem = ConversationCallSession & {
+  contactId?: string;
+  contactName: string;
+  propertyTitle: string;
+  conversationTitle: string;
+};
+
 export type MediaAsset = {
   id: string;
   scope: string;
@@ -486,22 +493,22 @@ const defaultAccountRole: AccountRole = "tenant";
 
 export const accountContexts: Record<AccountRole, Omit<AccountContext, "accountType" | "hiddenSections" | "isVerified" | "emailVerified" | "phoneVerified" | "accountOnboardingComplete" | "fullVerificationRequired">> = {
   tenant: {
-    visibleSections: ["index", "inbox", "profile", "maintenance", "leases", "verification"],
+    visibleSections: ["index", "inbox", "profile", "calls", "maintenance", "leases", "verification"],
     capabilities: ["search_properties", "save_properties", "submit_tenant_verification", "apply_for_rentals", "view_rental_history", "report_maintenance", "sign_leases", "message_landlord_or_agent"],
     onboardingRequirements: ["email_verification"],
   },
   landlord: {
-    visibleSections: ["index", "listings", "inbox", "profile", "maintenance", "leases", "analytics", "verification"],
+    visibleSections: ["index", "listings", "inbox", "profile", "calls", "maintenance", "leases", "analytics", "verification"],
     capabilities: ["add_properties", "upload_property_media", "create_agents", "submit_landlord_verification", "approve_tenants", "manage_maintenance", "view_landlord_reports", "message_tenants"],
     onboardingRequirements: ["email_verification"],
   },
   agent: {
-    visibleSections: ["index", "listings", "inbox", "profile", "operations"],
+    visibleSections: ["index", "listings", "inbox", "profile", "calls", "operations"],
     capabilities: ["list_properties", "submit_agent_verification", "schedule_viewings", "manage_landlords", "track_applications", "track_commissions", "message_clients"],
     onboardingRequirements: ["email_verification"],
   },
   admin: {
-    visibleSections: ["index", "profile", "verification", "operations", "analytics"],
+    visibleSections: ["index", "profile", "calls", "verification", "operations", "analytics"],
     capabilities: ["verify_users", "remove_fake_listings", "resolve_disputes", "review_reports", "manage_all_accounts"],
     onboardingRequirements: [],
   },
@@ -794,6 +801,7 @@ type RentalPlatformContextValue = {
   sendConversationMessage: (conversationId: string, body: string, attachment?: MessageAttachmentInput) => Promise<ConversationMessage>;
   startConversationCall: (conversationId: string, mode: "voice" | "video") => Promise<ConversationCallSession>;
   fetchConversationCalls: (conversationId: string) => Promise<ConversationCallSession[]>;
+  fetchCallHistory: () => Promise<CallHistoryItem[]>;
   endConversationCall: (conversationId: string, callId: string, status?: "ended" | "missed") => Promise<ConversationCallSession>;
   fetchMediaAssets: (filters?: MediaAssetFilter) => Promise<MediaAsset[]>;
   deleteMediaAsset: (mediaId: string) => Promise<MediaAsset>;
@@ -1324,6 +1332,12 @@ export function RentalPlatformProvider({ children }: { children: ReactNode }) {
           if (!authToken) throw new Error("Sign in is required to load calls");
           const response = await fetchJson(`${API_BASE_URL}/conversations/${conversationId}/calls/`, authToken);
           return response.results.map(mapApiConversationCall);
+        },
+        fetchCallHistory: async () => {
+          if (!API_BASE_URL) throw new Error("Set EXPO_PUBLIC_API_URL to the account API before using call history");
+          if (!authToken) throw new Error("Sign in is required to load call history");
+          const response = await fetchJson(`${API_BASE_URL}/calls/`, authToken);
+          return response.results.map(mapApiCallHistoryItem);
         },
         endConversationCall: async (conversationId, callId, status = "ended") => {
           const call = mapApiConversationCall(await protectedRequest(`conversations/${conversationId}/calls/${callId}/`, authToken, "PATCH", { status }));
@@ -1977,6 +1991,16 @@ function mapApiConversationCall(item: any): ConversationCallSession {
     status: titleize(item.status),
     createdAt: item.created_at,
     endedAt: item.ended_at || undefined,
+  };
+}
+
+function mapApiCallHistoryItem(item: any): CallHistoryItem {
+  return {
+    ...mapApiConversationCall(item),
+    contactId: item.contact_id ? String(item.contact_id) : undefined,
+    contactName: item.contact_name || "Unknown contact",
+    propertyTitle: item.property_title || "Property conversation",
+    conversationTitle: item.conversation_title || "Call",
   };
 }
 

@@ -45,7 +45,6 @@ export default function ProfileScreen() {
   const selectedProfilePicture = profilePictureDraft.trim();
   const selectedCoverPhoto = coverPhotoDraft.trim();
   const hiddenCount = account.hiddenSections.length;
-  const verificationLabel = authUser?.verified ? "Verified" : authUser?.accountOnboardingComplete ? "Basic account" : account.onboardingRequirements.length ? `${account.onboardingRequirements.length} pending` : "Ready";
 
   const saveProfileMedia = async () => {
     setNotice("");
@@ -126,10 +125,13 @@ export default function ProfileScreen() {
       <Screen>
         <ScrollView contentContainerStyle={styles.editContent} showsVerticalScrollIndicator={false}>
           <View style={styles.editHeader}>
-            <Pressable onPress={() => { setMediaSheetTarget(null); setEditingField(null); setEditingProfile(false); }} style={styles.backButton}>
-              <Ionicons name="chevron-back" size={25} color={colors.text} />
+            <Pressable accessibilityLabel="Go back" onPress={() => { setMediaSheetTarget(null); setEditingField(null); setEditingProfile(false); }} style={styles.backButton}>
+              <Ionicons name="chevron-back" size={26} color={colors.text} />
             </Pressable>
-            <Text style={styles.editTitle}>Profile</Text>
+            <Text style={styles.editTitle}>Edit Profile</Text>
+            <Pressable onPress={() => void saveProfileMedia()} disabled={authLoading} style={styles.headerAction}>
+              <Text style={styles.doneText}>{authLoading ? "Saving..." : "Done"}</Text>
+            </Pressable>
           </View>
 
           {editingField ? (
@@ -140,34 +142,6 @@ export default function ProfileScreen() {
               onDone={() => setEditingField(null)}
             />
           ) : null}
-
-          <View style={styles.coverTopSection}>
-            <View style={styles.coverEditTitleRow}>
-              <View style={styles.coverEditCopy}>
-                <Text style={styles.coverEditTitle}>Cover photo</Text>
-                <Text style={styles.coverEditMeta}>Public profile header</Text>
-              </View>
-              <Pressable onPress={() => setMediaSheetTarget("cover")} style={styles.coverEditAction}>
-                <Ionicons name="camera-outline" size={18} color={colors.accent} />
-              </Pressable>
-            </View>
-            <Pressable onPress={() => setMediaSheetTarget("cover")} style={styles.editCoverPreview}>
-              {selectedCoverPhoto ? (
-                <ImageBackground source={{ uri: selectedCoverPhoto }} resizeMode="cover" style={styles.editCoverImage}>
-                  <View style={styles.coverShade} />
-                  <View style={styles.coverChangePill}>
-                    <Ionicons name="camera" size={14} color={colors.accentText} />
-                    <Text style={styles.coverChangeText}>Change</Text>
-                  </View>
-                </ImageBackground>
-              ) : (
-                <View style={styles.editCoverEmpty}>
-                  <Ionicons name="image-outline" size={24} color={colors.textMuted} />
-                  <Text style={styles.editCoverEmptyText}>Add cover photo</Text>
-                </View>
-              )}
-            </Pressable>
-          </View>
 
           <View style={styles.editPhotoStage}>
             <Pressable onPress={() => setMediaSheetTarget("profile")} style={styles.editAvatar}>
@@ -191,11 +165,8 @@ export default function ProfileScreen() {
             </EditField>
           </View>
 
-          {notice ? <Text style={[styles.notice, isErrorNotice(notice) ? styles.errorText : null]}>{notice}</Text> : null}
+          {notice && isErrorNotice(notice) ? <Text style={styles.errorText}>{notice}</Text> : null}
           {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
-          <Pressable onPress={saveProfileMedia} disabled={authLoading} style={[styles.editSaveButton, authLoading && styles.buttonDisabled]}>
-            <Text style={styles.editSaveText}>{authLoading ? "Saving..." : "Save"}</Text>
-          </Pressable>
         </ScrollView>
         <PhotoActionSheet
           hasPhoto={mediaSheetTarget === "cover" ? Boolean(selectedCoverPhoto) : Boolean(selectedProfilePicture)}
@@ -213,29 +184,16 @@ export default function ProfileScreen() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.settingsHeader}>
-          <Text style={styles.screenTitle}>Profile</Text>
-          <Text style={styles.brandMark}>P24</Text>
+          <Text style={styles.screenTitle}>Settings</Text>
         </View>
 
         <Pressable onPress={() => setEditingProfile(true)} style={({ pressed }) => [styles.profileHero, pressed && styles.profileHeroPressed]}>
-          {selectedCoverPhoto ? (
-            <ImageBackground source={{ uri: selectedCoverPhoto }} resizeMode="cover" style={styles.profileHeroImage}>
-              <ProfileHeroContent accountType={account.accountType} bio={authUser?.bio} email={authUser?.email} name={authUser?.name} phone={authUser?.phone} profilePicture={selectedProfilePicture} verified={Boolean(authUser?.verified)} />
-            </ImageBackground>
-          ) : (
-            <View style={[styles.profileHeroImage, styles.profileHeroEmpty]}>
-              <ProfileHeroContent accountType={account.accountType} bio={authUser?.bio} email={authUser?.email} name={authUser?.name} phone={authUser?.phone} profilePicture={selectedProfilePicture} verified={Boolean(authUser?.verified)} />
-            </View>
-          )}
+          <View style={styles.profileHeroImage}>
+            <ProfileHeroContent accountType={account.accountType} bio={authUser?.bio} email={authUser?.email} name={authUser?.name} phone={authUser?.phone} profilePicture={selectedProfilePicture} onQrPress={() => setNotice("Profile QR sharing is coming soon.")} />
+          </View>
         </Pressable>
 
         <SettingsGroup title="Account">
-          <SettingsRow
-            icon="shield-checkmark-outline"
-            title="Verification"
-            meta={verificationLabel}
-            href={account.visibleSections.includes("verification") || account.onboardingRequirements.length ? "/verification" : undefined}
-          />
           <SettingsRow
             icon="lock-closed-outline"
             title="Privacy"
@@ -291,7 +249,7 @@ function FocusedTextEditor({ onChangeText, onDone, target, value }: { onChangeTe
       <View style={styles.focusEditorHeader}>
         <View>
           <Text style={styles.focusLabel}>{isAbout ? "About" : "Name"}</Text>
-          <Text style={styles.focusMeta}>{isAbout ? "Visible on your rental profile" : "Visible to verified rental users"}</Text>
+          <Text style={styles.focusMeta}>{isAbout ? "Visible on your rental profile" : "Visible to rental users"}</Text>
         </View>
         <Pressable onPress={onDone} style={styles.focusDoneButton}>
           <Text style={styles.focusDoneText}>Done</Text>
@@ -356,7 +314,7 @@ function PhotoActionSheet({ hasPhoto, onClose, onPick, onRemove, target, visible
   );
 }
 
-function ProfileHeroContent({ accountType, bio, email, name, phone, profilePicture, verified }: { accountType: AccountRole; bio?: string; email?: string; name?: string; phone?: string; profilePicture: string; verified: boolean }) {
+function ProfileHeroContent({ accountType, bio, email, name, onQrPress, phone, profilePicture }: { accountType: AccountRole; bio?: string; email?: string; name?: string; onQrPress: () => void; phone?: string; profilePicture: string }) {
   const { colors: themeColors } = useTheme();
   const colors = themeColors;
   const styles = createStyles(themeColors);
@@ -372,18 +330,16 @@ function ProfileHeroContent({ accountType, bio, email, name, phone, profilePictu
       <View style={styles.profileHeroBody}>
         <View style={styles.nameRow}>
           <Text numberOfLines={1} style={styles.name}>{name || `${roleLabel(accountType)} workspace`}</Text>
-          {verified ? <Ionicons name="checkmark-circle" size={16} color={colors.success} /> : null}
         </View>
         <Text numberOfLines={1} style={styles.subtitle}>{bio || email || phone || "Tap to update profile"}</Text>
-        <View style={styles.profileMetaRow}>
-          <Text style={styles.rolePill}>{roleLabel(accountType)}</Text>
-          <View style={styles.editPill}>
-            <Ionicons name="pencil" size={12} color={colors.text} />
-            <Text style={styles.editPillText}>Edit</Text>
-          </View>
-        </View>
+        <Text style={styles.rolePill}>{roleLabel(accountType)}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={19} color={colors.text} />
+      <View style={styles.profileHeroActions}>
+        <Pressable onPress={onQrPress} accessibilityLabel="Show profile QR code" style={styles.qrButton}>
+          <Ionicons name="qr-code-outline" size={22} color={colors.accent} />
+        </Pressable>
+        <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+      </View>
     </View>
   );
 }
@@ -459,34 +415,31 @@ function createStyles(themeColors: typeof colors) {
   const colors = themeColors;
   return StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.md, backgroundColor: colors.background },
-  settingsHeader: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  settingsHeader: { minHeight: 42, justifyContent: "center" },
   screenTitle: { color: colors.text, fontSize: 24, lineHeight: 29, ...typography.display },
-  brandMark: { overflow: "hidden", borderRadius: 4, backgroundColor: colors.accent, color: colors.accentText, paddingHorizontal: 8, paddingVertical: 4, fontSize: 12, ...typography.button },
-  profileHero: { overflow: "hidden", borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.surfaceElevated, ...shadows.card },
-  profileHeroPressed: { borderColor: "rgba(229,9,20,0.46)", backgroundColor: colors.surfaceMuted },
-  profileHeroImage: { minHeight: 154, justifyContent: "flex-end" },
-  profileHeroEmpty: { backgroundColor: colors.surfaceElevated },
-  profileHeroShade: { flex: 1, flexDirection: "row", alignItems: "flex-end", gap: 12, padding: spacing.md, backgroundColor: "rgba(2,11,20,0.62)" },
-  avatarLarge: { width: 66, height: 66, borderRadius: 33, overflow: "hidden", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.accent, backgroundColor: colors.background },
+  profileHero: { overflow: "hidden", borderBottomWidth: 1, borderTopWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  profileHeroPressed: { backgroundColor: colors.surfaceMuted },
+  profileHeroImage: { minHeight: 112, justifyContent: "center" },
+  profileHeroShade: { flex: 1, flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: spacing.md, paddingVertical: 18 },
+  avatarLarge: { width: 64, height: 64, borderRadius: 32, overflow: "hidden", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, backgroundColor: colors.accentSoft },
   avatarImage: { width: "100%", height: "100%" },
-  avatarLargeText: { color: colors.accent, fontSize: 16, ...typography.button },
-  profileHeroBody: { flex: 1, minWidth: 0, gap: 6 },
+  avatarLargeText: { color: colors.accent, fontSize: 18, ...typography.display },
+  profileHeroBody: { flex: 1, minWidth: 0, gap: 7 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  name: { flex: 1, color: colors.text, fontSize: 19, lineHeight: 24, ...typography.title },
+  name: { flex: 1, color: colors.text, fontSize: 17, lineHeight: 22, ...typography.title },
   subtitle: { color: colors.textMuted, fontSize: 13, lineHeight: 18, ...typography.body },
-  profileMetaRow: { flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" },
-  rolePill: { overflow: "hidden", borderRadius: 999, borderWidth: 1, borderColor: colors.border, color: colors.text, backgroundColor: colors.surfaceMuted, paddingHorizontal: 9, paddingVertical: 5, fontSize: 11, ...typography.button },
-  editPill: { minHeight: 27, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, backgroundColor: colors.accent },
-  editPillText: { color: colors.accentText, fontSize: 11, ...typography.button },
+  rolePill: { color: colors.accent, fontSize: 12, ...typography.label },
+  profileHeroActions: { alignItems: "center", flexDirection: "row", gap: 12 },
+  qrButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: colors.accentSoft },
   coverShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(2,11,20,0.12)" },
   groupWrap: { gap: spacing.xs },
-  groupLabel: { color: colors.accent, fontSize: 12, lineHeight: 16, paddingHorizontal: 2, paddingTop: 2, ...typography.label },
-  settingsGroup: { overflow: "hidden", borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.surfaceElevated, ...shadows.soft },
+  groupLabel: { color: colors.textMuted, fontSize: 11, lineHeight: 16, paddingHorizontal: 2, paddingTop: 4, textTransform: "uppercase", ...typography.label },
+  settingsGroup: { overflow: "hidden", borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
   settingsRow: { minHeight: 64, flexDirection: "row", alignItems: "center", backgroundColor: colors.surfaceElevated },
   settingsRowPressed: { backgroundColor: colors.surfaceMuted },
-  rowIcon: { width: 52, minHeight: 64, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
+  rowIcon: { width: 48, minHeight: 60, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   rowIconDanger: { backgroundColor: "transparent" },
-  rowBody: { flex: 1, minWidth: 0, minHeight: 64, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: colors.border, paddingRight: 14, paddingVertical: 8 },
+  rowBody: { flex: 1, minWidth: 0, minHeight: 60, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: colors.border, paddingRight: 14, paddingVertical: 8 },
   rowCopy: { flex: 1, minWidth: 0, justifyContent: "center", gap: 3 },
   rowTitle: { color: colors.text, fontSize: 16, lineHeight: 21, ...typography.title },
   rowTitleDanger: { color: colors.danger },
@@ -495,9 +448,11 @@ function createStyles(themeColors: typeof colors) {
   errorText: { color: colors.danger, fontSize: 12, lineHeight: 17, ...typography.label },
   buttonDisabled: { opacity: 0.62 },
   editContent: { paddingBottom: spacing.xl, backgroundColor: colors.background },
-  editHeader: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: colors.border, paddingHorizontal: 6, backgroundColor: colors.background },
-  backButton: { width: 38, height: 40, alignItems: "center", justifyContent: "center" },
-  editTitle: { color: colors.text, fontSize: 21, lineHeight: 26, ...typography.title },
+  editHeader: { minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: colors.border, paddingHorizontal: 16, backgroundColor: colors.surface },
+  headerAction: { minWidth: 64, minHeight: 40, justifyContent: "center" },
+  backButton: { width: 40, height: 40, alignItems: "flex-start", justifyContent: "center" },
+  doneText: { color: colors.accent, fontSize: 15, textAlign: "right", ...typography.button },
+  editTitle: { color: colors.text, fontSize: 17, lineHeight: 22, ...typography.title },
   focusEditor: { borderTopWidth: 8, borderTopColor: colors.background, backgroundColor: colors.surfaceElevated, paddingHorizontal: 20, paddingVertical: 14, gap: 12 },
   focusEditorHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   focusLabel: { color: colors.accent, fontSize: 13, lineHeight: 17, ...typography.label },

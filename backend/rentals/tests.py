@@ -1130,6 +1130,18 @@ class RentalApiTests(TestCase):
         self.assertEqual(end_response.json()["status"], CallSession.Status.ENDED)
         self.assertIsNotNone(end_response.json()["ended_at"])
 
+    def test_call_history_lists_calls_across_conversations(self):
+        conversation = Conversation.objects.create(property=self.property, title="Borrowdale chat")
+        conversation.participants.set([self.tenant, self.agent])
+        call = CallSession.objects.create(conversation=conversation, initiator=self.agent, mode=CallSession.Mode.VOICE, status=CallSession.Status.ENDED)
+
+        response = self.client.get("/api/calls/", **self.auth_header(self.tenant))
+
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertEqual(response.json()["results"][0]["id"], call.id)
+        self.assertEqual(response.json()["results"][0]["contact_name"], self.agent.get_full_name() or self.agent.username)
+        self.assertEqual(response.json()["results"][0]["property_title"], self.property.title)
+
     def test_profile_media_is_tracked_and_removed_with_assets(self):
         response = self.client.post(
             "/api/auth/profile/",

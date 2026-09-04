@@ -23,7 +23,7 @@ export default function OperationsScreen() {
   }, []);
 
   const metrics = [
-    { label: "Listings", value: `${stats.listings}`, change: `${stats.verifiedProperties} verified`, tone: "info" as const },
+    { label: "Listings", value: `${stats.listings}`, change: "active portfolio", tone: "info" as const },
     { label: "Payments", value: `${state.payments.length}`, change: `${stats.receivedPayments} received`, tone: "success" as const },
     { label: "Maintenance", value: `${state.maintenance.length}`, change: `${stats.maintenanceOpen} open`, tone: "warning" as const },
     { label: "Leases", value: `${state.leases.length}`, change: `${stats.occupiedRate}% active`, tone: "info" as const },
@@ -44,7 +44,7 @@ export default function OperationsScreen() {
               <Text style={styles.clockText}>{clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</Text>
             </View>
           </View>
-          <Text style={styles.subtitle}>Track verification, payments, leases, maintenance, chats, and analytics as one workflow.</Text>
+          <Text style={styles.subtitle}>Track payments, leases, maintenance, chats, and analytics as one workflow.</Text>
         </View>
 
         <SectionHeader title="Who is using the app" subtitle="Role-specific entry points for the rental platform." />

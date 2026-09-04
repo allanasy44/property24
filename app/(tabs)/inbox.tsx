@@ -185,7 +185,7 @@ export default function InboxScreen() {
   );
 
   const ensureConversation = useCallback(async () => {
-    if (!selectedThread) throw new Error("Select a verified listing before chatting");
+    if (!selectedThread) throw new Error("Select a listing before chatting");
     if (activeConversation) return activeConversation;
     if (!authToken) throw new Error("Sign in is required before chatting with a listing contact");
 
@@ -579,7 +579,7 @@ export default function InboxScreen() {
   const handleAttachmentAction = async (action: AttachmentActionKey) => {
     setAttachmentSheetVisible(false);
     if (!selectedThread) {
-      setError("Select a verified listing contact before sharing.");
+      setError("Select a listing contact before sharing.");
       return;
     }
 
@@ -728,7 +728,7 @@ export default function InboxScreen() {
                   <View style={styles.emptyList}>
                     <Ionicons name="chatbubble-ellipses-outline" size={28} color={colors.textMuted} />
                     <Text style={styles.emptyTitle}>No listing chats found</Text>
-                    <Text style={styles.emptyBody}>Verified landlord and agent conversations will appear here.</Text>
+                    <Text style={styles.emptyBody}>Landlord and agent conversations will appear here.</Text>
                   </View>
                 ) : null}
               </ScrollView>
@@ -788,8 +788,8 @@ export default function InboxScreen() {
                   <Text style={styles.startTitle}>{selectedThread ? "Start a secure listing chat" : "Open chat from a house post"}</Text>
                   <Text style={styles.startBody}>
                     {selectedThread
-                      ? "Your first message will create an account conversation with the verified owner or assigned agent for this house."
-                      : "Go to Home, choose a verified house, then open the supplier profile to message that landlord or agent."}
+                      ? "Your first message will create an account conversation with the owner or assigned agent for this house."
+                      : "Go to Home, choose a house, then open the supplier profile to message that landlord or agent."}
                   </Text>
                 </View>
               ) : null}
@@ -1151,7 +1151,7 @@ function buildListingThreads(properties: Property[], conversations: Conversation
     .map((property) => {
       const conversation = conversationByProperty.get(property.id);
       const contactName = property.supplierName || property.agentName || property.ownerName || otherParticipantName(conversation) || "Listing contact";
-      const contactRole = property.supplierRole === "agent" || property.agentName ? "Verified agent" : "Verified landlord";
+      const contactRole = property.supplierRole === "agent" || property.agentName ? "Agent" : "Landlord";
       const profilePicture = property.supplierProfilePicture || property.agentProfilePicture || property.ownerProfilePicture || otherParticipantPicture(conversation);
       const contactLastSeenAt = property.supplierLastSeenAt || property.agentLastSeenAt || property.ownerLastSeenAt || otherParticipantLastSeenAt(conversation);
       return {

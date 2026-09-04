@@ -218,7 +218,7 @@ def require_authenticated(request):
     user, error = current_user(request)
     if error:
         return None, json_error(error, status=401)
-    if request.method != "OPTIONS" and user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user) and not verification_access_allowed(request):
+    if request.method != "OPTIONS" and user.role in {User.Roles.LANDLORD, User.Roles.AGENT} and not account_onboarding_complete(user) and not verification_access_allowed(request):
         return None, json_error(
             "Email verification is required before using this feature",
             status=403,
@@ -270,7 +270,7 @@ def is_publicly_contactable_listing(prop):
 
 
 def public_listings(properties):
-    return properties.filter(listing_status=Property.ListingStatus.VERIFIED, owner__is_verified=True).filter(Q(agent__isnull=True) | Q(agent__is_verified=True))
+    return properties.filter(is_active=True)
 
 
 def user_properties(user):
@@ -1890,6 +1890,22 @@ def conversation_call_detail(request, conversation_id, call_id):
 
 
 @csrf_exempt
+@require_http_methods(["GET", "OPTIONS"])
+def calls_history(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+
+    calls = (
+        CallSession.objects.filter(conversation__participants=acting_user)
+        .select_related("conversation__property", "initiator")
+        .prefetch_related("conversation__participants")
+        .order_by("-created_at")[:100]
+    )
+    return JsonResponse({"results": [serialize_call_session(call, viewer=acting_user) for call in calls]})
+
+
+@csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])
 def push_devices_collection(request):
     acting_user, auth_response = require_authenticated(request)
@@ -3364,8 +3380,8 @@ def message_attachment_url(message):
     return message.attachment_url
 
 
-def serialize_call_session(call):
-    return {
+def serialize_call_session(call, viewer=None):
+    payload = {
         "id": call.id,
         "conversation_id": call.conversation_id,
         "initiator_id": call.initiator_id,
@@ -3374,6 +3390,16 @@ def serialize_call_session(call):
         "created_at": call.created_at.isoformat(),
         "ended_at": call.ended_at.isoformat() if call.ended_at else None,
     }
+    if viewer is not None:
+        participants = [participant for participant in call.conversation.participants.all() if participant.id != viewer.id]
+        contact = participants[0] if participants else call.initiator
+        payload.update({
+            "contact_id": contact.id if contact else None,
+            "contact_name": contact.get_full_name() or contact.username if contact else "",
+            "property_title": call.conversation.property.title if call.conversation.property else "",
+            "conversation_title": call.conversation.title,
+        })
+    return payload
 
 
 def serialize_supplier_follow(supplier, following):

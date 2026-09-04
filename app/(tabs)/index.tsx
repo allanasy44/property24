@@ -1,6 +1,6 @@
 import { Link } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { FlatList, ImageBackground, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, ImageBackground, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AccountRole, RentalPlatformState, useRentalPlatform, useRentalPlatformStats } from "../../state/rentalPlatform";
 import { colors, spacing, radius, shadows, typography, useTheme, getGreetingFromTime, formatDashboardTime } from "../../constants/theme";
@@ -22,10 +22,10 @@ export default function HomeScreen() {
   const visibleActions = quickActions.filter((action) => action.roles.includes(account.accountType));
 
   if (account.accountType === "tenant") {
-    return <TenantHome state={state} visibleActions={visibleActions} userName={authUser?.name} verified={Boolean(authUser?.verified)} themeColors={themeColors} />;
+    return <TenantHome state={state} visibleActions={visibleActions} userName={authUser?.name} themeColors={themeColors} />;
   }
 
-  return <RoleDashboard role={account.accountType} state={state} stats={stats} visibleActions={visibleActions} userName={authUser?.name} profileStatus={authUser?.profileStatus} verified={Boolean(authUser?.verified)} themeColors={themeColors} />;
+  return <RoleDashboard role={account.accountType} state={state} stats={stats} visibleActions={visibleActions} userName={authUser?.name} themeColors={themeColors} />;
 }
 
 type DashboardMetric = {
@@ -42,12 +42,11 @@ type DashboardPanel = {
   empty: string;
 };
 
-function RoleDashboard({ role, state, stats, visibleActions, userName, profileStatus, verified, themeColors }: { role: Exclude<AccountRole, "tenant">; state: RentalPlatformState; stats: ReturnType<typeof useRentalPlatformStats>; visibleActions: typeof quickActions; userName?: string; profileStatus?: string; verified: boolean; themeColors: typeof colors }) {
+function RoleDashboard({ role, state, stats, visibleActions, userName, themeColors }: { role: Exclude<AccountRole, "tenant">; state: RentalPlatformState; stats: ReturnType<typeof useRentalPlatformStats>; visibleActions: typeof quickActions; userName?: string; themeColors: typeof colors }) {
   const { mode, toggleTheme } = useTheme();
   const styles = createStyles(themeColors);
   const [now, setNow] = useState(new Date());
   const dashboard = getRoleDashboard(role, state, stats);
-  const statusText = verified ? "Verified account" : profileStatus === "account_ready" ? "Basic account" : "Verification pending";
   const featured = state.properties[0] ?? {
     id: "featured",
     title: "Marbisa Residence",
@@ -103,10 +102,6 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, profileSt
             <View style={styles.featureGradient} />
             <View style={styles.featureHeaderRow}>
                   <View style={[styles.featureBadge, { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.28)" }]}><Text style={styles.featureBadgeText}>Featured</Text></View>
-              <View style={[styles.featureMetaBadge, { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.28)" }]}>
-                <Ionicons name="shield-checkmark" size={13} color={themeColors.success} />
-                <Text style={styles.featureMetaText}>{featured.verified ? "Verified" : "Review"}</Text>
-              </View>
             </View>
             <View style={styles.featureBodyRow}>
               <View style={styles.featureTextBlock}>
@@ -164,18 +159,17 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, profileSt
 
 function getRoleDashboard(role: Exclude<AccountRole, "tenant">, state: RentalPlatformState, stats: ReturnType<typeof useRentalPlatformStats>): { metrics: DashboardMetric[]; panels: DashboardPanel[] } {
   const openMaintenance = state.maintenance.filter((item) => item.status.toLowerCase() !== "resolved");
-  const listings = state.properties.slice(0, 4).map((item) => ({ id: item.id, title: item.title, meta: [item.suburb, item.price].filter(Boolean).join(" · "), status: item.verified ? "Verified" : "Review" }));
+  const listings = state.properties.slice(0, 4).map((item) => ({ id: item.id, title: item.title, meta: [item.suburb, item.price].filter(Boolean).join(" · "), status: "Active" }));
   const payments = state.payments.slice(0, 4).map((item) => ({ id: item.id, title: item.tenant || "Tenant", meta: [item.property, item.method].filter(Boolean).join(" · "), status: item.amount }));
   const maintenance = openMaintenance.slice(0, 4).map((item) => ({ id: item.id, title: item.issue, meta: [item.property, item.category].filter(Boolean).join(" · "), status: item.status }));
   const applications = state.applications.slice(0, 4).map((item) => ({ id: item.id, title: item.applicant, meta: item.property, status: item.status }));
   const viewings = state.viewings.slice(0, 4).map((item) => ({ id: item.id, title: item.property, meta: [item.tenant, item.date, item.time].filter(Boolean).join(" · "), status: item.status }));
-  const verifications = state.verifications.slice(0, 4).map((item) => ({ id: item.id, title: item.name, meta: item.role, status: item.status }));
   const conversations = state.conversations.slice(0, 4).map((item) => ({ id: item.id, title: item.name, meta: item.preview, status: item.time }));
 
   if (role === "landlord") {
     return {
       metrics: [
-        { label: "Listings", value: String(stats.listings), detail: `${stats.verifiedProperties} verified`, icon: "home-outline" },
+        { label: "Listings", value: String(stats.listings), detail: "active portfolio", icon: "home-outline" },
         { label: "Rent", value: String(stats.receivedPayments), detail: "payments received", icon: "card-outline" },
         { label: "Maintenance", value: String(openMaintenance.length), detail: "open requests", icon: "construct-outline" },
         { label: "Occupancy", value: `${stats.occupiedRate}%`, detail: "active leases", icon: "stats-chart-outline" },
@@ -206,39 +200,37 @@ function getRoleDashboard(role: Exclude<AccountRole, "tenant">, state: RentalPla
 
   return {
     metrics: [
-      { label: "Verifications", value: String(stats.verifications), detail: "user checks", icon: "shield-checkmark-outline" },
-      { label: "Listings", value: String(stats.listings), detail: `${stats.verifiedProperties} verified`, icon: "home-outline" },
+      { label: "Users", value: String(stats.verifications), detail: "account records", icon: "people-outline" },
+      { label: "Listings", value: String(stats.listings), detail: "active portfolio", icon: "home-outline" },
       { label: "Payments", value: String(state.payments.length), detail: "records", icon: "wallet-outline" },
       { label: "Reports", value: String(openMaintenance.length), detail: "open issues", icon: "alert-circle-outline" },
     ],
     panels: [
-      { title: "Verification queue", subtitle: "Trust checks", rows: verifications, empty: "No verification requests yet." },
       { title: "Listings", subtitle: "Marketplace", rows: listings, empty: "No properties have been listed yet." },
       { title: "Maintenance", subtitle: "Dispute signals", rows: maintenance, empty: "No open maintenance reports." },
     ],
   };
 }
 
-function TenantHome({ state, visibleActions, userName, verified, themeColors }: { state: ReturnType<typeof useRentalPlatform>["state"]; visibleActions: typeof quickActions; userName?: string; verified: boolean; themeColors: typeof colors }) {
+function TenantHome({ state, visibleActions, userName, themeColors }: { state: ReturnType<typeof useRentalPlatform>["state"]; visibleActions: typeof quickActions; userName?: string; themeColors: typeof colors }) {
   const { mode, toggleTheme } = useTheme();
   const styles = createStyles(themeColors);
   const [now, setNow] = useState(new Date());
-  const tenantVisibleProperties = useMemo(() => state.properties.filter(isVerifiedSupplierListing), [state.properties]);
-  const verifiedCount = tenantVisibleProperties.length;
-  const openMaintenance = state.maintenance.filter((item) => item.status.toLowerCase() !== "resolved").length;
+  const tenantVisibleProperties = state.properties;
   const [query, setQuery] = useState("");
   const [selectedType, setSelectedType] = useState("All");
+  const [selectedQuickFilter, setSelectedQuickFilter] = useState("All");
   const [maxRent, setMaxRent] = useState("");
   const [bedrooms, setBedrooms] = useState("Any");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(timer);
   }, []);
 
-  const filteredProperties = useMemo(
-    () =>
-      tenantVisibleProperties.filter((property) => {
+  const filteredProperties = useMemo(() => {
+      const results = tenantVisibleProperties.filter((property) => {
         const text = [property.title, property.address, property.city, property.suburb, property.type, property.description].join(" ").toLowerCase();
         const rent = parseMoney(property.price);
         const minimumBedrooms = bedrooms === "Any" ? 0 : Number(bedrooms.replace("+", ""));
@@ -247,40 +239,37 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
         const matchesMaxRent = !maxRent.trim() || rent <= Number(maxRent);
         const matchesBedrooms = property.bedrooms >= minimumBedrooms;
         return matchesQuery && matchesType && matchesMaxRent && matchesBedrooms;
-      }),
-    [bedrooms, maxRent, query, selectedType, tenantVisibleProperties]
+      });
+      if (selectedQuickFilter === "Price") return [...results].sort((left, right) => parseMoney(left.price) - parseMoney(right.price));
+      if (selectedQuickFilter === "Bed / Bath") return results.filter((property) => property.bedrooms >= 2);
+      return results;
+    },
+    [bedrooms, maxRent, query, selectedQuickFilter, selectedType, tenantVisibleProperties]
   );
   const featured = filteredProperties.slice(0, 6);
-  const tenantActions = visibleActions.filter((action) => action.href !== "/");
   const greeting = getGreetingFromTime(now);
-  const displayName = userName ? firstName(userName) : "Find verified rentals";
+  const displayName = userName ? firstName(userName) : "Guest";
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={[styles.tenantContent, { backgroundColor: themeColors.background }]} showsVerticalScrollIndicator={false}>
-        <View style={styles.tenantTopBar}>
+      <ScrollView contentContainerStyle={[styles.landlordContent, { backgroundColor: themeColors.background }]} showsVerticalScrollIndicator={false}>
+        <View style={[styles.landlordTopRow, { backgroundColor: "transparent" }]}>
           <View>
-            <Text style={[styles.tenantKicker, { color: themeColors.textMuted }]}>{formatDashboardTime(now)} · Tenant workspace</Text>
-            <Text style={[styles.tenantTitle, { color: themeColors.text }]}>{greeting}, {displayName}</Text>
+            <Text style={styles.timeStamp}>{formatDashboardTime(now)}</Text>
+            <Text style={styles.greetingTitle}>{greeting}, {displayName}</Text>
           </View>
           <Pressable onPress={toggleTheme} style={[styles.avatarBadge, { backgroundColor: themeColors.accentSoft, borderColor: themeColors.border }]}>
             <Ionicons name={mode === "dark" ? "moon-outline" : "sunny-outline"} size={16} color={themeColors.accentStrong} />
           </Pressable>
         </View>
 
-        <View style={styles.filterRail}>
-          <View style={[styles.filterChip, styles.filterChipActive, { backgroundColor: themeColors.accent, borderColor: themeColors.accent }]}>
-            <Text style={[styles.filterChipText, styles.filterChipTextActive, { color: themeColors.accentText }]}>Overview</Text>
-          </View>
-        </View>
-
         <View style={styles.tenantSearchPanel}>
-          <View style={[styles.tenantSearch, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }]}>
+          <View style={[styles.searchCard, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }]}>
             <Ionicons name="search" size={19} color={themeColors.textMuted} />
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Search city, suburb, or address"
+              placeholder={filteredProperties[0]?.city || "Select location"}
               placeholderTextColor={themeColors.textMuted}
               autoCapitalize="none"
               style={[styles.tenantSearchInput, { color: themeColors.text }]}
@@ -290,108 +279,30 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
                 <Ionicons name="close-circle" size={18} color={themeColors.muted} />
               </Pressable>
             ) : (
-              <Ionicons name="options-outline" size={18} color={themeColors.text} />
+              <Pressable accessibilityLabel="Open property filters" onPress={() => setFiltersOpen(true)} hitSlop={10}>
+                <Ionicons name="options-outline" size={18} color={themeColors.text} />
+              </Pressable>
             )}
-          </View>
-
-          <View style={styles.tenantFilterRow}>
-            <View style={[styles.tenantFilterChip, styles.tenantFilterChipActive, { backgroundColor: themeColors.accentSoft, borderColor: themeColors.accent }]}>
-              <Ionicons name="shield-checkmark-outline" size={15} color={themeColors.accent} />
-              <Text style={[styles.tenantFilterText, styles.tenantFilterTextActive, { color: themeColors.accent }]}>Verified suppliers</Text>
-            </View>
-            <View style={[styles.tenantRentInputWrap, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }]}>
-              <Text style={[styles.tenantCurrency, { color: themeColors.text }]}>$</Text>
-              <TextInput value={maxRent} onChangeText={setMaxRent} keyboardType="number-pad" placeholder="Max rent" placeholderTextColor={themeColors.textMuted} style={[styles.tenantRentInput, { color: themeColors.text }]} />
-            </View>
           </View>
 
           <FlatList
             horizontal
-            data={typeFilters}
+            data={["All", "Price", "Property", "Bed / Bath"]}
             keyExtractor={(item) => item}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.tenantHorizontalFilters}
             renderItem={({ item }) => (
-              <Pressable onPress={() => setSelectedType(item)} style={[styles.tenantTypeChip, selectedType === item && styles.tenantTypeChipActive, selectedType === item && { backgroundColor: themeColors.accent, borderColor: themeColors.accent }]}>
-                <Text style={[styles.tenantTypeText, selectedType === item && styles.tenantTypeTextActive, { color: selectedType === item ? themeColors.accentText : themeColors.textMuted }]}>{shortType(item)}</Text>
+              <Pressable onPress={() => { setSelectedQuickFilter(item); if (item === "All") setSelectedType("All"); if (item === "Property" || item === "Bed / Bath") setFiltersOpen(true); }} style={[styles.tenantTypeChip, selectedQuickFilter === item && styles.tenantTypeChipActive, selectedQuickFilter === item && { backgroundColor: themeColors.accent, borderColor: themeColors.accent }]}>
+                <Text style={[styles.tenantTypeText, selectedQuickFilter === item && styles.tenantTypeTextActive, { color: selectedQuickFilter === item ? themeColors.accentText : themeColors.textMuted }]}>{item}</Text>
               </Pressable>
             )}
           />
 
-          <View style={styles.tenantBedroomBlock}>
-            <Text style={[styles.tenantFilterLabel, { color: themeColors.textMuted }]}>Bedrooms</Text>
-            <View style={styles.tenantBedroomChips}>
-              {bedroomFilters.map((item) => (
-                <Pressable key={item} onPress={() => setBedrooms(item)} style={[styles.tenantBedroomChip, bedrooms === item && styles.tenantBedroomChipActive, bedrooms === item && { backgroundColor: themeColors.accentSoft, borderColor: themeColors.accent }]}>
-                  <Text style={[styles.tenantBedroomText, bedrooms === item && styles.tenantBedroomTextActive, { color: bedrooms === item ? themeColors.accent : themeColors.textMuted }]}>{item}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
         </View>
 
-        <FlatList
-          data={filteredProperties.slice(0, 8)}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.storyRailWrap}
-          contentContainerStyle={styles.storyRail}
-          renderItem={({ item }) => (
-            <Link href={`/property/${item.id}`} asChild>
-              <Pressable style={styles.storyItem}>
-                {storyImage(item.photos?.[0]) ? (
-                <ImageBackground source={{ uri: storyImage(item.photos?.[0]) }} resizeMode="cover" style={styles.storyImage}>
-                  <View style={styles.storyShade} />
-                  <View style={styles.storyBadge}>
-                    <Ionicons name={item.verified ? "shield-checkmark" : "time-outline"} size={12} color="#FFFFFF" />
-                  </View>
-                  {item.videoCount ? (
-                    <View style={styles.storyVideoBadge}>
-                      <Ionicons name="play" size={10} color="#FFFFFF" />
-                    </View>
-                  ) : null}
-                </ImageBackground>
-                ) : (
-                  <View style={[styles.storyImage, styles.storyImageEmpty]}>
-                    <Ionicons name="image-outline" size={14} color={themeColors.textMuted} />
-                  </View>
-                )}
-                <View style={styles.storyCopy}>
-                  <Text style={styles.storyLabel} numberOfLines={1}>{item.suburb}</Text>
-                  <Text style={styles.storyMeta} numberOfLines={1}>{item.price}</Text>
-                </View>
-              </Pressable>
-            </Link>
-          )}
-        />
-
-        <View style={styles.tenantTrustStrip}>
-          <TrustPill icon="shield-checkmark" label={`${verifiedCount} verified homes`} />
-          <TrustPill icon="lock-closed" label="Private chat" />
-          <TrustPill icon="receipt" label="Rent history" />
-        </View>
-
-        <View style={[styles.tenantStatusPanel, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }]}>
-          <View style={styles.statusMetric}>
-            <Text style={[styles.statusValue, { color: themeColors.text }]}>{verified ? "Verified" : "Pending"}</Text>
-            <Text style={[styles.statusLabel, { color: themeColors.textMuted }]}>Profile checks</Text>
-          </View>
-          <View style={[styles.statusDivider, { backgroundColor: themeColors.border }]} />
-          <View style={styles.statusMetric}>
-            <Text style={[styles.statusValue, { color: themeColors.text }]}>{state.applications.length}</Text>
-            <Text style={[styles.statusLabel, { color: themeColors.textMuted }]}>Applications</Text>
-          </View>
-          <View style={[styles.statusDivider, { backgroundColor: themeColors.border }]} />
-          <View style={styles.statusMetric}>
-            <Text style={[styles.statusValue, { color: themeColors.text }]}>{openMaintenance}</Text>
-            <Text style={[styles.statusLabel, { color: themeColors.textMuted }]}>Maintenance</Text>
-          </View>
-        </View>
-
-        <View style={styles.tenantSectionRow}>
-          <Text style={[styles.tenantSectionTitle, { color: themeColors.text }]}>Available house posts</Text>
-          <Text style={[styles.tenantSeeAll, { color: themeColors.accent }]}>{filteredProperties.length} homes</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Homes</Text>
+          <Text style={[styles.tenantSeeAll, { color: themeColors.accent }]}>{filteredProperties.length}</Text>
         </View>
         <View style={styles.propertyStack}>
           {featured.length ? (
@@ -404,27 +315,38 @@ function TenantHome({ state, visibleActions, userName, verified, themeColors }: 
           )}
         </View>
 
-        <View style={styles.tenantSectionRow}>
-          <Text style={styles.tenantSectionTitle}>For you</Text>
-        </View>
-        <View style={styles.tenantActionList}>
-          {tenantActions.slice(0, 4).map((action) => (
-            <Link key={action.title} href={action.href} asChild>
-              <Pressable style={styles.tenantActionItem}>
-                <View style={styles.tenantActionIcon}>
-                  <Ionicons name={action.icon as keyof typeof Ionicons.glyphMap} size={18} color={themeColors.text} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.tenantActionTitle}>{action.title}</Text>
-                  <Text style={styles.tenantActionSubtitle} numberOfLines={1}>{action.subtitle}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={17} color={themeColors.muted} />
-              </Pressable>
-            </Link>
-          ))}
-        </View>
       </ScrollView>
+      <FilterSheet
+        visible={filtersOpen}
+        maxRent={maxRent}
+        bedrooms={bedrooms}
+        onClose={() => setFiltersOpen(false)}
+        onMaxRentChange={setMaxRent}
+        onBedroomsChange={setBedrooms}
+        propertyType={selectedType}
+        onPropertyTypeChange={setSelectedType}
+        themeColors={themeColors}
+      />
     </Screen>
+  );
+}
+
+function FilterSheet({ bedrooms, maxRent, onBedroomsChange, onClose, onMaxRentChange, onPropertyTypeChange, propertyType, themeColors, visible }: { bedrooms: string; maxRent: string; onBedroomsChange: (value: string) => void; onClose: () => void; onMaxRentChange: (value: string) => void; onPropertyTypeChange: (value: string) => void; propertyType: string; themeColors: typeof colors; visible: boolean }) {
+  const styles = createStyles(themeColors);
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.filterBackdrop} onPress={onClose} />
+      <View style={styles.filterSheet}>
+        <View style={styles.filterSheetHeader}><Text style={styles.filterSheetTitle}>Filters</Text><Pressable onPress={onClose} style={styles.filterClose}><Ionicons name="close" size={20} color={themeColors.text} /></Pressable></View>
+        <Text style={styles.filterLabel}>Maximum rent</Text>
+        <View style={styles.filterInput}><Text style={styles.filterCurrency}>$</Text><TextInput value={maxRent} onChangeText={onMaxRentChange} keyboardType="number-pad" placeholder="Any amount" placeholderTextColor={themeColors.textMuted} style={styles.filterInputText} /></View>
+        <Text style={styles.filterLabel}>Bedrooms</Text>
+        <View style={styles.filterBedroomRow}>{bedroomFilters.map((item) => <Pressable key={item} onPress={() => onBedroomsChange(item)} style={[styles.filterBedroom, bedrooms === item && styles.filterBedroomActive]}><Text style={[styles.filterBedroomText, bedrooms === item && styles.filterBedroomTextActive]}>{item}</Text></Pressable>)}</View>
+        <Text style={styles.filterLabel}>Property type</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTypeRow}>{typeFilters.map((item) => <Pressable key={item} onPress={() => onPropertyTypeChange(item)} style={[styles.filterType, propertyType === item && styles.filterBedroomActive]}><Text style={[styles.filterBedroomText, propertyType === item && styles.filterBedroomTextActive]}>{shortType(item)}</Text></Pressable>)}</ScrollView>
+        <Pressable onPress={onClose} style={styles.applyFilterButton}><Text style={styles.applyFilterText}>Apply filters</Text></Pressable>
+      </View>
+    </Modal>
   );
 }
 
@@ -476,23 +398,23 @@ function storyImage(photo?: string) {
 function createStyles(themeColors: typeof colors) {
   const colors = themeColors;
   return StyleSheet.create({
-  landlordContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: spacing.xl, gap: 12, backgroundColor: colors.background },
-  landlordTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
-  timeStamp: { color: colors.muted, fontSize: 12, ...typography.label },
-  greetingTitle: { color: colors.text, fontSize: 23, lineHeight: 28, marginTop: 3, ...typography.display },
+  landlordContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: spacing.xl, gap: 6, backgroundColor: colors.background },
+  landlordTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
+  timeStamp: { color: colors.textMuted, fontSize: 10, textTransform: "uppercase", ...typography.label },
+  greetingTitle: { color: colors.text, fontSize: 22, lineHeight: 27, marginTop: 0, ...typography.display },
   avatarBadge: { width: 38, height: 38, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  filterRail: { flexDirection: "row", gap: 8, marginTop: 2 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border },
+  filterRail: { flexDirection: "row", gap: 6, marginTop: 0 },
+  filterChip: { minHeight: 30, justifyContent: "center", paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border },
   filterChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   filterChipText: { color: colors.textMuted, fontSize: 11, ...typography.label },
   filterChipTextActive: { color: colors.accentText },
-  searchCard: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 16, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border, ...shadows.soft },
+  searchCard: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 11, borderRadius: 8, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border, ...shadows.soft },
   searchPlaceholder: { color: colors.textMuted, fontSize: 12, ...typography.body },
-  featureCard: { borderRadius: 28, overflow: "hidden", borderWidth: 1, borderColor: colors.border, ...shadows.card },
-  featureImage: { width: "100%", minHeight: 230, padding: 16, justifyContent: "space-between" },
+  featureCard: { borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: colors.border, ...shadows.card },
+  featureImage: { width: "100%", minHeight: 230, padding: 12, justifyContent: "space-between" },
   featureGradient: { position: "absolute", inset: 0, backgroundColor: "rgba(10,17,25,0.20)" },
   featureHeaderRow: { position: "relative", zIndex: 1, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  featureBadge: { backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  featureBadge: { backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   featureBadgeText: { color: "#ffffff", fontSize: 11, ...typography.label },
   featureMetaBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
   featureMetaText: { color: "#ffffff", fontSize: 11, ...typography.label },
@@ -511,7 +433,7 @@ function createStyles(themeColors: typeof colors) {
   quickStatValue: { color: colors.text, fontSize: 20, ...typography.display },
   quickStatLabel: { color: colors.textMuted, fontSize: 11, marginTop: 2, ...typography.label },
   featureDetailRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  featureDetailPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border },
+  featureDetailPill: { minHeight: 30, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border },
   featureDetailText: { color: colors.textMuted, fontSize: 11, ...typography.label },
   insightStrip: { flexDirection: "row", gap: 8 },
   insightCard: { flex: 1, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 10, ...shadows.soft },
@@ -549,7 +471,7 @@ function createStyles(themeColors: typeof colors) {
   sectionTitle: { color: colors.text, fontSize: 17, ...typography.title },
   sectionAction: { color: colors.accent, fontSize: 12, ...typography.label },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  metricCard: { flexGrow: 1, flexBasis: "47%", minHeight: 96, backgroundColor: colors.surfaceElevated, borderRadius: 24, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12, gap: 6, ...shadows.soft },
+  metricCard: { flexGrow: 1, flexBasis: "47%", minHeight: 94, backgroundColor: colors.surfaceElevated, borderRadius: 8, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 6, ...shadows.soft },
   metricCardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   metricCardValue: { color: colors.text, fontSize: 22, ...typography.display },
   metricLabel: { color: colors.text, fontSize: 13, ...typography.title },
@@ -588,19 +510,37 @@ function createStyles(themeColors: typeof colors) {
   dashboardRowMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2, ...typography.body },
   dashboardRowStatus: { color: colors.accent, fontSize: 11, ...typography.label },
   dashboardEmpty: { color: colors.textMuted, padding: 12, lineHeight: 18, ...typography.body },
-  tenantContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: spacing.xl, gap: 6, backgroundColor: colors.background },
+  tenantContent: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: spacing.xl, gap: 10, backgroundColor: colors.background },
   tenantTopBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
   tenantKicker: { color: colors.textMuted, fontSize: 10, textTransform: "uppercase", ...typography.label },
   tenantTitle: { color: colors.text, fontSize: 22, lineHeight: 27, marginTop: 0, ...typography.display },
   tenantSearchPanel: { gap: 6 },
   tenantSearch: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.surfaceElevated, borderRadius: 8, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 11 },
   tenantSearchInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: 13, outlineStyle: "none" as any, ...typography.body },
-  tenantFilterRow: { flexDirection: "row", gap: 6 },
-  tenantFilterChip: { minHeight: 32, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 9, backgroundColor: colors.surfaceElevated },
+  tenantFilterRow: { flexDirection: "row", gap: 8 },
+  tenantFilterChip: { minHeight: 30, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, backgroundColor: colors.surfaceElevated },
   tenantFilterChipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   tenantFilterText: { color: colors.textMuted, fontSize: 11, ...typography.button },
   tenantFilterTextActive: { color: colors.accent },
-  tenantRentInputWrap: { flex: 1, minHeight: 32, flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 8, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, backgroundColor: colors.surfaceElevated },
+  filterBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(2,11,20,0.42)" },
+  filterSheet: { gap: 10, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, backgroundColor: colors.surfaceElevated },
+  filterSheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  filterSheetTitle: { color: colors.text, fontSize: 20, ...typography.title },
+  filterClose: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17, backgroundColor: colors.surfaceMuted },
+  filterLabel: { color: colors.textMuted, fontSize: 11, textTransform: "uppercase", ...typography.label },
+  filterInput: { minHeight: 42, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 11, backgroundColor: colors.background },
+  filterCurrency: { color: colors.text, ...typography.button },
+  filterInputText: { flex: 1, color: colors.text, paddingVertical: 8, ...typography.body },
+  filterBedroomRow: { flexDirection: "row", gap: 6 },
+  filterTypeRow: { gap: 6, paddingRight: 6 },
+  filterType: { minHeight: 34, justifyContent: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, backgroundColor: colors.background },
+  filterBedroom: { flex: 1, minHeight: 34, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.background },
+  filterBedroomActive: { borderColor: colors.accent, backgroundColor: colors.accent },
+  filterBedroomText: { color: colors.textMuted, fontSize: 11, ...typography.button },
+  filterBedroomTextActive: { color: colors.accentText },
+  applyFilterButton: { minHeight: 44, alignItems: "center", justifyContent: "center", marginTop: 6, borderRadius: 8, backgroundColor: colors.accent },
+  applyFilterText: { color: colors.accentText, ...typography.button },
+  tenantRentInputWrap: { flex: 1, minHeight: 30, flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 8, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, backgroundColor: colors.surfaceElevated },
   tenantCurrency: { color: colors.text, ...typography.button },
   tenantRentInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: 12, outlineStyle: "none" as any, ...typography.body },
   tenantHorizontalFilters: { gap: 6, paddingRight: 12 },
@@ -608,7 +548,7 @@ function createStyles(themeColors: typeof colors) {
   tenantTypeChipActive: { borderColor: colors.accent, backgroundColor: colors.accent },
   tenantTypeText: { color: colors.textMuted, fontSize: 11, ...typography.button },
   tenantTypeTextActive: { color: "#FFFFFF" },
-  tenantBedroomBlock: { gap: 5 },
+  tenantBedroomBlock: { gap: 6 },
   tenantFilterLabel: { color: colors.textMuted, fontSize: 10, textTransform: "uppercase", ...typography.label },
   tenantBedroomChips: { flexDirection: "row", gap: 6 },
   tenantBedroomChip: { flex: 1, minHeight: 30, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
@@ -618,7 +558,7 @@ function createStyles(themeColors: typeof colors) {
   tenantTrustStrip: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   trustPill: { minHeight: 26, flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, paddingHorizontal: 8, backgroundColor: colors.successSoft },
   trustPillText: { color: colors.success, fontSize: 10, ...typography.button },
-  tenantStatusPanel: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.surfaceElevated, paddingVertical: 8 },
+  tenantStatusPanel: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surfaceElevated, paddingVertical: 8 },
   statusMetric: { flex: 1, alignItems: "center", gap: 1, paddingHorizontal: 4 },
   statusValue: { color: colors.text, fontSize: 13, ...typography.title },
   statusLabel: { color: colors.textMuted, fontSize: 8, textTransform: "uppercase", ...typography.label },
@@ -634,12 +574,12 @@ function createStyles(themeColors: typeof colors) {
   storyCopy: { width: "100%", alignItems: "center", gap: 0 },
   storyLabel: { width: "100%", color: colors.text, fontSize: 7, lineHeight: 8, textAlign: "center", ...typography.label },
   storyMeta: { width: "100%", color: colors.textMuted, fontSize: 6, lineHeight: 7, textAlign: "center", ...typography.body },
-  tenantSectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, marginTop: 0 },
-  tenantSectionTitle: { color: colors.text, fontSize: 16, lineHeight: 20, ...typography.title },
+  tenantSectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4 },
+  tenantSectionTitle: { color: colors.text, fontSize: 17, lineHeight: 21, ...typography.title },
   tenantSeeAll: { color: colors.accent, fontSize: 13, ...typography.button },
   tenantActionList: { borderTopWidth: 1, borderColor: colors.border },
-  tenantActionItem: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: 1, borderColor: colors.border },
-  tenantActionIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted },
+  tenantActionItem: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderColor: colors.border },
+  tenantActionIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted },
   tenantActionTitle: { color: colors.text, fontSize: 14, ...typography.title },
   tenantActionSubtitle: { color: colors.textMuted, fontSize: 12, marginTop: 2, ...typography.body },
   content: { padding: spacing.lg, gap: spacing.lg },

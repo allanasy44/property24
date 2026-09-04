@@ -131,7 +131,7 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   if (authUser && authToken) {
-    const verificationLocked = ["tenant", "landlord", "agent"].includes(authUser.role) && !authUser.accountOnboardingComplete;
+    const verificationLocked = ["landlord", "agent"].includes(authUser.role) && !authUser.accountOnboardingComplete;
     return (
       <>
         {verificationLocked ? (

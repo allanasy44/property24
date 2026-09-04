@@ -52,6 +52,7 @@ urlpatterns = [
     path("conversations/<int:conversation_id>/report/", views.conversation_report, name="conversation_report"),
     path("conversations/<int:conversation_id>/calls/", views.conversation_calls, name="conversation_calls"),
     path("conversations/<int:conversation_id>/calls/<int:call_id>/", views.conversation_call_detail, name="conversation_call_detail"),
+    path("calls/", views.calls_history, name="calls_history"),
     path("push/devices/", views.push_devices_collection, name="push_devices_collection"),
     path("media/", views.media_assets_collection, name="media_assets_collection"),
     path("media/<int:media_id>/", views.media_asset_detail, name="media_asset_detail"),

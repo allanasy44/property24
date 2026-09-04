@@ -24,7 +24,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: "Home" }} />
       <Tabs.Screen name="listings" options={tabOptions("listings", "Listings")} />
       <Tabs.Screen name="inbox" options={tabOptions("inbox", "Inbox")} />
-      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+      <Tabs.Screen name="calls" options={tabOptions("calls", "Calls")} />
+      <Tabs.Screen name="profile" options={{ title: "Settings" }} />
     </Tabs>
   );
 }
@@ -32,21 +33,23 @@ export default function TabsLayout() {
 function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { mode, colors: themeColors } = useTheme();
+  const { canAccessSection } = useRentalPlatform();
   const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
     index: "compass-outline",
     listings: "business-outline",
     inbox: "chatbubbles-outline",
-    profile: "person-outline",
+    calls: "call-outline",
+    profile: "settings-outline",
   };
 
   return (
     <View pointerEvents="box-none" style={[styles.host, { bottom: Math.max(insets.bottom, 10) }]}>
       <BlurView intensity={58} tint={mode === "dark" ? "dark" : "light"} style={[styles.dock, { backgroundColor: mode === "dark" ? "rgba(11,22,34,0.82)" : "rgba(238,242,255,0.30)" }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.items}>
-          {state.routes.map((route, index) => {
+          {state.routes.filter((route) => canAccessSection(route.name)).map((route) => {
             const descriptor = descriptors[route.key];
             const label = descriptor.options.tabBarLabel ?? descriptor.options.title ?? route.name;
-            const focused = state.index === index;
+            const focused = state.routes[state.index]?.key === route.key;
             const onPress = () => {
               const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
               if (!focused && !event.defaultPrevented) navigation.navigate(route.name, route.params);

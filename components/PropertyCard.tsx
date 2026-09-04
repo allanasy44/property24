@@ -34,7 +34,7 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
   const dislikes = disliked ? 1 : 0;
   const commentCount = comments.length || property.commentsCount || 0;
   const supplierName = property.supplierName || property.agentName || property.ownerName || `${property.suburb} supplier`;
-  const supplierRole = property.supplierRole === "agent" ? "Verified agent" : "Verified landlord";
+  const supplierRole = property.supplierRole === "agent" ? "Agent" : "Landlord";
   const supplierInitials = initials(supplierName);
   const supplierProfilePicture = property.supplierProfilePicture;
   const supplierProfileHref: Href = property.supplierId
@@ -101,12 +101,11 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
 
   const shareProperty = async () => {
     const appLink = Linking.createURL(`/property/${property.id}`);
-    const verification = property.verified && property.supplierVerified ? supplierRole : "Verification pending";
     const message = [
       `${property.title}`,
       `${property.price} · Deposit ${property.deposit}`,
       `${property.bedrooms} bed · ${property.bathrooms} bath · ${property.suburb}, ${property.city}`,
-      `${verification} · ${property.water} · ${property.solarPower ? "Solar backup" : property.power}`,
+      `${property.water} · ${property.solarPower ? "Solar backup" : property.power}`,
       `Media: ${photoCount} photo(s), ${property.videoCount} video(s)`,
       `Open in Property24: ${appLink}`,
       ...(imageUri ? [`Preview image: ${imageUri}`] : []),
@@ -139,7 +138,6 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
               <Link href={supplierProfileHref} asChild>
                 <Pressable style={styles.supplierLink}>
                   <Text numberOfLines={1} style={styles.feedName}>{supplierName}</Text>
-                  {property.supplierVerified ? <Ionicons name="shield-checkmark" size={13} color={colors.success} /> : null}
                 </Pressable>
               </Link>
               <Text style={styles.feedHandle}>@{supplierHandle(supplierName)}</Text>
@@ -158,38 +156,19 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
           <ImageBackground source={{ uri: imageUri }} resizeMode="cover" style={imageStyle}>
             <View style={styles.imageShade} />
             <View style={styles.topRow}>
-              {property.verified ? (
-                <View style={styles.verifiedBadge}>
-                  <Ionicons name="shield-checkmark" size={13} color={colors.success} />
-                  <Text style={styles.verifiedText}>Verified</Text>
-                </View>
-              ) : null}
+              <View style={styles.saleBadge}><View style={styles.saleDot} /><Text style={styles.saleText}>For sale</Text></View>
               <View style={styles.mediaStack}>
-                <View style={styles.mediaBadge}>
-                  <Ionicons name="camera-outline" size={13} color="#FFFFFF" />
-                  <Text style={styles.mediaText}>{photoCount}</Text>
-                </View>
-                {property.videoCount ? (
-                  <View style={styles.mediaBadge}>
-                    <Ionicons name="videocam-outline" size={13} color="#FFFFFF" />
-                    <Text style={styles.mediaText}>{property.videoCount}</Text>
-                  </View>
-                ) : null}
+                {feed ? <Pressable onPress={(event) => { event.stopPropagation(); toggleLike(); }} style={styles.favoriteButton}><Ionicons name={liked ? "heart" : "heart-outline"} size={19} color={liked ? colors.danger : "#FFFFFF"} /></Pressable> : null}
+                {!feed ? <View style={styles.mediaBadge}><Ionicons name="camera-outline" size={13} color="#FFFFFF" /><Text style={styles.mediaText}>{photoCount}</Text></View> : null}
+                {!feed && property.videoCount ? <View style={styles.mediaBadge}><Ionicons name="videocam-outline" size={13} color="#FFFFFF" /><Text style={styles.mediaText}>{property.videoCount}</Text></View> : null}
               </View>
             </View>
-            <View style={styles.priceBadge}>
-              <Text style={styles.price}>{property.price}</Text>
-            </View>
+            {feed ? <View style={styles.feedImageBottom}><View style={styles.feedImageSummary}><View><Text style={styles.feedImagePrice}>{property.price}<Text style={styles.feedImagePriceUnit}> /mo</Text></Text><Text numberOfLines={1} style={styles.feedImageAddress}><Ionicons name="location-outline" size={12} color="#FFFFFF" /> {property.address || `${property.suburb}, ${property.city}`}</Text></View><Ionicons name="arrow-forward-circle" size={28} color="#FFFFFF" /></View><View style={styles.feedImageFacts}><View style={styles.feedImageFact}><Ionicons name="bed-outline" size={13} color="#FFFFFF" /><Text style={styles.feedImageFactText}>{property.bedrooms} Bd</Text></View><View style={styles.feedImageFact}><Ionicons name="water-outline" size={13} color="#FFFFFF" /><Text style={styles.feedImageFactText}>{property.bathrooms} Ba</Text></View><View style={styles.feedImageFact}><Ionicons name="expand-outline" size={13} color="#FFFFFF" /><Text style={styles.feedImageFactText}>2,500 Sqft</Text></View></View></View> : <View style={styles.priceBadge}><Text style={styles.price}>{property.price}</Text></View>}
           </ImageBackground>
           ) : (
             <View style={[imageStyle, styles.noPhotoImage]}>
               <View style={styles.topRow}>
-                {property.verified ? (
-                  <View style={styles.verifiedBadge}>
-                    <Ionicons name="shield-checkmark" size={13} color={colors.success} />
-                    <Text style={styles.verifiedText}>Verified</Text>
-                  </View>
-                ) : <View />}
+                <View style={styles.saleBadge}><View style={styles.saleDot} /><Text style={styles.saleText}>For sale</Text></View>
                 <View style={styles.mediaBadge}>
                   <Ionicons name="camera-outline" size={13} color="#FFFFFF" />
                   <Text style={styles.mediaText}>{photoCount}</Text>
@@ -207,18 +186,8 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
         </Pressable>
       </Link>
 
-      {feed ? (
-        <View style={styles.feedActions}>
-          <FeedMetric icon={liked ? "heart" : "heart-outline"} value={`${likes}`} active={liked} activeColor={colors.danger} onPress={toggleLike} />
-          <FeedMetric icon={disliked ? "thumbs-down" : "thumbs-down-outline"} value={`${dislikes}`} active={disliked} activeColor={colors.warning} onPress={toggleDislike} />
-          <FeedMetric icon="chatbubble-outline" value={`${commentCount}`} onPress={() => setCommentOpen(true)} />
-          <FeedMetric icon="share-social-outline" value={`${shareCount}`} onPress={shareProperty} />
-          <FeedMetric icon="stats-chart-outline" value={`${property.listingViews}`} />
-        </View>
-      ) : null}
-
-      <View style={styles.body}>
-        <View style={styles.titleRow}>
+      <View style={[styles.body, feed && styles.feedBody]}>
+        <View style={[styles.titleRow, feed && styles.feedHidden]}>
           <View style={{ flex: 1 }}>
             <Text style={styles.title} numberOfLines={1}>{property.title}</Text>
             <Text style={styles.location} numberOfLines={1}>{property.suburb}, {property.city}</Text>
@@ -230,16 +199,15 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
           </Link>
         </View>
 
-        <View style={styles.factRow}>
+        <View style={[styles.factRow, feed && styles.feedHidden]}>
           <Fact icon="bed-outline" label={`${property.bedrooms} beds`} />
           <Fact icon="water-outline" label={property.borehole ? "Borehole" : property.water} />
           <Fact icon="flash-outline" label={property.solarPower ? "Solar" : "Grid"} />
         </View>
 
-        <View style={styles.footerRow}>
+        <View style={[styles.footerRow, feed && styles.feedHidden]}>
           <View style={styles.trustRow}>
-            <Ionicons name={property.verified ? "shield-checkmark" : "time-outline"} size={13} color={property.verified ? colors.success : colors.warning} />
-            <Text style={depositStyle}>{property.verified && property.supplierVerified ? `${supplierRole}` : "Verification pending"}</Text>
+            <Text style={depositStyle}>{supplierRole}</Text>
           </View>
           <Text style={styles.type}>{property.type}</Text>
         </View>
@@ -248,7 +216,6 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
             <Link href={supplierProfileHref} asChild>
               <Pressable style={styles.supplierNameButton}>
                 <Text style={styles.supplierName} numberOfLines={1}>{supplierName}</Text>
-                {property.supplierVerified ? <Ionicons name="shield-checkmark" size={13} color={colors.success} /> : null}
               </Pressable>
             </Link>
             <Pressable onPress={toggleFollow} style={[styles.followButtonSmall, followingSupplier && styles.followButtonActive]}>
@@ -256,8 +223,7 @@ export function PropertyCard({ property, variant = "default" }: PropertyCardProp
             </Pressable>
           </View>
         ) : null}
-        <Text style={styles.depositLine} numberOfLines={1}>Deposit {property.deposit} · GPS {property.gps}</Text>
-        {feed ? <Text style={styles.caption} numberOfLines={3}>{property.description}</Text> : null}
+        {!feed ? <Text style={styles.depositLine} numberOfLines={1}>Deposit {property.deposit} · GPS {property.gps}</Text> : null}
 
         {feed && comments.length ? <Text style={styles.commentPreview} numberOfLines={1}>Latest comment: {comments[0].body}</Text> : null}
       </View>
@@ -342,7 +308,6 @@ function CommentSheet({
               <View style={styles.commentMediaCopy}>
                 <Text style={styles.commentMediaTitle} numberOfLines={1}>{property.title}</Text>
                 <Text style={styles.commentMediaMeta} numberOfLines={2}>{property.price} · {property.suburb}, {property.city}</Text>
-                <Text style={styles.commentMediaTrust}>{property.verified ? "Verified listing" : "Verification pending"}</Text>
               </View>
             </View>
 
@@ -469,10 +434,11 @@ function createStyles(themeColors: typeof colors) {
     ...shadows.soft,
   },
   feedCard: {
-    borderRadius: 28,
+    borderRadius: 18,
     shadowOpacity: 0.03,
   },
   feedHeader: {
+    display: "none",
     minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
@@ -508,10 +474,10 @@ function createStyles(themeColors: typeof colors) {
     backgroundColor: colors.border,
   },
   feedImage: {
-    height: 230,
-    padding: 10,
-    marginHorizontal: 12,
-    borderRadius: 8,
+    height: 300,
+    padding: 12,
+    marginHorizontal: 0,
+    borderRadius: 0,
     overflow: "hidden",
   },
   noPhotoImage: {
@@ -540,6 +506,18 @@ function createStyles(themeColors: typeof colors) {
     alignItems: "flex-start",
     gap: spacing.sm,
   },
+  saleBadge: { minHeight: 30, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 15, paddingHorizontal: 10, backgroundColor: "rgba(17,19,21,0.52)" },
+  saleDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
+  saleText: { color: "#FFFFFF", fontSize: 11, ...typography.button },
+  favoriteButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: "rgba(17,19,21,0.46)" },
+  feedImageBottom: { gap: 8 },
+  feedImageSummary: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 10 },
+  feedImageFacts: { flexDirection: "row", gap: 6 },
+  feedImageFact: { minHeight: 27, flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 8, paddingHorizontal: 8, backgroundColor: "rgba(17,19,21,0.46)" },
+  feedImageFactText: { color: "#FFFFFF", fontSize: 10, ...typography.button },
+  feedImagePrice: { color: "#FFFFFF", fontSize: 24, lineHeight: 29, textShadowColor: "rgba(0,0,0,0.4)", textShadowRadius: 6, ...typography.display },
+  feedImagePriceUnit: { fontSize: 13, ...typography.body },
+  feedImageAddress: { color: "rgba(255,255,255,0.9)", fontSize: 11, marginTop: 3, maxWidth: 280, ...typography.body },
   mediaStack: { alignItems: "flex-end", gap: 6 },
   verifiedBadge: {
     flexDirection: "row",
@@ -567,10 +545,6 @@ function createStyles(themeColors: typeof colors) {
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 7,
-    shadowColor: "#000000",
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
   },
   price: { color: colors.text, fontSize: 15, lineHeight: 19, ...typography.display },
   feedActions: {
@@ -584,6 +558,8 @@ function createStyles(themeColors: typeof colors) {
   feedMetric: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 2 },
   feedMetricText: { color: colors.textMuted, fontSize: 11, ...typography.label },
   body: { padding: 12, gap: spacing.sm },
+  feedBody: { display: "none" },
+  feedHidden: { display: "none" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   openButton: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
   title: { color: colors.text, fontSize: 16, lineHeight: 21, ...typography.title },
