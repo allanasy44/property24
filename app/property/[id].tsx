@@ -16,6 +16,9 @@ export default function PropertyDetailScreen() {
   const property = state.properties.find((entry) => entry.id === id);
   const canApply = hasCapability("apply_for_rentals");
   const canMessage = hasCapability("message_landlord_or_agent") || hasCapability("message_tenants") || hasCapability("message_clients");
+  const contactName = property?.supplierName || property?.agentName || property?.ownerName;
+  const contactRole = property?.supplierRole === "agent" || property?.agentName ? "agent" : "landlord";
+  const chatLabel = contactName ? `Chat with ${contactName}` : `Chat with ${contactRole}`;
   const lifecycle = usePropertyLifecycle(state, property?.id, authUser?.id, authUser?.name);
   const isTenant = account.accountType === "tenant";
   const styles = useMemo(
@@ -178,7 +181,7 @@ export default function PropertyDetailScreen() {
         </View>
       </ScrollView>
       <View style={styles.bottomBar}>
-        {canMessage ? <Link href={{ pathname: "/inbox", params: { propertyId: property.id } }} asChild><Text style={styles.primaryAction}>Contact an Agent</Text></Link> : null}
+        {canMessage ? <Link href={{ pathname: "/inbox", params: { propertyId: property.id } }} asChild><Text style={styles.primaryAction}>{chatLabel}</Text></Link> : null}
         {isTenant ? <Pressable onPress={requestViewing} style={styles.secondaryButton}><Text style={styles.secondaryText}>Schedule Tour</Text></Pressable> : null}
       </View>
       </View>
@@ -250,4 +253,3 @@ function estimatedMonthly(value: string) {
   const monthly = amount > 10000 ? amount * 0.0032 : amount;
   return `$${Math.round(monthly).toLocaleString()}`;
 }
-

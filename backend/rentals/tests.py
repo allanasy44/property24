@@ -1025,6 +1025,7 @@ class RentalApiTests(TestCase):
         self.assertEqual(first.json()["id"], second.json()["id"])
         participant_ids = {item["id"] for item in first.json()["participants"]}
         self.assertEqual(participant_ids, {self.tenant.id, self.agent.id})
+        self.assertEqual(Conversation.objects.filter(property=self.property).count(), 1)
         self.assertFalse(first.json()["phone_numbers_revealed"])
 
     def test_conversation_messages_mark_read_and_validate_body(self):

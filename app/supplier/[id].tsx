@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Link, useLocalSearchParams, type Href } from "expo-router";
+import { Link, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useMemo, useState } from "react";
 import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Screen } from "../../components/Screen";
@@ -18,12 +18,15 @@ type SupplierProfile = {
 
 export default function SupplierProfileScreen() {
   const { id, propertyId } = useLocalSearchParams<{ id?: string; propertyId?: string }>();
+  const router = useRouter();
   const supplierId = normalizeParam(id);
   const selectedPropertyId = normalizeParam(propertyId);
-  const { state, authToken, hasCapability, toggleSupplierFollow } = useRentalPlatform();
+  const { state, authToken, hasCapability, startPropertyConversation, toggleSupplierFollow } = useRentalPlatform();
   const { colors: themeColors } = useTheme();
   const [following, setFollowing] = useState(false);
   const [notice, setNotice] = useState("");
+  const [chatError, setChatError] = useState("");
+  const [openingChat, setOpeningChat] = useState(false);
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -47,8 +50,10 @@ export default function SupplierProfileScreen() {
         followTextActive: { color: themeColors.accent },
         bio: { color: themeColors.text, fontSize: 13, lineHeight: 20, marginTop: 12, ...typography.body },
         notice: { color: themeColors.success, fontSize: 12, marginTop: 8, ...typography.label },
+        error: { color: themeColors.warning, fontSize: 12, marginTop: 8, ...typography.label },
         actionRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 13 },
         primaryAction: { flex: 1, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 8, backgroundColor: themeColors.accent },
+        primaryActionDisabled: { opacity: 0.65 },
         primaryText: { color: themeColors.accentText, fontSize: 13, ...typography.button },
         iconAction: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: themeColors.border, backgroundColor: themeColors.surface },
         statsBand: { flexDirection: "row", alignItems: "center", marginTop: 10, borderTopWidth: 1, borderBottomWidth: 1, borderColor: themeColors.border, backgroundColor: themeColors.surface },
@@ -95,9 +100,6 @@ export default function SupplierProfileScreen() {
   const canMessage =
     Boolean(selectedProperty) &&
     (hasCapability("message_landlord_or_agent") || hasCapability("message_tenants") || hasCapability("message_clients"));
-  const messageHref: Href | null = selectedProperty
-    ? { pathname: "/inbox", params: { propertyId: selectedProperty.id } }
-    : null;
   const voiceHref: Href | null = selectedProperty
     ? { pathname: "/inbox", params: { propertyId: selectedProperty.id, intent: "voice" } }
     : null;
@@ -123,6 +125,26 @@ export default function SupplierProfileScreen() {
       setFollowing(!nextValue);
       setNotice(error instanceof Error ? error.message : "Follow action could not be saved.");
     });
+  };
+
+  const openChat = async () => {
+    if (!selectedProperty || openingChat) return;
+    if (!authToken) {
+      setChatError("Sign in is required before starting a chat.");
+      return;
+    }
+
+    setOpeningChat(true);
+    setNotice("");
+    setChatError("");
+    try {
+      await startPropertyConversation(selectedProperty.id);
+      router.push({ pathname: "/inbox", params: { propertyId: selectedProperty.id } });
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "Chat could not be opened. Please try again.");
+    } finally {
+      setOpeningChat(false);
+    }
   };
 
   if (!supplier || !supplier.verified || !supplierProperties.length) {
@@ -175,15 +197,14 @@ export default function SupplierProfileScreen() {
               {supplier.bio || `${roleNoun(supplier.role)} with contact details kept inside the app until the rental process is appropriate.`}
             </Text>
             {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+            {chatError ? <Text style={styles.error}>{chatError}</Text> : null}
 
             <View style={styles.actionRow}>
-              {canMessage && messageHref ? (
-                <Link href={messageHref} asChild>
-                  <Pressable style={styles.primaryAction}>
-                    <Ionicons name="chatbubble-ellipses" size={17} color={colors.accentText} />
-                    <Text style={styles.primaryText}>Message</Text>
-                  </Pressable>
-                </Link>
+              {canMessage ? (
+                <Pressable onPress={() => void openChat()} disabled={openingChat} style={[styles.primaryAction, openingChat && styles.primaryActionDisabled]}>
+                  <Ionicons name="chatbubble-ellipses" size={17} color={colors.accentText} />
+                  <Text style={styles.primaryText}>{openingChat ? "Opening chat..." : "Message"}</Text>
+                </Pressable>
               ) : null}
               {canMessage && voiceHref ? (
                 <Link href={voiceHref} asChild>
@@ -351,4 +372,3 @@ function imageFor(property?: Property) {
   if (normalized.includes("student")) return "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1000&q=80&auto=format&fit=crop";
   return "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1000&q=80&auto=format&fit=crop";
 }
-
