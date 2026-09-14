@@ -38,38 +38,41 @@ type DashboardMetric = {
 type DashboardPanel = {
   title: string;
   subtitle: string;
-  rows: Array<{ id: string; title: string; meta: string; status?: string }>;
+  rows: DashboardRow[];
   empty: string;
+};
+
+type DashboardRow = {
+  id: string;
+  title: string;
+  meta: string;
+  status?: string;
+  searchText?: string;
+  href?: `/property/${string}`;
 };
 
 function RoleDashboard({ role, state, stats, visibleActions, userName, themeColors }: { role: Exclude<AccountRole, "tenant">; state: RentalPlatformState; stats: ReturnType<typeof useRentalPlatformStats>; visibleActions: typeof quickActions; userName?: string; themeColors: typeof colors }) {
   const { mode, toggleTheme } = useTheme();
   const styles = createStyles(themeColors);
   const [now, setNow] = useState(new Date());
+  const [query, setQuery] = useState("");
   const dashboard = getRoleDashboard(role, state, stats);
-  const featured = state.properties[0] ?? {
-    id: "featured",
-    title: "Marbisa Residence",
-    suburb: "Austin",
-    city: "Austin, TX",
-    price: "$475,000",
-    bedrooms: 3,
-    bathrooms: 2.5,
-    type: "Single family",
-    verified: true,
-  };
-  const featuredArea = "2,250 Sqft";
-  const featuredYear = "2010";
+  const featured = state.properties[0];
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(timer);
   }, []);
 
-  const filterPills = ["All", "Price", "Property", "Bed / Bath"];
-  const pricePills = ["$20K", "$30K", "$50K", "$60K"];
-
-  const featuredImage = featured.photos?.[0] || "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80";
+  const normalizedQuery = query.trim().toLowerCase();
+  const searchPanels = useMemo(() => dashboard.panels
+    .map((panel) => ({
+      ...panel,
+      rows: panel.rows.filter((row) => [row.title, row.meta, row.status, row.searchText].filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery)),
+    }))
+    .filter((panel) => panel.rows.length), [dashboard.panels, normalizedQuery]);
+  const resultCount = searchPanels.reduce((total, panel) => total + panel.rows.length, 0);
+  const featuredImage = featured?.photos?.[0] || "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80";
   const greeting = getGreetingFromTime(now);
   const displayName = userName ? firstName(userName) : roleLabel(role);
 
@@ -94,11 +97,47 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, themeColo
 
         <View style={[styles.searchCard, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }]}>
           <Ionicons name="search-outline" size={16} color={themeColors.textMuted} />
-          <Text style={[styles.searchPlaceholder, { color: themeColors.textMuted }]}>Search listings, tenants, or locations</Text>
+          <TextInput
+            accessibilityLabel="Search dashboard"
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search listings, tenants, or locations"
+            placeholderTextColor={themeColors.textMuted}
+            autoCapitalize="none"
+            returnKeyType="search"
+            style={[styles.dashboardSearchInput, { color: themeColors.text }]}
+          />
+          {query ? (
+            <Pressable accessibilityLabel="Clear dashboard search" accessibilityRole="button" onPress={() => setQuery("")} hitSlop={10}>
+              <Ionicons name="close-circle" size={18} color={themeColors.textMuted} />
+            </Pressable>
+          ) : null}
         </View>
 
-        <View style={styles.featureCard}>
-          <ImageBackground source={{ uri: featuredImage }} resizeMode="cover" style={styles.featureImage}>
+        {normalizedQuery ? (
+          <View style={styles.dashboardPanelStack}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Search results</Text>
+              <Text style={styles.sectionAction}>{resultCount}</Text>
+            </View>
+            {searchPanels.length ? searchPanels.map((panel) => (
+              <View key={panel.title} style={styles.dashboardPanel}>
+                <View style={styles.dashboardPanelHeader}>
+                  <Text style={styles.dashboardPanelTitle}>{panel.title}</Text>
+                  <Text style={styles.dashboardPanelSubtitle}>{panel.subtitle}</Text>
+                </View>
+                {panel.rows.map((row) => <DashboardResultRow key={`${panel.title}-${row.id}`} row={row} styles={styles} />)}
+              </View>
+            )) : (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>No results for “{query.trim()}”</Text>
+                <Text style={styles.emptyBody}>Try a property name, location, tenant, applicant, or conversation.</Text>
+              </View>
+            )}
+          </View>
+        ) : featured ? (<>
+          <View style={styles.featureCard}>
+            <ImageBackground source={{ uri: featuredImage }} resizeMode="cover" style={styles.featureImage}>
             <View style={styles.featureGradient} />
             <View style={styles.featureHeaderRow}>
                   <View style={[styles.featureBadge, { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.28)" }]}><Text style={styles.featureBadgeText}>Featured</Text></View>
@@ -113,10 +152,10 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, themeColo
                 <Text style={styles.priceBubbleText}>{featured.price || "$450,000"}</Text>
               </View>
             </View>
-          </ImageBackground>
-        </View>
+            </ImageBackground>
+          </View>
 
-        <View style={styles.featureDetailRow}>
+          <View style={styles.featureDetailRow}>
           <View style={styles.featureDetailPill}>
             <Ionicons name="bed-outline" size={14} color={themeColors.textMuted} />
             <Text style={styles.featureDetailText}>{featured.bedrooms || 3} beds</Text>
@@ -129,42 +168,86 @@ function RoleDashboard({ role, state, stats, visibleActions, userName, themeColo
             <Ionicons name="flash-outline" size={14} color={themeColors.textMuted} />
             <Text style={styles.featureDetailText}>{featured.solarPower ? "Solar" : featured.power || "Grid"}</Text>
           </View>
-        </View>
-
-        <View style={styles.metricGrid}>
-          {dashboard.metrics.map((metric) => (
-            <View key={metric.label} style={styles.metricCard}>
-              <View style={styles.metricCardTop}>
-                <Ionicons name={metric.icon} size={18} color={themeColors.accentStrong} />
-                <Text style={styles.metricCardValue}>{metric.value}</Text>
-              </View>
-              <Text style={styles.metricLabel}>{metric.label}</Text>
-              <Text style={styles.metricDetail}>{metric.detail}</Text>
-            </View>
-          ))}
-        </View>
-
-        {state.liveEvents.length ? (
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Live activity</Text>
-            <Text style={styles.sectionAction}>See all</Text>
           </View>
-        ) : null}
+        </>) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No properties available yet</Text>
+            <Text style={styles.emptyBody}>{role === "admin" ? "Property listings will appear here when they are published." : "Start building your Zimbabwe property portfolio by publishing your first listing."}</Text>
+            {role !== "admin" ? (
+              <Link href="/listings" asChild>
+                <Pressable accessibilityLabel="Post a property" accessibilityRole="button" style={styles.emptyStateButton}>
+                  <Text style={styles.emptyStateButtonText}>Post property</Text>
+                </Pressable>
+              </Link>
+            ) : null}
+          </View>
+        )}
 
-        <LiveFeed items={state.liveEvents} />
+        {!normalizedQuery ? (<>
+          <View style={styles.metricGrid}>
+            {dashboard.metrics.map((metric) => (
+              <View key={metric.label} style={styles.metricCard}>
+                <View style={styles.metricCardTop}>
+                  <Ionicons name={metric.icon} size={18} color={themeColors.accentStrong} />
+                  <Text style={styles.metricCardValue}>{metric.value}</Text>
+                </View>
+                <Text style={styles.metricLabel}>{metric.label}</Text>
+                <Text style={styles.metricDetail}>{metric.detail}</Text>
+              </View>
+            ))}
+          </View>
+
+          {state.liveEvents.length ? (
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Live activity</Text>
+              <Text style={styles.sectionAction}>See all</Text>
+            </View>
+          ) : null}
+
+          <LiveFeed items={state.liveEvents} />
+        </>) : null}
       </ScrollView>
     </Screen>
   );
 }
 
+function DashboardResultRow({ row, styles }: { row: DashboardRow; styles: ReturnType<typeof createStyles> }) {
+  const content = (
+    <View style={styles.dashboardRow}>
+      <View style={styles.dashboardRowAvatar}>
+        <Text style={styles.dashboardRowInitial}>{row.title.charAt(0).toUpperCase()}</Text>
+      </View>
+      <View style={styles.dashboardRowBody}>
+        <Text style={styles.dashboardRowTitle}>{row.title}</Text>
+        <Text style={styles.dashboardRowMeta}>{row.meta}</Text>
+      </View>
+      {row.status ? <Text style={styles.dashboardRowStatus}>{row.status}</Text> : null}
+    </View>
+  );
+
+  if (!row.href) return content;
+  return (
+    <Link href={row.href} asChild>
+      <Pressable accessibilityLabel={`Open property ${row.title}`} accessibilityRole="link">{content}</Pressable>
+    </Link>
+  );
+}
+
 function getRoleDashboard(role: Exclude<AccountRole, "tenant">, state: RentalPlatformState, stats: ReturnType<typeof useRentalPlatformStats>): { metrics: DashboardMetric[]; panels: DashboardPanel[] } {
   const openMaintenance = state.maintenance.filter((item) => item.status.toLowerCase() !== "resolved");
-  const listings = state.properties.slice(0, 4).map((item) => ({ id: item.id, title: item.title, meta: [item.suburb, item.price].filter(Boolean).join(" · "), status: "Active" }));
-  const payments = state.payments.slice(0, 4).map((item) => ({ id: item.id, title: item.tenant || "Tenant", meta: [item.property, item.method].filter(Boolean).join(" · "), status: item.amount }));
-  const maintenance = openMaintenance.slice(0, 4).map((item) => ({ id: item.id, title: item.issue, meta: [item.property, item.category].filter(Boolean).join(" · "), status: item.status }));
-  const applications = state.applications.slice(0, 4).map((item) => ({ id: item.id, title: item.applicant, meta: item.property, status: item.status }));
-  const viewings = state.viewings.slice(0, 4).map((item) => ({ id: item.id, title: item.property, meta: [item.tenant, item.date, item.time].filter(Boolean).join(" · "), status: item.status }));
-  const conversations = state.conversations.slice(0, 4).map((item) => ({ id: item.id, title: item.name, meta: item.preview, status: item.time }));
+  const listings: DashboardRow[] = state.properties.map((item) => ({
+    id: item.id,
+    title: item.title,
+    meta: [item.suburb, item.city, item.price].filter(Boolean).join(" · "),
+    status: "Active",
+    searchText: [item.address, item.type, item.ownerName, item.agentName, item.supplierName].filter(Boolean).join(" "),
+    href: `/property/${item.id}`,
+  }));
+  const payments: DashboardRow[] = state.payments.map((item) => ({ id: item.id, title: item.tenant || "Tenant", meta: [item.property, item.method].filter(Boolean).join(" · "), status: item.amount }));
+  const maintenance: DashboardRow[] = openMaintenance.map((item) => ({ id: item.id, title: item.issue, meta: [item.property, item.category].filter(Boolean).join(" · "), status: item.status, searchText: item.tenant }));
+  const applications: DashboardRow[] = state.applications.map((item) => ({ id: item.id, title: item.applicant, meta: item.property, status: item.status, searchText: item.role }));
+  const viewings: DashboardRow[] = state.viewings.map((item) => ({ id: item.id, title: item.property, meta: [item.tenant, item.date, item.time].filter(Boolean).join(" · "), status: item.status, searchText: item.agent }));
+  const conversations: DashboardRow[] = state.conversations.map((item) => ({ id: item.id, title: item.name, meta: item.preview, status: item.time, searchText: item.participants.map((participant) => participant.name).join(" ") }));
 
   if (role === "landlord") {
     return {
@@ -320,9 +403,16 @@ function TenantHome({ state, visibleActions, userName, themeColors }: { state: R
         visible={filtersOpen}
         maxRent={maxRent}
         bedrooms={bedrooms}
+        canReset={Boolean(maxRent.trim()) || bedrooms !== "Any" || selectedType !== "All" || selectedQuickFilter !== "All"}
         onClose={() => setFiltersOpen(false)}
         onMaxRentChange={setMaxRent}
         onBedroomsChange={setBedrooms}
+        onReset={() => {
+          setMaxRent("");
+          setBedrooms("Any");
+          setSelectedType("All");
+          setSelectedQuickFilter("All");
+        }}
         propertyType={selectedType}
         onPropertyTypeChange={setSelectedType}
         themeColors={themeColors}
@@ -331,20 +421,28 @@ function TenantHome({ state, visibleActions, userName, themeColors }: { state: R
   );
 }
 
-function FilterSheet({ bedrooms, maxRent, onBedroomsChange, onClose, onMaxRentChange, onPropertyTypeChange, propertyType, themeColors, visible }: { bedrooms: string; maxRent: string; onBedroomsChange: (value: string) => void; onClose: () => void; onMaxRentChange: (value: string) => void; onPropertyTypeChange: (value: string) => void; propertyType: string; themeColors: typeof colors; visible: boolean }) {
+function FilterSheet({ bedrooms, canReset, maxRent, onBedroomsChange, onClose, onMaxRentChange, onPropertyTypeChange, onReset, propertyType, themeColors, visible }: { bedrooms: string; canReset: boolean; maxRent: string; onBedroomsChange: (value: string) => void; onClose: () => void; onMaxRentChange: (value: string) => void; onPropertyTypeChange: (value: string) => void; onReset: () => void; propertyType: string; themeColors: typeof colors; visible: boolean }) {
   const styles = createStyles(themeColors);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.filterBackdrop} onPress={onClose} />
       <View style={styles.filterSheet}>
-        <View style={styles.filterSheetHeader}><Text style={styles.filterSheetTitle}>Filters</Text><Pressable onPress={onClose} style={styles.filterClose}><Ionicons name="close" size={20} color={themeColors.text} /></Pressable></View>
+        <View style={styles.filterSheetHeader}>
+          <Text style={styles.filterSheetTitle}>Filters</Text>
+          <View style={styles.filterHeaderActions}>
+            <Pressable accessibilityLabel="Reset property filters" accessibilityRole="button" disabled={!canReset} onPress={onReset} style={styles.resetFilterButton}>
+              <Text style={[styles.resetFilterText, !canReset && styles.resetFilterTextDisabled]}>Reset</Text>
+            </Pressable>
+            <Pressable accessibilityLabel="Close property filters" accessibilityRole="button" onPress={onClose} style={styles.filterClose}><Ionicons name="close" size={20} color={themeColors.text} /></Pressable>
+          </View>
+        </View>
         <Text style={styles.filterLabel}>Maximum rent</Text>
         <View style={styles.filterInput}><Text style={styles.filterCurrency}>$</Text><TextInput value={maxRent} onChangeText={onMaxRentChange} keyboardType="number-pad" placeholder="Any amount" placeholderTextColor={themeColors.textMuted} style={styles.filterInputText} /></View>
         <Text style={styles.filterLabel}>Bedrooms</Text>
         <View style={styles.filterBedroomRow}>{bedroomFilters.map((item) => <Pressable key={item} onPress={() => onBedroomsChange(item)} style={[styles.filterBedroom, bedrooms === item && styles.filterBedroomActive]}><Text style={[styles.filterBedroomText, bedrooms === item && styles.filterBedroomTextActive]}>{item}</Text></Pressable>)}</View>
         <Text style={styles.filterLabel}>Property type</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTypeRow}>{typeFilters.map((item) => <Pressable key={item} onPress={() => onPropertyTypeChange(item)} style={[styles.filterType, propertyType === item && styles.filterBedroomActive]}><Text style={[styles.filterBedroomText, propertyType === item && styles.filterBedroomTextActive]}>{shortType(item)}</Text></Pressable>)}</ScrollView>
-        <Pressable onPress={onClose} style={styles.applyFilterButton}><Text style={styles.applyFilterText}>Apply filters</Text></Pressable>
+        <Pressable accessibilityLabel="Apply property filters" accessibilityRole="button" onPress={onClose} style={styles.applyFilterButton}><Text style={styles.applyFilterText}>Apply filters</Text></Pressable>
       </View>
     </Modal>
   );
@@ -410,6 +508,7 @@ function createStyles(themeColors: typeof colors) {
   filterChipTextActive: { color: colors.accentText },
   searchCard: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 11, borderRadius: 8, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border, ...shadows.soft },
   searchPlaceholder: { color: colors.textMuted, fontSize: 12, ...typography.body },
+  dashboardSearchInput: { flex: 1, minWidth: 0, fontSize: 12, outlineStyle: "none" as any, ...typography.body },
   featureCard: { borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: colors.border, ...shadows.card },
   featureImage: { width: "100%", minHeight: 230, padding: 12, justifyContent: "space-between" },
   featureGradient: { position: "absolute", inset: 0, backgroundColor: "rgba(10,17,25,0.20)" },
@@ -510,6 +609,8 @@ function createStyles(themeColors: typeof colors) {
   dashboardRowMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2, ...typography.body },
   dashboardRowStatus: { color: colors.accent, fontSize: 11, ...typography.label },
   dashboardEmpty: { color: colors.textMuted, padding: 12, lineHeight: 18, ...typography.body },
+  emptyStateButton: { alignSelf: "flex-start", minHeight: 40, alignItems: "center", justifyContent: "center", marginTop: 4, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.accent },
+  emptyStateButtonText: { color: colors.accentText, ...typography.button },
   tenantContent: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: spacing.xl, gap: 10, backgroundColor: colors.background },
   tenantTopBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
   tenantKicker: { color: colors.textMuted, fontSize: 10, textTransform: "uppercase", ...typography.label },
@@ -526,6 +627,10 @@ function createStyles(themeColors: typeof colors) {
   filterSheet: { gap: 10, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, backgroundColor: colors.surfaceElevated },
   filterSheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   filterSheetTitle: { color: colors.text, fontSize: 20, ...typography.title },
+  filterHeaderActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  resetFilterButton: { minHeight: 34, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  resetFilterText: { color: colors.accent, ...typography.button },
+  resetFilterTextDisabled: { color: colors.textMuted, opacity: 0.55 },
   filterClose: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17, backgroundColor: colors.surfaceMuted },
   filterLabel: { color: colors.textMuted, fontSize: 11, textTransform: "uppercase", ...typography.label },
   filterInput: { minHeight: 42, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 11, backgroundColor: colors.background },
