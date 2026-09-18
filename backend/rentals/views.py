@@ -699,7 +699,7 @@ def properties_collection(request):
 
 
 @csrf_exempt
-@require_http_methods(["GET", "PATCH", "OPTIONS"])
+@require_http_methods(["GET", "PATCH", "DELETE", "OPTIONS"])
 def property_detail(request, property_id):
     prop = get_object_or_404(Property.objects.select_related("owner", "agent"), pk=property_id)
     if request.method == "GET":
@@ -710,6 +710,12 @@ def property_detail(request, property_id):
         return auth_response
     if not can_manage_property(acting_user, prop):
         return forbidden()
+
+    if request.method == "DELETE":
+        prop.is_active = False
+        prop.listing_status = Property.ListingStatus.ARCHIVED
+        prop.save(update_fields=["is_active", "listing_status", "updated_at"])
+        return JsonResponse(serialize_property(prop))
 
     data = request_json(request)
     if data is None:

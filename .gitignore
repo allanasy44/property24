@@ -1,20 +1,19 @@
-# Dependencies
+# Dependencies and generated build state
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
 node_modules/
 backend/venv/
 .venv/
 venv/
 
-# Expo / React Native
+# Legacy Expo / React Native local output
 .expo/
 .expo-shared/
 dist/
 web-build/
-.expo/
 expo-env.d.ts
-
-# Native build output
-android/
-ios/
 
 # Environment and secrets
 .env

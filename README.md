@@ -1,13 +1,14 @@
 # Property24 Zimbabwe
 
-Mobile-first React Native rental platform for Zimbabwean property discovery, applications, rent collection, maintenance, messaging, and verification.
+Mobile-first Flutter rental platform for Zimbabwean property discovery, applications, rent collection, maintenance, messaging, and verification.
 
 ## Stack
 
-- Expo SDK 54
-- Expo Router
-- TypeScript
-- React Native
+- Flutter
+- Dart
+- Provider state management
+- Shared preferences for local auth-token persistence
+- HTTP client connected to the Django API
 - Django 6 backend
 - PostgreSQL for the full backend stack
 - MinIO / S3-compatible object storage for images, videos, verification files, and lease documents
@@ -28,24 +29,30 @@ Mobile-first React Native rental platform for Zimbabwean property discovery, app
 Frontend:
 
 ```bash
-npm install
-npm run start
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8010/api
 ```
 
-To hydrate the mobile app from Django:
+If this checkout does not have Flutter platform runner folders yet, generate them once from the project root:
 
 ```bash
-EXPO_PUBLIC_API_URL=http://127.0.0.1:8010/api npm run web
+flutter create . --platforms=android,ios,web
 ```
 
-For Google sign-in, create OAuth client IDs in Google Cloud Console, then start Expo with `EXPO_PUBLIC_GOOGLE_CLIENT_ID`, and with `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` / `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` for native builds. Put the same client IDs in backend `GOOGLE_CLIENT_IDS` and keep `GOOGLE_SIGN_IN_ENABLED=true`.
+For Android emulator builds, point Flutter at the host machine backend:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8010/api
+```
+
+For iOS simulator, desktop, and web builds, `http://127.0.0.1:8010/api` is usually correct when the backend runs on the same machine.
 
 Backend:
 
 ```bash
 cd backend
-python3 -m venv venv
-venv/bin/pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 python3 manage.py migrate
 python3 manage.py runserver 0.0.0.0:8010
 ```
@@ -54,13 +61,6 @@ Local admin login:
 
 - Email/username: `admin@property24.test`
 - Password: `admin12345`
-
-Or from the project root:
-
-```bash
-npm run backend:migrate
-npm run backend
-```
 
 Full backend stack with PostgreSQL and MinIO:
 
@@ -73,7 +73,7 @@ To customize secrets or service addresses, copy `backend/.env.example` to `backe
 
 ## Django API
 
-The local npm backend and Docker expose JSON endpoints under `http://localhost:8010/api/`.
+The local Django backend and Docker expose JSON endpoints under `http://localhost:8010/api/`.
 
 - `GET /api/properties/` with filters for `city`, `suburb`, `rent_min`, `rent_max`, `bedrooms_min`, `type`, and `verified_only`
 - `POST /api/auth/login/`, `POST /api/auth/refresh/`, and `GET /api/auth/me/` for JWT authentication
@@ -99,7 +99,7 @@ python3 manage.py makemigrations --check --dry-run
 ## Notes
 
 - When `OBJECT_STORAGE_PROVIDER=minio`, Django file fields use the MinIO bucket configured in `backend/.env`.
-- Google sign-in uses Expo AuthSession to get a Google ID token, then sends it to `POST /api/auth/google/`. The backend verifies the token audience against `GOOGLE_CLIENT_IDS`, creates only tenant/landlord/agent accounts, and returns normal JWT tokens. Register these redirect URIs in Google if your client type requires them: `property24zimbabwe://auth/google` for development builds and the Expo `exp://.../--/auth/google` URI shown by AuthSession/Metro for Expo Go testing.
+- The backend still exposes `POST /api/auth/google/` for Google ID-token sign-in when `GOOGLE_SIGN_IN_ENABLED=true`; the Flutter frontend currently ships password registration/sign-in and can add a Google identity-provider package against that endpoint later.
 - `GET /api/health/` reports database, object storage, AI provider, and map provider status.
-- The mobile data layer hydrates from the Django API and does not inject demo listings, payments, leases, or conversations.
+- The Flutter data layer hydrates from the Django API and does not inject demo listings, payments, leases, or conversations.
 - Payment provider callbacks for EcoCash, ZIPIT, bank transfer reconciliation, and cards are still modeled as recorded payment events; production provider integrations should be added behind those endpoints before launch.

@@ -1,0 +1,296 @@
+import 'package:flutter/material.dart';
+
+import '../models/rental_models.dart';
+
+class PropertyCard extends StatelessWidget {
+  const PropertyCard({
+    required this.property,
+    this.onTap,
+    this.trailing,
+    this.saved = false,
+    this.compared = false,
+    this.onSave,
+    this.onCompare,
+    super.key,
+  });
+
+  final PropertyListing property;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+  final bool saved;
+  final bool compared;
+  final VoidCallback? onSave;
+  final VoidCallback? onCompare;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: 14),
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: property.photos.isEmpty
+                      ? DecoratedBox(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xffe7f2df), Color(0xffbcdac2)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.apartment,
+                            color: colorScheme.secondary,
+                            size: 46,
+                          ),
+                        )
+                      : Image.network(
+                          property.photos.first,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => DecoratedBox(
+                            decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer),
+                            child: Icon(Icons.apartment,
+                                color: colorScheme.onPrimaryContainer),
+                          ),
+                        ),
+                ),
+                Positioned(
+                  left: 12,
+                  top: 12,
+                  child: _ImageBadge(
+                    icon: Icons.verified_user_outlined,
+                    label: '${property.trustScore}% trust',
+                    emphasized: property.trustScore >= 80,
+                  ),
+                ),
+                Positioned(
+                  right: 10,
+                  top: 10,
+                  child: Row(
+                    children: [
+                      _RoundIconButton(
+                        tooltip: saved ? 'Remove saved home' : 'Save home',
+                        icon: saved ? Icons.favorite : Icons.favorite_border,
+                        selected: saved,
+                        onPressed: onSave,
+                      ),
+                      const SizedBox(width: 8),
+                      _RoundIconButton(
+                        tooltip: compared
+                            ? 'Remove from comparison'
+                            : 'Compare home',
+                        icon: Icons.compare_arrows,
+                        selected: compared,
+                        onPressed: onCompare,
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: _ImageBadge(
+                    icon: Icons.event_available_outlined,
+                    label: property.availabilityLabel,
+                    emphasized: false,
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          property.title,
+                          style: textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (trailing != null) trailing!,
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    property.location.isEmpty
+                        ? property.address
+                        : property.location,
+                    style: textTheme.bodyMedium
+                        ?.copyWith(color: colorScheme.onSurfaceVariant),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _Pill(
+                            icon: Icons.payments_outlined,
+                            label: property.rentLabel),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _Pill(
+                            icon: Icons.savings_outlined,
+                            label: '${property.moveInTotalLabel} move-in'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _Pill(
+                          icon: Icons.bed_outlined,
+                          label: '${property.bedrooms} beds'),
+                      _Pill(
+                          icon: Icons.bathtub_outlined,
+                          label: '${property.bathrooms} baths'),
+                      _Pill(
+                          icon: Icons.water_drop_outlined,
+                          label: property.borehole
+                              ? 'Borehole'
+                              : property.waterAvailability),
+                      if (property.solarPower)
+                        const _Pill(icon: Icons.bolt_outlined, label: 'Solar'),
+                      if (property.has360Tour)
+                        const _Pill(
+                            icon: Icons.threesixty_outlined, label: '360 tour'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RoundIconButton extends StatelessWidget {
+  const _RoundIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.selected,
+    this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: IconButton.filledTonal(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        style: IconButton.styleFrom(
+          backgroundColor:
+              selected ? colorScheme.primary : Colors.white.withOpacity(0.9),
+          foregroundColor:
+              selected ? colorScheme.onPrimary : colorScheme.secondary,
+          fixedSize: const Size.square(40),
+          minimumSize: const Size.square(40),
+        ),
+      ),
+    );
+  }
+}
+
+class _ImageBadge extends StatelessWidget {
+  const _ImageBadge({
+    required this.icon,
+    required this.label,
+    required this.emphasized,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: emphasized
+            ? const Color(0xff19b66a)
+            : Colors.white.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon,
+              size: 15,
+              color: emphasized ? Colors.white : const Color(0xff12324a)),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: emphasized ? Colors.white : const Color(0xff12324a),
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withOpacity(0.72),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: colorScheme.onSurfaceVariant),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
