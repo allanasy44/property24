@@ -42,7 +42,7 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.initial,
       pageBuilder: (context, state) => _fadePage(
         state,
-        const SplashScreen(),
+        const OnboardingScreen(),
       ),
     ),
     StatefulShellRoute.indexedStack(

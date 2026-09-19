@@ -19,17 +19,16 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
   String _query = '';
-  String _type = 'All';
+  String _type = 'Popular';
   bool _mapMode = false;
 
-  static const _types = [
-    'All',
-    'House',
-    'Flat',
-    'Cottage',
-    'Student Accommodation',
-    'Commercial Property',
-  ];
+  static const _primary = Color(0xFF6C4CF1);
+  static const _primarySoft = Color(0xFFEDE9FE);
+  static const _searchFill = Color(0xFFF4F2FB);
+  static const _textDark = Color(0xFF1E1B2E);
+  static const _textMuted = Color(0xFF8A8A9E);
+
+  static const _types = ['Popular', 'Nearby', 'Recommended'];
 
   @override
   Widget build(BuildContext context) {
@@ -44,12 +43,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       ].join(' ').toLowerCase();
       final matchesQuery =
           _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
-      final matchesType = _type == 'All' ||
-          property.propertyType.toLowerCase() == _type.toLowerCase();
-      return matchesQuery && matchesType;
+      return matchesQuery;
     }).toList();
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
 
     return LoadingOverlay(
       child: RefreshIndicator(
@@ -58,126 +53,151 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ─── Top bar: avatar + greeting + bell ───
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _NotificationButton(state: state),
-                        const SizedBox(width: 10),
-                        Expanded(
+                        Container(
+                          height: 44,
+                          width: 44,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _primarySoft,
+                          ),
+                          child: const Icon(UniconsLine.user,
+                              color: _primary, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Hi, find your dream home',
-                                  style: textTheme.headlineSmall),
-                              const SizedBox(height: 4),
                               Text(
-                                'Verified rentals, real costs, lifestyle fit, and direct contact.',
-                                style: textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
+                                'Good Evening!',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _textMuted,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Isabella Chen',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: _textDark,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        Tooltip(
-                          message: 'Trust center',
-                          child: IconButton.filledTonal(
-                            onPressed: () => _showTrustCenter(context, state),
-                            icon: const Icon(UniconsLine.shield_check),
+                        _NotificationButton(state: state),
+                      ],
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // ─── Search bar + filter button ───
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: 50,
+                            padding: const EdgeInsets.symmetric(horizontal: 18),
+                            decoration: BoxDecoration(
+                              color: _searchFill,
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.search,
+                                    color: _textMuted, size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: TextField(
+                                    decoration: const InputDecoration(
+                                      border: InputBorder.none,
+                                      isCollapsed: true,
+                                      hintText: 'Food, Groceries, Drinks etc.',
+                                      hintStyle: TextStyle(
+                                        color: _textMuted,
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: _textDark,
+                                    ),
+                                    onChanged: (v) =>
+                                        setState(() => _query = v),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(28),
+                          onTap: () => _showTrustCenter(context, state),
+                          child: Container(
+                            height: 50,
+                            width: 50,
+                            decoration: const BoxDecoration(
+                              color: _primary,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.tune,
+                                color: Colors.white, size: 22),
                           ),
                         ),
                       ],
                     ),
-                    if (state.canManageListings) ...[
-                      const SizedBox(height: 10),
-                      FilledButton.icon(
-                        onPressed: () =>
-                            context.pushNamed(AppRoutes.listingsName),
-                        icon: const Icon(UniconsLine.estate),
-                        label: const Text('Manage listings'),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    SearchBar(
-                      hintText: 'Search suburb, city, or property type',
-                      leading: const Icon(Icons.search),
-                      trailing: [
-                        Tooltip(
-                          message: 'Create smart alert',
-                          child: IconButton(
-                            onPressed: () => _saveAlert(context, state),
-                            icon: const Icon(UniconsLine.bell),
-                          ),
-                        ),
-                      ],
-                      onChanged: (value) => setState(() => _query = value),
-                    ),
-                    const SizedBox(height: 12),
+
+                    const SizedBox(height: 22),
+
+                    // ─── Pill tabs ───
                     SizedBox(
-                      height: 40,
+                      height: 44,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: _types.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
                         itemBuilder: (context, index) {
                           final type = _types[index];
-                          return ChoiceChip(
-                            label: Text(type),
-                            selected: _type == type,
-                            onSelected: (_) => setState(() => _type = type),
+                          final selected = _type == type;
+                          return GestureDetector(
+                            onTap: () => setState(() => _type = type),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: selected ? _primary : Colors.transparent,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  type,
+                                  style: TextStyle(
+                                    color: selected ? Colors.white : _textDark,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
                           );
                         },
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _TrustStrip(
-                            verified: state.verifiedProperties,
-                            total: state.snapshot.properties.length,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        SegmentedButton<bool>(
-                          segments: const [
-                            ButtonSegment(
-                              value: false,
-                              icon: Icon(Icons.view_agenda_outlined),
-                            ),
-                            ButtonSegment(
-                              value: true,
-                              icon: Icon(Icons.map_outlined),
-                            ),
-                          ],
-                          selected: {_mapMode},
-                          showSelectedIcon: false,
-                          onSelectionChanged: (value) {
-                            setState(() => _mapMode = value.first);
-                          },
-                        ),
-                      ],
-                    ),
-                    if (state.smartAlerts.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final alert in state.smartAlerts)
-                            Chip(
-                              avatar: const Icon(
-                                  Icons.notifications_active_outlined,
-                                  size: 16),
-                              label: Text(alert),
-                            ),
-                        ],
-                      ),
-                    ],
+
+                    const SizedBox(height: 18),
                   ],
                 ),
               ),
@@ -193,7 +213,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               )
             else if (_mapMode)
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                 sliver: SliverToBoxAdapter(
                   child: _MapExplorer(
                     properties: properties,
@@ -214,7 +234,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   ),
                 ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
                 sliver: SliverList.builder(
                   itemCount: properties.length,
                   itemBuilder: (context, index) {
@@ -246,29 +266,28 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  void _saveAlert(BuildContext context, Property24State state) {
-    final label = [
-      if (_query.trim().isNotEmpty) _query.trim(),
-      if (_type != 'All') _type,
-      'verified rentals',
-    ].join(' · ');
-    state.addSmartAlert(label);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Smart alert saved: $label')),
-    );
-  }
-
   void _showTrustCenter(BuildContext context, Property24State state) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Trust center', style: Theme.of(context).textTheme.titleLarge),
+            const Text(
+              'Filters',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: _textDark,
+              ),
+            ),
             const SizedBox(height: 12),
             _TrustLine(
                 label: 'Identity verified',
@@ -290,6 +309,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Notification bell button (circular, white, shadowed)
+// ─────────────────────────────────────────────────────────────
 class _NotificationButton extends StatelessWidget {
   const _NotificationButton({required this.state});
 
@@ -297,42 +319,72 @@ class _NotificationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton.filledTonal(
-      tooltip: 'Notifications',
-      onPressed: () {
-        showModalBottomSheet<void>(
-          context: context,
-          showDragHandle: true,
-          builder: (context) => Padding(
-            padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Notifications',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                for (final item in state.notifications)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(UniconsLine.bell),
-                    title: Text(item),
-                  ),
-              ],
-            ),
+    return Container(
+      height: 44,
+      width: 44,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-        );
-      },
-      icon: Badge(
-        label: Text('${state.notifications.length}'),
-        child: const Icon(UniconsLine.bell),
+        ],
+      ),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        onPressed: () {
+          showModalBottomSheet<void>(
+            context: context,
+            showDragHandle: true,
+            backgroundColor: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            builder: (context) => Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Notifications',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E1B2E),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final item in state.notifications)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(UniconsLine.bell),
+                      title: Text(item),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+        icon: Badge(
+          label: Text(
+            '${state.notifications.length}',
+            style: const TextStyle(fontSize: 10),
+          ),
+          child:
+              const Icon(UniconsLine.bell, color: Color(0xFF1E1B2E), size: 20),
+        ),
       ),
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Trust strip (kept, restyled)
+// ─────────────────────────────────────────────────────────────
 class _TrustStrip extends StatelessWidget {
   const _TrustStrip({required this.verified, required this.total});
 
@@ -341,22 +393,24 @@ class _TrustStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          Icon(Icons.shield_outlined, color: colorScheme.primary),
+          const Icon(Icons.shield_outlined, color: Color(0xFF6C4CF1)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               '$verified of $total homes verified',
-              style: Theme.of(context).textTheme.labelLarge,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1E1B2E),
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -366,6 +420,9 @@ class _TrustStrip extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Map explorer (restyled)
+// ─────────────────────────────────────────────────────────────
 class _MapExplorer extends StatelessWidget {
   const _MapExplorer({required this.properties, required this.onOpen});
 
@@ -374,7 +431,6 @@ class _MapExplorer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       children: [
         Container(
@@ -382,14 +438,15 @@ class _MapExplorer extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: const Color(0xffe8f2ea),
-            borderRadius: BorderRadius.circular(8),
+            color: const Color(0xFFEDE9FE),
+            borderRadius: BorderRadius.circular(22),
           ),
           child: Stack(
             children: [
               Positioned.fill(
                 child: CustomPaint(
-                    painter: _MapLinesPainter(colorScheme.outlineVariant)),
+                    painter: _MapLinesPainter(
+                        const Color(0xFF6C4CF1).withOpacity(0.15))),
               ),
               for (var index = 0; index < properties.take(5).length; index++)
                 Positioned(
@@ -416,7 +473,8 @@ class _MapExplorer extends StatelessWidget {
         for (final property in properties.take(3))
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.location_on_outlined),
+            leading: const Icon(Icons.location_on_outlined,
+                color: Color(0xFF6C4CF1)),
             title: Text(property.title,
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text(property.heroLocation),
@@ -445,18 +503,19 @@ class _MapPin extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: property.verified
-                ? const Color(0xff19b66a)
-                : const Color(0xff12324a),
+                ? const Color(0xFF19B66A)
+                : const Color(0xFF6C4CF1),
             borderRadius: BorderRadius.circular(24),
           ),
           child: Text(
             property.monthlyRentValue > 0
                 ? '\$${property.monthlyRentValue.round()}'
                 : 'Home',
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: Colors.white),
+            style: const TextStyle(
+              fontSize: 11,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
@@ -491,6 +550,9 @@ class _MapLinesPainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Comparison tray (restyled)
+// ─────────────────────────────────────────────────────────────
 class _ComparisonTray extends StatelessWidget {
   const _ComparisonTray({required this.properties, required this.onClear});
 
@@ -499,56 +561,88 @@ class _ComparisonTray extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 6, 16, 10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Compare homes',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1E1B2E),
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: onClear,
+                child: const Text(
+                  'Clear',
+                  style: TextStyle(
+                    color: Color(0xFF6C4CF1),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                Expanded(
-                    child: Text('Compare homes',
-                        style: Theme.of(context).textTheme.titleMedium)),
-                TextButton(onPressed: onClear, child: const Text('Clear')),
+                for (final property in properties)
+                  Container(
+                    width: 172,
+                    margin: const EdgeInsets.only(right: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF4F2FB),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(property.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E1B2E),
+                            )),
+                        const SizedBox(height: 6),
+                        Text(property.rentLabel,
+                            style: const TextStyle(
+                              color: Color(0xFF6C4CF1),
+                              fontWeight: FontWeight.w700,
+                            )),
+                        Text('${property.trustScore}% trust',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF8A8A9E),
+                            )),
+                        Text(
+                            '${property.bedrooms} bed · ${property.bathrooms} bath',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF8A8A9E),
+                            )),
+                      ],
+                    ),
+                  ),
               ],
             ),
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final property in properties)
-                    Container(
-                      width: 172,
-                      margin: const EdgeInsets.only(right: 10),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest
-                            .withOpacity(0.55),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(property.title,
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                          const SizedBox(height: 6),
-                          Text(property.rentLabel),
-                          Text('${property.trustScore}% trust'),
-                          Text(
-                              '${property.bedrooms} bed · ${property.bathrooms} bath'),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -564,8 +658,12 @@ class _TrustLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.check_circle_outline),
-      title: Text(label),
+      leading: const Icon(Icons.check_circle_outline, color: Color(0xFF6C4CF1)),
+      title: Text(label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1E1B2E),
+          )),
       subtitle: Text(value),
     );
   }

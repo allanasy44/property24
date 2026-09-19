@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:unicons/unicons.dart';
 
 import '../theme/app_theme.dart';
@@ -15,7 +16,8 @@ class AppScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: AppTheme.bg,
+      extendBody: true,
       body: navigationShell,
       bottomNavigationBar: _BottomNav(
         currentIndex: navigationShell.currentIndex,
@@ -41,46 +43,53 @@ class _BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FIX: colorScheme belongs to this widget's build context.
     final colorScheme = Theme.of(context).colorScheme;
 
-    final items = [
-      const _NavItem(
+    // Navigation icons based on the reference design:
+    // Home • Saved • Messages • Profile
+    const items = [
+      _NavItem(
         icon: UniconsLine.estate,
         label: 'Home',
       ),
-      const _NavItem(
-        icon: UniconsLine.phone,
-        label: 'Calls',
+      _NavItem(
+        icon: UniconsLine.heart,
+        label: 'Saved',
       ),
-      const _NavItem(
+      _NavItem(
         icon: UniconsLine.comment_alt_message,
-        label: 'Chat',
+        label: 'Messages',
       ),
-      const _NavItem(
+      _NavItem(
         icon: UniconsLine.user_circle,
         label: 'Profile',
       ),
     ];
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color: colorScheme.outlineVariant,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(30),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(
+        16,
+        0,
+        16,
+        14,
       ),
-      child: SafeArea(
-        top: false,
+      child: Container(
+        height: 72,
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: colorScheme.outlineVariant.withAlpha(80),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(22),
+              blurRadius: 30,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: 8,
@@ -90,61 +99,107 @@ class _BottomNav extends StatelessWidget {
             children: List.generate(
               items.length,
               (index) {
-                final isActive = index == currentIndex;
+                final item = items[index];
+                final selected = index == currentIndex;
 
                 return Expanded(
-                  child: Tooltip(
-                    message: items[index].label,
-                    child: GestureDetector(
-                      onTap: () => onTap(index),
-                      child: AnimatedContainer(
-                        duration: const Duration(
-                          milliseconds: 250,
-                        ),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 11,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isActive
-                              ? AppTheme.accent.withAlpha(30)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(22),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              items[index].icon,
-                              color: isActive
-                                  ? AppTheme.accent
-                                  : colorScheme.onSurfaceVariant,
-                              size: isActive ? 24 : 22,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              items[index].label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontFamily: 'DM Sans',
-                                fontSize: 11,
-                                fontWeight: isActive
-                                    ? FontWeight.w800
-                                    : FontWeight.w600,
-                                color: isActive
-                                    ? AppTheme.accent
-                                    : colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                  child: _BottomNavItem(
+                    item: item,
+                    selected: selected,
+                    onTap: () => onTap(index),
                   ),
                 );
               },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomNavItem extends StatelessWidget {
+  const _BottomNavItem({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _NavItem item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 5,
+          ),
+          decoration: BoxDecoration(
+            color:
+                selected ? AppTheme.accent.withAlpha(25) : Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(
+                      begin: 0.90,
+                      end: 1.0,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+              child: Column(
+                key: ValueKey(
+                  '${item.label}-$selected',
+                ),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    item.icon,
+                    size: selected ? 22 : 21,
+                    color: selected
+                        ? AppTheme.accent
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 10,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      color: selected
+                          ? AppTheme.accent
+                          : colorScheme.onSurfaceVariant,
+                      height: 1.0,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

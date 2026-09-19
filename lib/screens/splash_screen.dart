@@ -1,344 +1,759 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
-import 'package:unicons/unicons.dart';
 
-import '../routes/app_routes.dart';
-import '../theme/app_theme.dart';
+import '../../theme/app_theme.dart';
+import '../../routes/app_routes.dart';
 
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+class OnboardingScreen extends StatefulWidget {
+  const OnboardingScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _fade;
-  late final Animation<double> _scale;
-  late final Animation<Offset> _slide;
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with TickerProviderStateMixin {
+  final PageController _pageController = PageController();
+
+  int _currentPage = 0;
+  bool _showRoleSelection = false;
+
+  late AnimationController _fadeController;
+  late AnimationController _slideController;
+
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
+
+  final List<_OnboardSlide> _slides = [
+    _OnboardSlide(
+      imageUrl:
+          'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg',
+      semanticLabel:
+          'Modern luxury apartment interior with floor-to-ceiling windows and contemporary furniture in Lagos',
+      headline: 'Find Your\nPerfect Home',
+      subtitle:
+          'Discover thousands of verified properties across Lagos — from cozy studios to luxury penthouses.',
+      accentWord: 'Perfect',
+    ),
+    _OnboardSlide(
+      imageUrl:
+          'https://images.pexels.com/photos/2029694/pexels-photo-2029694.jpeg',
+      semanticLabel:
+          'Elegant modern house with trust verification shield overlay concept',
+      headline: 'Trust Before\nYou Rent',
+      subtitle:
+          'Every property has a Trust Score. Know exactly who you\'re dealing with before signing anything.',
+      accentWord: 'Trust',
+    ),
+    _OnboardSlide(
+      imageUrl:
+          'https://images.pexels.com/photos/3288103/pexels-photo-3288103.jpeg',
+      semanticLabel:
+          'Luxury penthouse with city views representing premium property listing',
+      headline: 'List & Earn\nMore',
+      subtitle:
+          'Landlords and agents — get verified, list your properties, and connect with serious tenants.',
+      accentWord: 'Earn',
+    ),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1700),
-    )..forward();
-    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
-    _scale = Tween<double>(begin: .94, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+      ),
     );
-    _slide = Tween<Offset>(
-      begin: const Offset(0, .08),
+
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _slideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+
+    _fadeAnim = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    );
+
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.08),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    ).animate(
+      CurvedAnimation(
+        parent: _slideController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+
+    _fadeController.forward();
+    _slideController.forward();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pageController.dispose();
+    _fadeController.dispose();
+    _slideController.dispose();
     super.dispose();
+  }
+
+  void _nextPage() {
+    if (_currentPage < _slides.length - 1) {
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOutCubic,
+      );
+    } else {
+      setState(() {
+        _showRoleSelection = true;
+      });
+    }
+  }
+
+  void _selectRole(String role) {
+    context.go(AppRoutes.homeScreen);
   }
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     return Scaffold(
-      backgroundColor: const Color(0xffeef5ef),
-      body: Stack(
-        children: [
-          Positioned.fill(child: CustomPaint(painter: _CoverPainter(_controller))),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-              child: FadeTransition(
-                opacity: _fade,
+      backgroundColor: AppTheme.bg,
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 500),
+        child: _showRoleSelection
+            ? _RoleSelectionView(
+                onRoleSelected: _selectRole,
+              )
+            : _OnboardingView(
+                slides: _slides,
+                currentPage: _currentPage,
+                pageController: _pageController,
+                fadeAnim: _fadeAnim,
+                slideAnim: _slideAnim,
+                onPageChanged: (i) {
+                  setState(() {
+                    _currentPage = i;
+                  });
+
+                  _fadeController.reset();
+                  _slideController.reset();
+
+                  _fadeController.forward();
+                  _slideController.forward();
+                },
+                onNext: _nextPage,
+                onSkip: () {
+                  setState(() {
+                    _showRoleSelection = true;
+                  });
+                },
+              ),
+      ),
+    );
+  }
+}
+
+class _OnboardingView extends StatelessWidget {
+  final List<_OnboardSlide> slides;
+  final int currentPage;
+  final PageController pageController;
+  final Animation<double> fadeAnim;
+  final Animation<Offset> slideAnim;
+  final ValueChanged<int> onPageChanged;
+  final VoidCallback onNext;
+  final VoidCallback onSkip;
+
+  const _OnboardingView({
+    required this.slides,
+    required this.currentPage,
+    required this.pageController,
+    required this.fadeAnim,
+    required this.slideAnim,
+    required this.onPageChanged,
+    required this.onNext,
+    required this.onSkip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isLast = currentPage == slides.length - 1;
+
+    return Stack(
+      children: [
+        // Full-screen image
+        PageView.builder(
+          controller: pageController,
+          onPageChanged: onPageChanged,
+          itemCount: slides.length,
+          itemBuilder: (context, index) {
+            return CachedNetworkImage(
+              imageUrl: slides[index].imageUrl,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              placeholder: (_, __) => Container(
+                color: AppTheme.bgCard,
+              ),
+              errorWidget: (_, __, ___) => Container(
+                color: AppTheme.bgCard,
+                child: const Icon(
+                  Icons.home,
+                  color: AppTheme.textMuted,
+                  size: 48,
+                ),
+              ),
+            );
+          },
+        ),
+
+        // Gradient overlay
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: const [
+                0.0,
+                0.35,
+                0.65,
+                1.0,
+              ],
+              colors: [
+                Colors.black.withAlpha(102),
+                Colors.transparent,
+                AppTheme.bg.withAlpha(204),
+                AppTheme.bg,
+              ],
+            ),
+          ),
+        ),
+
+        // Skip button
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 16,
+          right: 20,
+          child: GestureDetector(
+            onTap: onSkip,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.black.withAlpha(77),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.white.withAlpha(51),
+                ),
+              ),
+              child: Text(
+                'Skip',
+                style: GoogleFonts.dmSans(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Bottom content
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              28,
+              0,
+              28,
+              MediaQuery.of(context).padding.bottom + 32,
+            ),
+            child: FadeTransition(
+              opacity: fadeAnim,
+              child: SlideTransition(
+                position: slideAnim,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Headline
+                    _buildHeadline(slides[currentPage]),
+
+                    const SizedBox(height: 14),
+
+                    // Subtitle
+                    Text(
+                      slides[currentPage].subtitle,
+                      style: GoogleFonts.dmSans(
+                        color: AppTheme.textSecondary,
+                        fontSize: 14,
+                        height: 1.6,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+
+                    const SizedBox(height: 36),
+
+                    // Dots + Button row
                     Row(
                       children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(20),
-                                blurRadius: 18,
-                                offset: const Offset(0, 8),
+                        // Page dots
+                        Row(
+                          children: List.generate(
+                            slides.length,
+                            (i) {
+                              final isActive = i == currentPage;
+
+                              return AnimatedContainer(
+                                duration: const Duration(
+                                  milliseconds: 300,
+                                ),
+                                margin: const EdgeInsets.only(right: 6),
+                                width: isActive ? 24 : 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  color: isActive
+                                      ? AppTheme.accent
+                                      : AppTheme.textMuted,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+
+                        const Spacer(),
+
+                        // Next / Get Started button
+                        GestureDetector(
+                          onTap: onNext,
+                          child: AnimatedContainer(
+                            duration: const Duration(
+                              milliseconds: 300,
+                            ),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isLast ? 28 : 20,
+                              vertical: 16,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  AppTheme.accent,
+                                  AppTheme.accentTeal,
+                                ],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
                               ),
-                            ],
-                          ),
-                          child: const Icon(
-                            UniconsLine.estate,
-                            color: AppTheme.accent,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Property 24',
-                          style: textTheme.titleLarge?.copyWith(
-                            color: const Color(0xff12324a),
-                            fontWeight: FontWeight.w900,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.accent.withAlpha(77),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  isLast ? 'Get Started' : 'Next',
+                                  style: GoogleFonts.dmSans(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.arrow_forward_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 22),
-                    Expanded(
-                      child: Center(
-                        child: ScaleTransition(
-                          scale: _scale,
-                          child: SlideTransition(
-                            position: _slide,
-                            child: const _PhonePreview(),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: const [
-                        _TrustPill(icon: UniconsLine.shield_check, text: 'Verified'),
-                        _TrustPill(icon: UniconsLine.receipt, text: 'Real costs'),
-                        _TrustPill(icon: UniconsLine.comparison, text: 'Compare'),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Find a home you can actually trust.',
-                      style: textTheme.displaySmall?.copyWith(
-                        color: const Color(0xff0b2017),
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0,
-                        height: 1.04,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Find -> Verify -> Understand -> Compare -> Decide. Built around fair access, secure identity checks, and the OSWAP code of ethics.',
-                      style: textTheme.bodyLarge?.copyWith(
-                        color: const Color(0xff536158),
-                        height: 1.38,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: () => context.goNamed(AppRoutes.homeName),
-                      icon: const Icon(UniconsLine.arrow_right),
-                      label: const Text('Explore trusted homes'),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(54),
-                        backgroundColor: AppTheme.accent,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: () => context.goNamed(AppRoutes.profileName),
-                      icon: const Icon(UniconsLine.user_circle),
-                      label: const Text('Login or create account'),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(52),
-                        foregroundColor: const Color(0xff12324a),
-                        side: const BorderSide(color: Color(0xffc8d8cd)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeadline(_OnboardSlide slide) {
+    final parts = slide.headline.split(slide.accentWord);
+
+    return RichText(
+      text: TextSpan(
+        style: GoogleFonts.dmSans(
+          fontSize: 34,
+          fontWeight: FontWeight.w700,
+          color: AppTheme.textPrimary,
+          height: 1.15,
+          letterSpacing: -0.5,
+        ),
+        children: [
+          if (parts.isNotEmpty)
+            TextSpan(
+              text: parts[0],
+            ),
+          TextSpan(
+            text: slide.accentWord,
+            style: TextStyle(
+              foreground: Paint()
+                ..shader = LinearGradient(
+                  colors: [
+                    AppTheme.accent,
+                    AppTheme.accentTeal,
+                  ],
+                ).createShader(
+                  const Rect.fromLTWH(
+                    0,
+                    0,
+                    200,
+                    50,
+                  ),
+                ),
+            ),
+          ),
+          if (parts.length > 1)
+            TextSpan(
+              text: parts[1],
+            ),
         ],
       ),
     );
   }
 }
 
-class _PhonePreview extends StatelessWidget {
-  const _PhonePreview();
+class _RoleSelectionView extends StatefulWidget {
+  final ValueChanged<String> onRoleSelected;
+
+  const _RoleSelectionView({
+    required this.onRoleSelected,
+  });
+
+  @override
+  State<_RoleSelectionView> createState() => _RoleSelectionViewState();
+}
+
+class _RoleSelectionViewState extends State<_RoleSelectionView>
+    with SingleTickerProviderStateMixin {
+  String? _selectedRole;
+
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _fadeAnim = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOut,
+    );
+
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+
+    _animController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 268,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xff0f2118),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Colors.white, width: 5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(50),
-            blurRadius: 36,
-            offset: const Offset(0, 22),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            height: 190,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: const LinearGradient(
-                colors: [Color(0xffd8ead9), Color(0xff73bf8d)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeAnim,
+          child: SlideTransition(
+            position: _slideAnim,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
               ),
-            ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: CustomPaint(painter: _HousePainter()),
-                ),
-                const Positioned(
-                  left: 14,
-                  top: 14,
-                  child: _PreviewBadge(text: '92 trust'),
-                ),
-                const Positioned(
-                  right: 14,
-                  top: 14,
-                  child: Icon(UniconsLine.heart, color: Colors.white),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Avondale townhouse',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 48),
+
+                  // Header
+                  Text(
+                    'How will you\nuse PropNest?',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                      height: 1.2,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  Text(
+                    'Choose your role to get a personalized experience.',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 15,
+                      color: AppTheme.textSecondary,
+                      height: 1.5,
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  // Tenant card
+                  _RoleCard(
+                    role: 'tenant',
+                    title: "I'm Looking to Rent",
+                    subtitle:
+                        'Browse verified properties, compare listings, and find your perfect home.',
+                    icon: Icons.search_rounded,
+                    isSelected: _selectedRole == 'tenant',
+                    onTap: () {
+                      setState(() {
+                        _selectedRole = 'tenant';
+                      });
+                    },
+                    gradientColors: [
+                      AppTheme.accent,
+                      const Color(0xFF3B6FD4),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Landlord card
+                  _RoleCard(
+                    role: 'landlord',
+                    title: "I'm a Landlord / Agent",
+                    subtitle:
+                        'List your properties, get verified, and connect with quality tenants.',
+                    icon: Icons.apartment_rounded,
+                    isSelected: _selectedRole == 'landlord',
+                    onTap: () {
+                      setState(() {
+                        _selectedRole = 'landlord';
+                      });
+                    },
+                    gradientColors: [
+                      AppTheme.accentTeal,
+                      const Color(0xFF2BA896),
+                    ],
+                  ),
+
+                  const Spacer(),
+
+                  // Continue button
+                  AnimatedOpacity(
+                    opacity: _selectedRole != null ? 1.0 : 0.4,
+                    duration: const Duration(milliseconds: 300),
+                    child: GestureDetector(
+                      onTap: _selectedRole != null
+                          ? () => widget.onRoleSelected(
+                                _selectedRole!,
+                              )
+                          : null,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 18,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              AppTheme.accent,
+                              AppTheme.accentTeal,
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: _selectedRole != null
+                              ? [
+                                  BoxShadow(
+                                    color: AppTheme.accent.withAlpha(77),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ]
+                              : [],
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Continue',
+                            style: GoogleFonts.dmSans(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       ),
-                ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+                ],
               ),
-              const Text(
-                '\$900',
-                style: TextStyle(
-                  color: AppTheme.accentTeal,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: const [
-              _MiniFact(icon: UniconsLine.bed_double, text: '3 bed'),
-              SizedBox(width: 6),
-              _MiniFact(icon: UniconsLine.water, text: 'Borehole'),
-              SizedBox(width: 6),
-              _MiniFact(icon: UniconsLine.bolt, text: 'Solar'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TrustPill extends StatelessWidget {
-  const _TrustPill({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(210),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xffd5e5da)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: AppTheme.accent),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              color: Color(0xff12324a),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PreviewBadge extends StatelessWidget {
-  const _PreviewBadge({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(235),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w900,
-          color: Color(0xff12324a),
         ),
       ),
     );
   }
 }
 
-class _MiniFact extends StatelessWidget {
-  const _MiniFact({required this.icon, required this.text});
-
+class _RoleCard extends StatelessWidget {
+  final String role;
+  final String title;
+  final String subtitle;
   final IconData icon;
-  final String text;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final List<Color> gradientColors;
+
+  const _RoleCard({
+    required this.role,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+    required this.gradientColors,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withAlpha(18),
-          borderRadius: BorderRadius.circular(8),
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(
+          milliseconds: 250,
         ),
-        child: Column(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: isSelected ? gradientColors[0].withAlpha(26) : AppTheme.bgCard,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? gradientColors[0] : AppTheme.border,
+            width: isSelected ? 1.5 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: gradientColors[0].withAlpha(51),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : [],
+        ),
+        child: Row(
           children: [
-            Icon(icon, size: 16, color: AppTheme.accentTeal),
-            const SizedBox(height: 3),
-            Text(
-              text,
-              style: const TextStyle(color: Colors.white, fontSize: 11),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            // Icon container
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: gradientColors,
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                icon,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+
+            const SizedBox(width: 18),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      color: AppTheme.textSecondary,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            AnimatedContainer(
+              duration: const Duration(
+                milliseconds: 250,
+              ),
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? gradientColors[0] : Colors.transparent,
+                border: Border.all(
+                  color: isSelected ? gradientColors[0] : AppTheme.textMuted,
+                  width: 2,
+                ),
+              ),
+              child: isSelected
+                  ? const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 13,
+                    )
+                  : null,
             ),
           ],
         ),
@@ -347,73 +762,18 @@ class _MiniFact extends StatelessWidget {
   }
 }
 
-class _CoverPainter extends CustomPainter {
-  _CoverPainter(this.animation) : super(repaint: animation);
+class _OnboardSlide {
+  final String imageUrl;
+  final String semanticLabel;
+  final String headline;
+  final String subtitle;
+  final String accentWord;
 
-  final Animation<double> animation;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0xffeef5ef), Color(0xffd4ead9), Color(0xfff7fbf8)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ).createShader(Offset.zero & size);
-    canvas.drawRect(Offset.zero & size, paint);
-
-    final pulse = animation.value;
-    canvas.drawCircle(
-      Offset(size.width * .88, size.height * .16),
-      96 + 20 * pulse,
-      Paint()..color = AppTheme.accent.withAlpha(28),
-    );
-    canvas.drawCircle(
-      Offset(size.width * .08, size.height * .48),
-      130 + 16 * pulse,
-      Paint()..color = AppTheme.accentTeal.withAlpha(22),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _CoverPainter oldDelegate) => true;
-}
-
-class _HousePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final body = Paint()..color = Colors.white.withAlpha(220);
-    final roof = Paint()..color = const Color(0xff12324a);
-    final window = Paint()..color = AppTheme.accent;
-    final ground = Paint()..color = Colors.white.withAlpha(90);
-
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * .22, size.height * .43, size.width * .56, 62),
-        const Radius.circular(8),
-      ),
-      body,
-    );
-    final path = Path()
-      ..moveTo(size.width * .16, size.height * .46)
-      ..lineTo(size.width * .5, size.height * .24)
-      ..lineTo(size.width * .84, size.height * .46)
-      ..close();
-    canvas.drawPath(path, roof);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * .43, size.height * .55, 28, 40),
-        const Radius.circular(6),
-      ),
-      window,
-    );
-    canvas.drawLine(
-      Offset(size.width * .12, size.height * .82),
-      Offset(size.width * .9, size.height * .8),
-      ground..strokeWidth = 4,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _HousePainter oldDelegate) => false;
+  const _OnboardSlide({
+    required this.imageUrl,
+    required this.semanticLabel,
+    required this.headline,
+    required this.subtitle,
+    required this.accentWord,
+  });
 }

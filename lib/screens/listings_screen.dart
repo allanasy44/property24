@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:unicons/unicons.dart';
 
 import '../models/rental_models.dart';
 import '../services/property24_api.dart';
@@ -11,6 +12,12 @@ import 'property_detail_screen.dart';
 class ListingsScreen extends StatelessWidget {
   const ListingsScreen({super.key});
 
+  static const _primary = Color(0xFF6C4CF1);
+  static const _primarySoft = Color(0xFFEDE9FE);
+  static const _searchFill = Color(0xFFF4F2FB);
+  static const _textDark = Color(0xFF1E1B2E);
+  static const _textMuted = Color(0xFF8A8A9E);
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
@@ -21,34 +28,104 @@ class ListingsScreen extends StatelessWidget {
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Landlord studio',
-                              style: Theme.of(context).textTheme.headlineSmall),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Create trusted listings, confirm availability, and guide tenants into the right workflow.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
+                    Row(
+                      children: [
+                        Container(
+                          height: 44,
+                          width: 44,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _primarySoft,
+                          ),
+                          child: const Icon(UniconsLine.estate,
+                              color: _primary, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Welcome back, landlord',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _textMuted,
+                                  fontWeight: FontWeight.w400,
                                 ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Landlord Studio',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: _textDark,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(28),
+                          onTap: () => _openEditor(context),
+                          child: Container(
+                            height: 44,
+                            width: 44,
+                            decoration: const BoxDecoration(
+                              color: _primary,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.add,
+                                color: Colors.white, size: 22),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      height: 50,
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      decoration: BoxDecoration(
+                        color: _searchFill,
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.search, color: _textMuted, size: 20),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Search your listings',
+                              style: TextStyle(
+                                color: _textMuted,
+                                fontSize: 13.5,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    FilledButton.icon(
-                      onPressed: () => _openEditor(context),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add'),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Manage listings',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: _textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Create trusted listings, confirm availability, and guide tenants into the right workflow.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _textMuted,
+                        height: 1.4,
+                      ),
                     ),
                   ],
                 ),
@@ -66,7 +143,7 @@ class ListingsScreen extends StatelessWidget {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
                 sliver: SliverList.builder(
                   itemCount: state.snapshot.properties.length,
                   itemBuilder: (context, index) {
@@ -80,6 +157,7 @@ class ListingsScreen extends StatelessWidget {
                         ),
                       ),
                       trailing: PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_horiz, color: _textMuted),
                         onSelected: (value) {
                           if (value == 'edit') _openEditor(context, property);
                           if (value == 'delete') _delete(context, property);
@@ -104,6 +182,10 @@ class ListingsScreen extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (_) => PropertyEditor(property: property),
     );
   }
@@ -112,6 +194,7 @@ class ListingsScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('Delete listing?'),
         content: Text(property.title),
         actions: [
@@ -139,9 +222,12 @@ class _ChecklistTile extends StatelessWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(Icons.verified_outlined,
-          color: Theme.of(context).colorScheme.primary),
-      title: Text(label),
+      leading: const Icon(Icons.verified_outlined, color: Color(0xFF6C4CF1)),
+      title: Text(label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF1E1B2E),
+          )),
     );
   }
 }
@@ -156,6 +242,12 @@ class PropertyEditor extends StatefulWidget {
 }
 
 class _PropertyEditorState extends State<PropertyEditor> {
+  static const _primary = Color(0xFF6C4CF1);
+  static const _primarySoft = Color(0xFFEDE9FE);
+  static const _searchFill = Color(0xFFF4F2FB);
+  static const _textDark = Color(0xFF1E1B2E);
+  static const _textMuted = Color(0xFF8A8A9E);
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _title;
   late final TextEditingController _address;
@@ -230,26 +322,30 @@ class _PropertyEditorState extends State<PropertyEditor> {
   Widget build(BuildContext context) {
     final inset = MediaQuery.viewInsetsOf(context).bottom;
     return Padding(
-      padding: EdgeInsets.fromLTRB(18, 18, 18, inset + 18),
+      padding: EdgeInsets.fromLTRB(20, 8, 20, inset + 20),
       child: Form(
         key: _formKey,
         child: ListView(
           shrinkWrap: true,
           children: [
-            Text(
-              widget.property == null
-                  ? 'Create verified listing'
-                  : 'Edit listing',
-              style: Theme.of(context).textTheme.titleLarge,
+            const Text(
+              'Create verified listing',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: _textDark,
+              ),
             ),
             const SizedBox(height: 6),
-            Text(
+            const Text(
               'The strongest listings include identity, authority, property facts, availability, and real move-in cost.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+              style: TextStyle(
+                fontSize: 13,
+                color: _textMuted,
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             _field(_title, 'Title'),
             _field(_address, 'Address'),
             Row(
@@ -281,23 +377,25 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         keyboardType: TextInputType.number)),
               ],
             ),
-            DropdownButtonFormField<String>(
-              value: _type,
-              decoration: const InputDecoration(labelText: 'Property type'),
-              items: const [
-                DropdownMenuItem(value: 'house', child: Text('House')),
-                DropdownMenuItem(value: 'flat', child: Text('Flat')),
-                DropdownMenuItem(value: 'cottage', child: Text('Cottage')),
-                DropdownMenuItem(
-                    value: 'student_accommodation',
-                    child: Text('Student accommodation')),
-                DropdownMenuItem(
-                    value: 'commercial_property',
-                    child: Text('Commercial property')),
-              ],
-              onChanged: (value) => setState(() => _type = value ?? 'house'),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: DropdownButtonFormField<String>(
+                value: _type,
+                decoration: _inputDeco('Property type'),
+                items: const [
+                  DropdownMenuItem(value: 'house', child: Text('House')),
+                  DropdownMenuItem(value: 'flat', child: Text('Flat')),
+                  DropdownMenuItem(value: 'cottage', child: Text('Cottage')),
+                  DropdownMenuItem(
+                      value: 'student_accommodation',
+                      child: Text('Student accommodation')),
+                  DropdownMenuItem(
+                      value: 'commercial_property',
+                      child: Text('Commercial property')),
+                ],
+                onChanged: (value) => setState(() => _type = value ?? 'house'),
+              ),
             ),
-            const SizedBox(height: 8),
             _field(_description, 'Description', maxLines: 4),
             _field(
               _images,
@@ -324,66 +422,83 @@ class _PropertyEditorState extends State<PropertyEditor> {
                 Expanded(child: _field(_parking, 'Parking')),
               ],
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Furnished'),
-              value: _furnished,
-              onChanged: (value) => setState(() => _furnished = value),
+            _switch(
+                'Furnished', _furnished, (v) => setState(() => _furnished = v)),
+            _switch('Solar power', _solar, (v) => setState(() => _solar = v)),
+            _switch(
+                'Borehole', _borehole, (v) => setState(() => _borehole = v)),
+            _switch('Pet friendly', _pets, (v) => setState(() => _pets = v)),
+            _switch('360 tour / video walkthrough ready', _tour,
+                (v) => setState(() => _tour = v)),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _primarySoft,
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: const Column(
+                children: [
+                  _ChecklistTile(label: 'Identity document uploaded'),
+                  _ChecklistTile(label: 'Phone number verified'),
+                  _ChecklistTile(
+                      label: 'Ownership or agent authority document ready'),
+                  _ChecklistTile(
+                      label: 'Property address and availability confirmed'),
+                ],
+              ),
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Solar power'),
-              value: _solar,
-              onChanged: (value) => setState(() => _solar = value),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Borehole'),
-              value: _borehole,
-              onChanged: (value) => setState(() => _borehole = value),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Pet friendly'),
-              value: _pets,
-              onChanged: (value) => setState(() => _pets = value),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('360 tour / video walkthrough ready'),
-              value: _tour,
-              onChanged: (value) => setState(() => _tour = value),
-            ),
-            Card(
-              color: Theme.of(context)
-                  .colorScheme
-                  .surfaceContainerHighest
-                  .withOpacity(0.45),
-              child: const Padding(
-                padding: EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    _ChecklistTile(label: 'Identity document uploaded'),
-                    _ChecklistTile(label: 'Phone number verified'),
-                    _ChecklistTile(
-                        label: 'Ownership or agent authority document ready'),
-                    _ChecklistTile(
-                        label: 'Property address and availability confirmed'),
-                  ],
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28)),
+                ),
+                child: Text(
+                  widget.property == null ? 'Create listing' : 'Save changes',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _submit,
-              child: Text(
-                  widget.property == null ? 'Create listing' : 'Save changes'),
-            ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
     );
   }
+
+  // ─── Helpers ───
+  InputDecoration _inputDeco(String label) => InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: _searchFill,
+        labelStyle: const TextStyle(
+          color: _textMuted,
+          fontWeight: FontWeight.w500,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: _primary, width: 1.4),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      );
 
   Widget _field(
     TextEditingController controller,
@@ -396,14 +511,29 @@ class _PropertyEditorState extends State<PropertyEditor> {
       padding: const EdgeInsets.only(bottom: 10),
       child: TextFormField(
         controller: controller,
-        decoration: InputDecoration(labelText: label),
+        decoration: _inputDeco(label),
         keyboardType: keyboardType,
         maxLines: maxLines,
+        style: const TextStyle(color: _textDark),
         validator: (value) =>
             requiredField && (value == null || value.trim().isEmpty)
                 ? 'Required'
                 : null,
       ),
+    );
+  }
+
+  Widget _switch(String label, bool value, ValueChanged<bool> onChanged) {
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      activeColor: _primary,
+      title: Text(label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w500,
+            color: _textDark,
+          )),
+      value: value,
+      onChanged: onChanged,
     );
   }
 
