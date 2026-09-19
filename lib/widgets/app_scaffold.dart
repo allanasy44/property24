@@ -188,14 +188,14 @@ class _BottomNavItem extends StatelessWidget {
                     item.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.poppins(
                       fontSize: 10,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                       color: selected
                           ? AppTheme.accent
                           : colorScheme.onSurfaceVariant,
                       height: 1.0,
-                      letterSpacing: -0.1,
+                      letterSpacing: 0,
                     ),
                   ),
                 ],

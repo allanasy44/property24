@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:unicons/unicons.dart';
 
 import '../models/rental_models.dart';
+import '../theme/app_theme.dart';
 
-// Local palette (keeps this file self-contained)
 class _C {
-  static const primary = Color(0xFF6C4CF1);
-  static const primarySoft = Color(0xFFEDE9FE);
-  static const searchFill = Color(0xFFF4F2FB);
-  static const textDark = Color(0xFF1E1B2E);
-  static const textMuted = Color(0xFF8A8A9E);
+  static const primary = AppTheme.accent;
+  static const primarySoft = Color(0xfff1f1ff);
+  static const searchFill = AppTheme.bgSurface;
+  static const textDark = AppTheme.textPrimary;
+  static const textMuted = AppTheme.textMuted;
 }
 
 class PropertyDetailScreen extends StatefulWidget {

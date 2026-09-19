@@ -5,22 +5,46 @@ import 'package:unicons/unicons.dart';
 import '../models/rental_models.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
+import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
 import '../widgets/property_card.dart';
+import 'ai_search_screen.dart';
 import 'property_detail_screen.dart';
 
-class ListingsScreen extends StatelessWidget {
+class ListingsScreen extends StatefulWidget {
   const ListingsScreen({super.key});
 
-  static const _primary = Color(0xFF6C4CF1);
-  static const _primarySoft = Color(0xFFEDE9FE);
-  static const _searchFill = Color(0xFFF4F2FB);
-  static const _textDark = Color(0xFF1E1B2E);
-  static const _textMuted = Color(0xFF8A8A9E);
+  @override
+  State<ListingsScreen> createState() => _ListingsScreenState();
+}
+
+class _ListingsScreenState extends State<ListingsScreen> {
+  String _query = '';
+
+  static const _primary = AppTheme.accent;
+  static const _primarySoft = Color(0xfff1f1ff);
+  static const _searchFill = AppTheme.bgSurface;
+  static const _textDark = AppTheme.textPrimary;
+  static const _textMuted = AppTheme.textMuted;
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
+    final listings = state.snapshot.properties.where((property) {
+      final haystack = [
+        property.title,
+        property.description,
+        property.address,
+        property.city,
+        property.suburb,
+        property.propertyType,
+        property.rentLabel,
+        property.parking,
+        property.waterAvailability,
+      ].join(' ').toLowerCase();
+      return _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
+    }).toList();
+
     return LoadingOverlay(
       child: RefreshIndicator(
         onRefresh: state.refresh,
@@ -222,11 +246,11 @@ class _ChecklistTile extends StatelessWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.verified_outlined, color: Color(0xFF6C4CF1)),
+      leading: const Icon(Icons.verified_outlined, color: AppTheme.accent),
       title: Text(label,
           style: const TextStyle(
             fontWeight: FontWeight.w500,
-            color: Color(0xFF1E1B2E),
+            color: AppTheme.textPrimary,
           )),
     );
   }
@@ -242,11 +266,11 @@ class PropertyEditor extends StatefulWidget {
 }
 
 class _PropertyEditorState extends State<PropertyEditor> {
-  static const _primary = Color(0xFF6C4CF1);
-  static const _primarySoft = Color(0xFFEDE9FE);
-  static const _searchFill = Color(0xFFF4F2FB);
-  static const _textDark = Color(0xFF1E1B2E);
-  static const _textMuted = Color(0xFF8A8A9E);
+  static const _primary = AppTheme.accent;
+  static const _primarySoft = Color(0xfff1f1ff);
+  static const _searchFill = AppTheme.bgSurface;
+  static const _textDark = AppTheme.textPrimary;
+  static const _textMuted = AppTheme.textMuted;
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _title;

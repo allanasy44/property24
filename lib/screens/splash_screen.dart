@@ -259,7 +259,7 @@ class _OnboardingView extends StatelessWidget {
               ),
               child: Text(
                 'Skip',
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -297,7 +297,7 @@ class _OnboardingView extends StatelessWidget {
                     // Subtitle
                     Text(
                       slides[currentPage].subtitle,
-                      style: GoogleFonts.dmSans(
+                      style: GoogleFonts.poppins(
                         color: AppTheme.textSecondary,
                         fontSize: 14,
                         height: 1.6,
@@ -371,7 +371,7 @@ class _OnboardingView extends StatelessWidget {
                               children: [
                                 Text(
                                   isLast ? 'Get Started' : 'Next',
-                                  style: GoogleFonts.dmSans(
+                                  style: GoogleFonts.poppins(
                                     color: Colors.white,
                                     fontSize: 15,
                                     fontWeight: FontWeight.w600,
@@ -404,12 +404,12 @@ class _OnboardingView extends StatelessWidget {
 
     return RichText(
       text: TextSpan(
-        style: GoogleFonts.dmSans(
+        style: GoogleFonts.poppins(
           fontSize: 34,
           fontWeight: FontWeight.w700,
           color: AppTheme.textPrimary,
           height: 1.15,
-          letterSpacing: -0.5,
+          letterSpacing: 0,
         ),
         children: [
           if (parts.isNotEmpty)
@@ -518,12 +518,12 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
                   // Header
                   Text(
                     'How will you\nuse PropNest?',
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.poppins(
                       fontSize: 32,
                       fontWeight: FontWeight.w700,
                       color: AppTheme.textPrimary,
                       height: 1.2,
-                      letterSpacing: -0.5,
+                      letterSpacing: 0,
                     ),
                   ),
 
@@ -531,7 +531,7 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
 
                   Text(
                     'Choose your role to get a personalized experience.',
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.poppins(
                       fontSize: 15,
                       color: AppTheme.textSecondary,
                       height: 1.5,
@@ -555,7 +555,7 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
                     },
                     gradientColors: [
                       AppTheme.accent,
-                      const Color(0xFF3B6FD4),
+                      AppTheme.accentTeal,
                     ],
                   ),
 
@@ -576,7 +576,7 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
                     },
                     gradientColors: [
                       AppTheme.accentTeal,
-                      const Color(0xFF2BA896),
+                      AppTheme.accentTeal,
                     ],
                   ),
 
@@ -618,7 +618,7 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
                         child: Center(
                           child: Text(
                             'Continue',
-                            style: GoogleFonts.dmSans(
+                            style: GoogleFonts.poppins(
                               color: Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -712,7 +712,7 @@ class _RoleCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.poppins(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color: AppTheme.textPrimary,
@@ -721,7 +721,7 @@ class _RoleCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.poppins(
                       fontSize: 13,
                       color: AppTheme.textSecondary,
                       height: 1.4,

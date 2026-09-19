@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:property24_zimbabwe/main.dart';
@@ -7,7 +8,7 @@ void main() {
     await tester.pumpWidget(const MyApp(bootState: false));
     await tester.pump();
 
-    expect(find.text('Property 24'), findsOneWidget);
-    expect(find.text('Start safely'), findsOneWidget);
+    expect(find.byType(PageView), findsOneWidget);
+    expect(find.text('Next'), findsOneWidget);
   });
 }

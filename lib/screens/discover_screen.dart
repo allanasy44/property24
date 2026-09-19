@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:unicons/unicons.dart';
 
 import '../models/rental_models.dart';
-import '../routes/app_routes.dart';
 import '../state/property24_state.dart';
+import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
 import '../widgets/property_card.dart';
+import 'ai_search_screen.dart';
 import 'property_detail_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
@@ -22,11 +22,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   String _type = 'Popular';
   bool _mapMode = false;
 
-  static const _primary = Color(0xFF6C4CF1);
-  static const _primarySoft = Color(0xFFEDE9FE);
-  static const _searchFill = Color(0xFFF4F2FB);
-  static const _textDark = Color(0xFF1E1B2E);
-  static const _textMuted = Color(0xFF8A8A9E);
+  static const _primary = AppTheme.accent;
+  static const _primarySoft = Color(0xfff1f1ff);
+  static const _searchFill = AppTheme.bgSurface;
+  static const _textDark = AppTheme.textPrimary;
+  static const _textMuted = AppTheme.textMuted;
 
   static const _types = ['Popular', 'Nearby', 'Recommended'];
 
@@ -105,39 +105,51 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Container(
-                            height: 50,
-                            padding: const EdgeInsets.symmetric(horizontal: 18),
-                            decoration: BoxDecoration(
-                              color: _searchFill,
-                              borderRadius: BorderRadius.circular(28),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.search,
-                                    color: _textMuted, size: 20),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: TextField(
-                                    decoration: const InputDecoration(
-                                      border: InputBorder.none,
-                                      isCollapsed: true,
-                                      hintText: 'Food, Groceries, Drinks etc.',
-                                      hintStyle: TextStyle(
-                                        color: _textMuted,
+                          child: InkWell(
+                            onTap: _openAiSearch,
+                            borderRadius: BorderRadius.circular(28),
+                            child: Container(
+                              height: 50,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 18),
+                              decoration: BoxDecoration(
+                                color: _searchFill,
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.search,
+                                      color: _textMuted, size: 20),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      _query.isEmpty
+                                          ? 'Describe the stay you are looking for...'
+                                          : _query,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: _query.isEmpty
+                                            ? _textMuted
+                                            : _textDark,
                                         fontSize: 13.5,
                                         fontWeight: FontWeight.w400,
                                       ),
                                     ),
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: _textDark,
-                                    ),
-                                    onChanged: (v) =>
-                                        setState(() => _query = v),
                                   ),
-                                ),
-                              ],
+                                  if (_query.isNotEmpty)
+                                    IconButton(
+                                      tooltip: 'Clear search',
+                                      onPressed: () =>
+                                          setState(() => _query = ''),
+                                      icon: const Icon(
+                                        Icons.close_rounded,
+                                        color: _textMuted,
+                                        size: 18,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -266,6 +278,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
+  Future<void> _openAiSearch() async {
+    final query = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        fullscreenDialog: true,
+        builder: (_) => AiSearchScreen(initialQuery: _query),
+      ),
+    );
+    if (!mounted || query == null) return;
+    setState(() => _query = query);
+  }
+
   void _showTrustCenter(BuildContext context, Property24State state) {
     showModalBottomSheet<void>(
       context: context,
@@ -354,7 +377,7 @@ class _NotificationButton extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1E1B2E),
+                      color: AppTheme.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -374,47 +397,9 @@ class _NotificationButton extends StatelessWidget {
             '${state.notifications.length}',
             style: const TextStyle(fontSize: 10),
           ),
-          child:
-              const Icon(UniconsLine.bell, color: Color(0xFF1E1B2E), size: 20),
+          child: const Icon(UniconsLine.bell,
+              color: AppTheme.textPrimary, size: 20),
         ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Trust strip (kept, restyled)
-// ─────────────────────────────────────────────────────────────
-class _TrustStrip extends StatelessWidget {
-  const _TrustStrip({required this.verified, required this.total});
-
-  final int verified;
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.shield_outlined, color: Color(0xFF6C4CF1)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              '$verified of $total homes verified',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1E1B2E),
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -438,15 +423,15 @@ class _MapExplorer extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: const Color(0xFFEDE9FE),
+            color: const Color(0xfff1f1ff),
             borderRadius: BorderRadius.circular(22),
           ),
           child: Stack(
             children: [
               Positioned.fill(
                 child: CustomPaint(
-                    painter: _MapLinesPainter(
-                        const Color(0xFF6C4CF1).withOpacity(0.15))),
+                    painter:
+                        _MapLinesPainter(AppTheme.accent.withOpacity(0.15))),
               ),
               for (var index = 0; index < properties.take(5).length; index++)
                 Positioned(
@@ -473,8 +458,8 @@ class _MapExplorer extends StatelessWidget {
         for (final property in properties.take(3))
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.location_on_outlined,
-                color: Color(0xFF6C4CF1)),
+            leading:
+                const Icon(Icons.location_on_outlined, color: AppTheme.accent),
             title: Text(property.title,
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text(property.heroLocation),
@@ -502,9 +487,7 @@ class _MapPin extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: property.verified
-                ? const Color(0xFF19B66A)
-                : const Color(0xFF6C4CF1),
+            color: property.verified ? AppTheme.trustHigh : AppTheme.accent,
             borderRadius: BorderRadius.circular(24),
           ),
           child: Text(
@@ -579,7 +562,7 @@ class _ComparisonTray extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1E1B2E),
+                    color: AppTheme.textPrimary,
                   ),
                 ),
               ),
@@ -588,7 +571,7 @@ class _ComparisonTray extends StatelessWidget {
                 child: const Text(
                   'Clear',
                   style: TextStyle(
-                    color: Color(0xFF6C4CF1),
+                    color: AppTheme.accent,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -606,7 +589,7 @@ class _ComparisonTray extends StatelessWidget {
                     margin: const EdgeInsets.only(right: 10),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF4F2FB),
+                      color: AppTheme.bgSurface,
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Column(
@@ -617,24 +600,24 @@ class _ComparisonTray extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF1E1B2E),
+                              color: AppTheme.textPrimary,
                             )),
                         const SizedBox(height: 6),
                         Text(property.rentLabel,
                             style: const TextStyle(
-                              color: Color(0xFF6C4CF1),
+                              color: AppTheme.accent,
                               fontWeight: FontWeight.w700,
                             )),
                         Text('${property.trustScore}% trust',
                             style: const TextStyle(
                               fontSize: 12,
-                              color: Color(0xFF8A8A9E),
+                              color: AppTheme.textMuted,
                             )),
                         Text(
                             '${property.bedrooms} bed · ${property.bathrooms} bath',
                             style: const TextStyle(
                               fontSize: 12,
-                              color: Color(0xFF8A8A9E),
+                              color: AppTheme.textMuted,
                             )),
                       ],
                     ),
@@ -658,11 +641,11 @@ class _TrustLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.check_circle_outline, color: Color(0xFF6C4CF1)),
+      leading: const Icon(Icons.check_circle_outline, color: AppTheme.accent),
       title: Text(label,
           style: const TextStyle(
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1E1B2E),
+            color: AppTheme.textPrimary,
           )),
       subtitle: Text(value),
     );

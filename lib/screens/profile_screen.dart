@@ -4,6 +4,7 @@ import 'package:unicons/unicons.dart';
 
 import '../models/rental_models.dart';
 import '../state/property24_state.dart';
+import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -63,7 +64,7 @@ class _SignedInProfile extends StatelessWidget {
                           fit: BoxFit.cover),
                   gradient: user.coverPhoto.isEmpty
                       ? const LinearGradient(
-                          colors: [Color(0xff12324a), Color(0xff19b66a)])
+                          colors: [AppTheme.accent, AppTheme.accentTeal])
                       : null,
                 ),
               ),
@@ -362,7 +363,7 @@ class _AuthPanelState extends State<_AuthPanel> {
             padding: const EdgeInsets.all(18),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                  colors: [Color(0xff12324a), Color(0xff19b66a)]),
+                  colors: [AppTheme.accent, AppTheme.accentTeal]),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

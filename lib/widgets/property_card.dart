@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/rental_models.dart';
+import '../theme/app_theme.dart';
 
 class PropertyCard extends StatelessWidget {
   const PropertyCard({
@@ -42,7 +43,7 @@ class PropertyCard extends StatelessWidget {
                       ? DecoratedBox(
                           decoration: const BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [Color(0xffe7f2df), Color(0xffbcdac2)],
+                              colors: [AppTheme.bgSurface, AppTheme.borderMid],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
@@ -236,9 +237,7 @@ class _ImageBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: emphasized
-            ? const Color(0xff19b66a)
-            : Colors.white.withOpacity(0.92),
+        color: emphasized ? AppTheme.trustHigh : Colors.white.withOpacity(0.92),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -246,12 +245,12 @@ class _ImageBadge extends StatelessWidget {
         children: [
           Icon(icon,
               size: 15,
-              color: emphasized ? Colors.white : const Color(0xff12324a)),
+              color: emphasized ? Colors.white : AppTheme.textPrimary),
           const SizedBox(width: 5),
           Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: emphasized ? Colors.white : const Color(0xff12324a),
+                  color: emphasized ? Colors.white : AppTheme.textPrimary,
                   fontWeight: FontWeight.w800,
                 ),
           ),
