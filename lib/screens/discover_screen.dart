@@ -33,6 +33,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
+    final displayName = state.user?.name.trim() ?? '';
     final properties = state.snapshot.properties.where((property) {
       final haystack = [
         property.title,
@@ -71,22 +72,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               color: _primary, size: 22),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Good Evening!',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _textMuted,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Isabella Chen',
-                                style: TextStyle(
+                                displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
                                   fontSize: 16,
                                   color: _textDark,
                                   fontWeight: FontWeight.w700,
@@ -123,9 +117,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
-                                      _query.isEmpty
-                                          ? 'Describe the stay you are looking for...'
-                                          : _query,
+                                      _query.isEmpty ? '' : _query,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(

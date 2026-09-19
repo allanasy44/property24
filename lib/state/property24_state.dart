@@ -24,11 +24,7 @@ class Property24State extends ChangeNotifier {
   final Set<String> savedPropertyIds = <String>{};
   final Set<String> comparisonPropertyIds = <String>{};
   final List<String> smartAlerts = <String>[];
-  final List<String> notifications = <String>[
-    'Borrowdale garden flat is still available.',
-    'A verified landlord replied to your viewing request.',
-    'New trusted homes match your saved search.',
-  ];
+  final List<String> notifications = <String>[];
   final List<ChatMessageDraft> localChatMessages = <ChatMessageDraft>[
     const ChatMessageDraft(
       id: 'm1',

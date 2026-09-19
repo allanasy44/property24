@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:unicons/unicons.dart';
 
 import '../models/rental_models.dart';
+import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
-
-class _C {
-  static const primary = AppTheme.accent;
-  static const primarySoft = Color(0xfff1f1ff);
-  static const searchFill = AppTheme.bgSurface;
-  static const textDark = AppTheme.textPrimary;
-  static const textMuted = AppTheme.textMuted;
-}
+import 'supplier_profile_screen.dart';
 
 class PropertyDetailScreen extends StatefulWidget {
   const PropertyDetailScreen({super.key, required this.property});
+
   final PropertyListing property;
 
   @override
@@ -26,299 +22,636 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final p = widget.property;
-    final photos = p.photos.isEmpty ? <String>[''] : p.photos;
+    final property = widget.property;
+    final photos = property.photos.isEmpty ? <String>[''] : property.photos;
+    final amenities = _amenities(property);
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Top bar
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon:
-                        const Icon(UniconsLine.arrow_left, color: _C.textDark),
-                  ),
-                  Expanded(
-                    child: Text(
-                      p.title,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: _C.textDark,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(UniconsLine.share_alt, color: _C.textDark),
-                  ),
-                ],
+      backgroundColor: AppTheme.bg,
+      body: Stack(
+        children: [
+          CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: _HeroGallery(
+                  photos: photos,
+                  page: _page,
+                  saved: _saved,
+                  onPageChanged: (index) => setState(() => _page = index),
+                  onBack: () => Navigator.pop(context),
+                  onSave: () => setState(() => _saved = !_saved),
+                ),
               ),
-            ),
-
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  // Image carousel
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(22),
-                      child: AspectRatio(
-                        aspectRatio: 16 / 10,
-                        child: Stack(
-                          children: [
-                            PageView.builder(
-                              itemCount: photos.length,
-                              onPageChanged: (i) => setState(() => _page = i),
-                              itemBuilder: (_, i) => photos[i].isEmpty
-                                  ? Container(
-                                      color: _C.searchFill,
-                                      child: const Icon(Icons.home_outlined,
-                                          size: 60, color: _C.textMuted),
-                                    )
-                                  : Image.network(photos[i], fit: BoxFit.cover),
-                            ),
-                            Positioned(
-                              top: 12,
-                              right: 12,
-                              child: GestureDetector(
-                                onTap: () => setState(() => _saved = !_saved),
-                                child: Container(
-                                  height: 36,
-                                  width: 36,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.9),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    _saved
-                                        ? Icons.favorite
-                                        : Icons.favorite_border,
-                                    size: 18,
-                                    color: _saved ? _C.primary : _C.textDark,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 12,
-                              left: 0,
-                              right: 0,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(photos.length, (i) {
-                                  final active = i == _page;
-                                  return AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
-                                    margin: const EdgeInsets.symmetric(
-                                        horizontal: 3),
-                                    height: 6,
-                                    width: active ? 18 : 6,
-                                    decoration: BoxDecoration(
-                                      color: active
-                                          ? _C.primary
-                                          : Colors.white.withOpacity(0.7),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  );
-                                }),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+              SliverToBoxAdapter(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(22, 18, 22, 112),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(26),
                     ),
                   ),
-                  const SizedBox(height: 20),
-
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(p.title,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: _C.textDark,
-                            )),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Icon(Icons.location_on_outlined,
-                                size: 15, color: _C.textMuted),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                p.heroLocation,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: _C.textMuted,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-
-                        // Info chips
-                        Container(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          decoration: BoxDecoration(
-                            color: _C.primarySoft,
-                            borderRadius: BorderRadius.circular(22),
-                          ),
-                          child: Row(children: [
-                            _InfoChip(
-                                icon: UniconsLine.bed,
-                                label: '${p.bedrooms} bhk'),
-                            _divider(),
-                            _InfoChip(
-                                icon: Icons.square_foot,
-                                label: '${(p.bathrooms * 500).round()} sq ft'),
-                            _divider(),
-                            _InfoChip(
-                                icon: Icons.weekend_outlined,
-                                label:
-                                    p.furnished ? 'Furnished' : 'Unfurnished'),
-                          ]),
-                        ),
-                        const SizedBox(height: 22),
-
-                        Text.rich(
-                          TextSpan(
-                            children: [
-                              const TextSpan(
-                                text: 'Price : ',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: _C.textDark,
-                                ),
-                              ),
-                              TextSpan(
-                                text: p.rentLabel,
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  color: _C.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 22),
-
-                        const Text('Description',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: _C.textDark,
-                            )),
-                        const SizedBox(height: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _PriceHeader(property: property),
+                      const SizedBox(height: 14),
+                      _MetaLine(property: property),
+                      const SizedBox(height: 14),
+                      _GuestChips(property: property),
+                      const SizedBox(height: 18),
+                      const _DetailTabs(),
+                      const SizedBox(height: 14),
+                      if (property.description.trim().isNotEmpty)
                         Text(
-                          p.description.isEmpty
-                              ? 'No description provided.'
-                              : p.description,
+                          property.description.trim(),
                           style: const TextStyle(
-                            fontSize: 13.5,
-                            height: 1.6,
-                            color: _C.textMuted,
+                            color: AppTheme.textSecondary,
+                            fontSize: 12.5,
+                            height: 1.55,
                           ),
                         ),
-                        const SizedBox(height: 100),
+                      const SizedBox(height: 20),
+                      if (amenities.isNotEmpty) ...[
+                        const Text(
+                          'What this house offers',
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final item in amenities) _AmenityChip(item),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
                       ],
-                    ),
+                      _HostCard(property: property),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-
-            // Bottom actions
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(UniconsLine.phone,
-                          color: _C.primary, size: 18),
-                      label: const Text('Call',
-                          style: TextStyle(
-                              color: _C.primary, fontWeight: FontWeight.w600)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: BorderSide(color: _C.primary.withOpacity(0.4)),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(UniconsLine.comment_message,
-                          color: Colors.white, size: 18),
-                      label: const Text('Message',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _C.primary,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+            ],
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _BottomActions(property: property),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _divider() => Container(
-        width: 1,
-        height: 30,
-        color: _C.primary.withOpacity(0.15),
-      );
+  List<String> _amenities(PropertyListing property) {
+    return [
+      if (property.has360Tour) '360 tour',
+      if (property.parking.trim().isNotEmpty) property.parking.trim(),
+      if (property.waterAvailability.trim().isNotEmpty)
+        property.waterAvailability.trim(),
+      if (property.furnished) 'Furnished',
+      if (property.solarPower) 'Solar power',
+      if (property.borehole) 'Borehole',
+      if (property.petFriendly) 'Pet friendly',
+      property.propertyType,
+    ].where((item) => item.trim().isNotEmpty).toSet().toList(growable: false);
+  }
 }
 
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.icon, required this.label});
+class _HeroGallery extends StatelessWidget {
+  const _HeroGallery({
+    required this.photos,
+    required this.page,
+    required this.saved,
+    required this.onPageChanged,
+    required this.onBack,
+    required this.onSave,
+  });
+
+  final List<String> photos;
+  final int page;
+  final bool saved;
+  final ValueChanged<int> onPageChanged;
+  final VoidCallback onBack;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 270,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            itemCount: photos.length,
+            onPageChanged: onPageChanged,
+            itemBuilder: (context, index) {
+              final photo = photos[index];
+              if (photo.isEmpty) {
+                return Container(
+                  color: AppTheme.bgSurface,
+                  child: const Icon(
+                    Icons.home_work_outlined,
+                    color: AppTheme.textMuted,
+                    size: 56,
+                  ),
+                );
+              }
+              return Image.network(
+                photo,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  color: AppTheme.bgSurface,
+                  child: const Icon(
+                    Icons.home_work_outlined,
+                    color: AppTheme.textMuted,
+                    size: 56,
+                  ),
+                ),
+              );
+            },
+          ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 10,
+            left: 18,
+            child: _CircleAction(
+              icon: Icons.chevron_left_rounded,
+              tooltip: 'Back',
+              onPressed: onBack,
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 10,
+            right: 18,
+            child: Row(
+              children: [
+                _CircleAction(
+                  icon: Icons.ios_share_rounded,
+                  tooltip: 'Share',
+                  onPressed: () {},
+                ),
+                const SizedBox(width: 10),
+                _CircleAction(
+                  icon: saved ? Icons.favorite : Icons.favorite_border,
+                  tooltip: saved ? 'Remove saved home' : 'Save home',
+                  onPressed: onSave,
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 12,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var index = 0; index < photos.length; index++)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    height: 5,
+                    width: page == index ? 18 : 5,
+                    decoration: BoxDecoration(
+                      color: page == index ? Colors.white : Colors.white70,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircleAction extends StatelessWidget {
+  const _CircleAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.black.withOpacity(0.32),
+        foregroundColor: Colors.white,
+        fixedSize: const Size.square(36),
+        minimumSize: const Size.square(36),
+      ),
+      icon: Icon(icon, size: 19),
+    );
+  }
+}
+
+class _PriceHeader extends StatelessWidget {
+  const _PriceHeader({required this.property});
+
+  final PropertyListing property;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                property.rentLabel,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                property.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                property.heroLocation,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 11.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        const _HeaderIcon(icon: UniconsLine.clock),
+        const _HeaderIcon(icon: UniconsLine.bookmark),
+        const _HeaderIcon(icon: UniconsLine.map_marker),
+        const _HeaderIcon(icon: UniconsLine.heart),
+      ],
+    );
+  }
+}
+
+class _HeaderIcon extends StatelessWidget {
+  const _HeaderIcon({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Icon(icon, size: 16, color: AppTheme.textSecondary),
+    );
+  }
+}
+
+class _MetaLine extends StatelessWidget {
+  const _MetaLine({required this.property});
+
+  final PropertyListing property;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${property.trustScore}% trust / ${property.moveInTotalLabel} move-in',
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            const Icon(
+              Icons.visibility_outlined,
+              size: 13,
+              color: AppTheme.textMuted,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              property.availabilityLabel,
+              style: const TextStyle(
+                color: AppTheme.textMuted,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _GuestChips extends StatelessWidget {
+  const _GuestChips({required this.property});
+
+  final PropertyListing property;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _Pill(icon: Icons.group_outlined, label: property.propertyType),
+        _Pill(
+            icon: Icons.bathtub_outlined, label: '${property.bathrooms} baths'),
+        _Pill(icon: Icons.bed_outlined, label: '${property.bedrooms} beds'),
+      ],
+    );
+  }
+}
+
+class _DetailTabs extends StatelessWidget {
+  const _DetailTabs();
+
+  @override
+  Widget build(BuildContext context) {
+    const tabs = ['Overview', 'Amenities', 'Reviews', 'Location'];
+    return Row(
+      children: [
+        for (final tab in tabs)
+          Expanded(
+            child: Column(
+              children: [
+                Text(
+                  tab,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: tab == tabs.first
+                        ? AppTheme.accent
+                        : AppTheme.textSecondary,
+                    fontSize: 11.5,
+                    fontWeight:
+                        tab == tabs.first ? FontWeight.w800 : FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 2,
+                  width: 36,
+                  color:
+                      tab == tabs.first ? AppTheme.accent : Colors.transparent,
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _AmenityChip extends StatelessWidget {
+  const _AmenityChip(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check, size: 13, color: AppTheme.accent),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.icon, required this.label});
+
   final IconData icon;
   final String label;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.bgSurface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: _C.primary, size: 22),
-          const SizedBox(height: 6),
-          Text(label,
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: _C.textDark,
-              )),
+          Icon(icon, size: 14, color: AppTheme.textSecondary),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HostCard extends StatelessWidget {
+  const _HostCard({required this.property});
+
+  final PropertyListing property;
+
+  @override
+  Widget build(BuildContext context) {
+    final supplier = property.supplier;
+    final name = supplier?.name.trim() ?? '';
+    final role = supplier?.role.label ?? '';
+    final initials = name.isEmpty
+        ? 'P'
+        : name
+            .trim()
+            .split(RegExp(r'\s+'))
+            .take(2)
+            .map((part) => part.characters.first.toUpperCase())
+            .join();
+
+    return InkWell(
+      onTap: supplier == null
+          ? null
+          : () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => SupplierProfileScreen(supplier: supplier),
+                ),
+              ),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 21,
+              backgroundColor: AppTheme.textPrimary,
+              backgroundImage: supplier?.profilePicture.isNotEmpty == true
+                  ? NetworkImage(supplier!.profilePicture)
+                  : null,
+              child: supplier?.profilePicture.isNotEmpty == true
+                  ? null
+                  : Text(
+                      initials,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (name.isNotEmpty)
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  if (role.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      role,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.textMuted,
+                        fontSize: 10.5,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (supplier?.verified == true)
+              const Icon(
+                Icons.verified_rounded,
+                color: AppTheme.accent,
+                size: 18,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomActions extends StatelessWidget {
+  const _BottomActions({required this.property});
+
+  final PropertyListing property;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        22,
+        14,
+        22,
+        MediaQuery.paddingOf(context).bottom + 14,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppTheme.border)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, -8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () =>
+                  context.read<Property24State>().startConversation(property),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text('Message host'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: FilledButton(
+              onPressed: () =>
+                  context.read<Property24State>().requestViewing(property),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text('Reserve'),
+            ),
+          ),
         ],
       ),
     );

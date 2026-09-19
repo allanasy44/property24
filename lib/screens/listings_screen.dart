@@ -30,6 +30,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
+    final displayName = state.user?.name.trim() ?? '';
     final listings = state.snapshot.properties.where((property) {
       final haystack = [
         property.title,
@@ -69,22 +70,15 @@ class _ListingsScreenState extends State<ListingsScreen> {
                               color: _primary, size: 22),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Welcome back, landlord',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _textMuted,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Landlord Studio',
-                                style: TextStyle(
+                                displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
                                   fontSize: 16,
                                   color: _textDark,
                                   fontWeight: FontWeight.w700,
@@ -110,27 +104,45 @@ class _ListingsScreenState extends State<ListingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 18),
-                    Container(
-                      height: 50,
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                      decoration: BoxDecoration(
-                        color: _searchFill,
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.search, color: _textMuted, size: 20),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Search your listings',
-                              style: TextStyle(
-                                color: _textMuted,
-                                fontSize: 13.5,
+                    InkWell(
+                      onTap: _openAiSearch,
+                      borderRadius: BorderRadius.circular(28),
+                      child: Container(
+                        height: 50,
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        decoration: BoxDecoration(
+                          color: _searchFill,
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.search,
+                                color: _textMuted, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _query.isEmpty ? '' : _query,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color:
+                                      _query.isEmpty ? _textMuted : _textDark,
+                                  fontSize: 13.5,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                            if (_query.isNotEmpty)
+                              IconButton(
+                                tooltip: 'Clear search',
+                                onPressed: () => setState(() => _query = ''),
+                                icon: const Icon(
+                                  Icons.close_rounded,
+                                  color: _textMuted,
+                                  size: 18,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 18),
@@ -140,15 +152,6 @@ class _ListingsScreenState extends State<ListingsScreen> {
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                         color: _textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Create trusted listings, confirm availability, and guide tenants into the right workflow.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: _textMuted,
-                        height: 1.4,
                       ),
                     ),
                   ],
@@ -165,13 +168,21 @@ class _ListingsScreenState extends State<ListingsScreen> {
                       'Create a verified rental listing connected to the Django property API.',
                 ),
               )
+            else if (listings.isEmpty)
+              const SliverFillRemaining(
+                child: EmptyState(
+                  icon: Icons.search_off,
+                  title: 'No matching listings',
+                  body: '',
+                ),
+              )
             else
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
                 sliver: SliverList.builder(
-                  itemCount: state.snapshot.properties.length,
+                  itemCount: listings.length,
                   itemBuilder: (context, index) {
-                    final property = state.snapshot.properties[index];
+                    final property = listings[index];
                     return PropertyCard(
                       property: property,
                       onTap: () => Navigator.of(context).push(
@@ -202,16 +213,23 @@ class _ListingsScreenState extends State<ListingsScreen> {
   }
 
   void _openEditor(BuildContext context, [PropertyListing? property]) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => PropertyEditor(property: property),
       ),
-      builder: (_) => PropertyEditor(property: property),
     );
+  }
+
+  Future<void> _openAiSearch() async {
+    final query = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        fullscreenDialog: true,
+        builder: (_) => AiSearchScreen(initialQuery: _query),
+      ),
+    );
+    if (!mounted || query == null) return;
+    setState(() => _query = query);
   }
 
   Future<void> _delete(BuildContext context, PropertyListing property) async {
@@ -256,6 +274,40 @@ class _ChecklistTile extends StatelessWidget {
   }
 }
 
+class _Section extends StatelessWidget {
+  const _Section({
+    required this.title,
+    required this.child,
+  });
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 8),
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
 class PropertyEditor extends StatefulWidget {
   const PropertyEditor({this.property, super.key});
 
@@ -287,6 +339,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
   late final TextEditingController _images;
   late final TextEditingController _videos;
   late final TextEditingController _audio;
+  String _intent = 'Rent';
   String _type = 'house';
   bool _furnished = false;
   bool _solar = false;
@@ -345,155 +398,213 @@ class _PropertyEditorState extends State<PropertyEditor> {
   @override
   Widget build(BuildContext context) {
     final inset = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 8, 20, inset + 20),
-      child: Form(
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      appBar: AppBar(
+        title: Text(widget.property == null ? 'Add property' : 'Edit property'),
+        centerTitle: true,
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.chevron_left_rounded),
+        ),
+      ),
+      body: Form(
         key: _formKey,
         child: ListView(
-          shrinkWrap: true,
+          padding: EdgeInsets.fromLTRB(16, 8, 16, inset + 96),
           children: [
-            const Text(
-              'Create verified listing',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: _textDark,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'The strongest listings include identity, authority, property facts, availability, and real move-in cost.',
-              style: TextStyle(
-                fontSize: 13,
-                color: _textMuted,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 20),
-            _field(_title, 'Title'),
-            _field(_address, 'Address'),
-            Row(
-              children: [
-                Expanded(child: _field(_city, 'City')),
-                const SizedBox(width: 10),
-                Expanded(child: _field(_suburb, 'Suburb')),
-              ],
-            ),
-            Row(
-              children: [
-                Expanded(
-                    child: _field(_rent, 'Monthly rent',
-                        keyboardType: TextInputType.number)),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: _field(_deposit, 'Deposit',
-                        keyboardType: TextInputType.number)),
-              ],
-            ),
-            Row(
-              children: [
-                Expanded(
-                    child: _field(_beds, 'Bedrooms',
-                        keyboardType: TextInputType.number)),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: _field(_baths, 'Bathrooms',
-                        keyboardType: TextInputType.number)),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: DropdownButtonFormField<String>(
-                value: _type,
-                decoration: _inputDeco('Property type'),
-                items: const [
-                  DropdownMenuItem(value: 'house', child: Text('House')),
-                  DropdownMenuItem(value: 'flat', child: Text('Flat')),
-                  DropdownMenuItem(value: 'cottage', child: Text('Cottage')),
-                  DropdownMenuItem(
-                      value: 'student_accommodation',
-                      child: Text('Student accommodation')),
-                  DropdownMenuItem(
-                      value: 'commercial_property',
-                      child: Text('Commercial property')),
+            _Section(
+              title: 'Property for',
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'Sale', label: Text('Sale')),
+                  ButtonSegment(value: 'Rent', label: Text('Rent')),
                 ],
-                onChanged: (value) => setState(() => _type = value ?? 'house'),
+                selected: {_intent},
+                showSelectedIcon: false,
+                onSelectionChanged: (value) =>
+                    setState(() => _intent = value.first),
               ),
             ),
-            _field(_description, 'Description', maxLines: 4),
-            _field(
-              _images,
-              'Image URLs, one per line',
-              maxLines: 3,
-              requiredField: false,
-            ),
-            _field(
-              _videos,
-              'Video URLs, one per line',
-              maxLines: 3,
-              requiredField: false,
-            ),
-            _field(
-              _audio,
-              'Audio walkthrough URLs, one per line',
-              maxLines: 2,
-              requiredField: false,
-            ),
-            Row(
-              children: [
-                Expanded(child: _field(_water, 'Water availability')),
-                const SizedBox(width: 10),
-                Expanded(child: _field(_parking, 'Parking')),
-              ],
-            ),
-            _switch(
-                'Furnished', _furnished, (v) => setState(() => _furnished = v)),
-            _switch('Solar power', _solar, (v) => setState(() => _solar = v)),
-            _switch(
-                'Borehole', _borehole, (v) => setState(() => _borehole = v)),
-            _switch('Pet friendly', _pets, (v) => setState(() => _pets = v)),
-            _switch('360 tour / video walkthrough ready', _tour,
-                (v) => setState(() => _tour = v)),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _primarySoft,
-                borderRadius: BorderRadius.circular(22),
-              ),
-              child: const Column(
+            _Section(
+              title: 'Property details',
+              child: Column(
                 children: [
-                  _ChecklistTile(label: 'Identity document uploaded'),
-                  _ChecklistTile(label: 'Phone number verified'),
-                  _ChecklistTile(
-                      label: 'Ownership or agent authority document ready'),
-                  _ChecklistTile(
-                      label: 'Property address and availability confirmed'),
+                  _field(_title, 'Title'),
+                  _field(_description, 'Details', maxLines: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: DropdownButtonFormField<String>(
+                      value: _type,
+                      decoration: _inputDeco('Property type'),
+                      items: const [
+                        DropdownMenuItem(value: 'house', child: Text('House')),
+                        DropdownMenuItem(value: 'flat', child: Text('Flat')),
+                        DropdownMenuItem(
+                            value: 'cottage', child: Text('Cottage')),
+                        DropdownMenuItem(
+                          value: 'student_accommodation',
+                          child: Text('Student accommodation'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'commercial_property',
+                          child: Text('Commercial property'),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _type = value ?? 'house'),
+                    ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _primary,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28)),
-                ),
-                child: Text(
-                  widget.property == null ? 'Create listing' : 'Save changes',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+            _Section(
+              title: 'Location',
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _field(_city, 'City')),
+                      const SizedBox(width: 10),
+                      Expanded(child: _field(_suburb, 'Suburb')),
+                    ],
                   ),
+                  _field(_address, 'House address'),
+                ],
+              ),
+            ),
+            _Section(
+              title: 'Pricing and rooms',
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _field(
+                          _rent,
+                          _intent == 'Sale' ? 'Price' : 'Monthly rent',
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _field(
+                          _deposit,
+                          'Deposit',
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _field(
+                          _beds,
+                          'Bedrooms',
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _field(
+                          _baths,
+                          'Bathrooms',
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            _Section(
+              title: 'Features',
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _field(_water, 'Water availability')),
+                      const SizedBox(width: 10),
+                      Expanded(child: _field(_parking, 'Parking')),
+                    ],
+                  ),
+                  _switch('Furnished', _furnished,
+                      (v) => setState(() => _furnished = v)),
+                  _switch(
+                      'Solar power', _solar, (v) => setState(() => _solar = v)),
+                  _switch('Borehole', _borehole,
+                      (v) => setState(() => _borehole = v)),
+                  _switch(
+                      'Pet friendly', _pets, (v) => setState(() => _pets = v)),
+                  _switch('360 tour / video walkthrough ready', _tour,
+                      (v) => setState(() => _tour = v)),
+                ],
+              ),
+            ),
+            _Section(
+              title: 'Media',
+              child: Column(
+                children: [
+                  _field(
+                    _images,
+                    'Image URLs, one per line',
+                    maxLines: 3,
+                    requiredField: false,
+                  ),
+                  _field(
+                    _videos,
+                    'Video URLs, one per line',
+                    maxLines: 3,
+                    requiredField: false,
+                  ),
+                  _field(
+                    _audio,
+                    'Audio walkthrough URLs, one per line',
+                    maxLines: 2,
+                    requiredField: false,
+                  ),
+                ],
+              ),
+            ),
+            _Section(
+              title: 'Readiness',
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _primarySoft,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Column(
+                  children: [
+                    _ChecklistTile(label: 'Identity document uploaded'),
+                    _ChecklistTile(label: 'Phone number verified'),
+                    _ChecklistTile(
+                        label: 'Ownership or agent authority document ready'),
+                    _ChecklistTile(
+                        label: 'Property address and availability confirmed'),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 8),
           ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          child: FilledButton(
+            onPressed: _submit,
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            child: Text(widget.property == null ? 'Continue' : 'Save changes'),
+          ),
         ),
       ),
     );
@@ -588,6 +699,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
             draft,
             propertyId: widget.property?.id,
           );
+      if (!mounted) return;
+      await _showSuccessDialog();
       if (mounted) Navigator.pop(context);
     } catch (exception) {
       if (mounted) {
@@ -595,5 +708,82 @@ class _PropertyEditorState extends State<PropertyEditor> {
             .showSnackBar(SnackBar(content: Text('$exception')));
       }
     }
+  }
+
+  Future<void> _showSuccessDialog() {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 28, 22, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 72,
+                  width: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.accent.withOpacity(0.16),
+                  ),
+                  child: Container(
+                    margin: const EdgeInsets.all(14),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppTheme.accent,
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Congratulations!',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.property == null
+                      ? 'Your property listed successfully.'
+                      : 'Your listing was updated successfully.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    child: const Text('Continue'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }

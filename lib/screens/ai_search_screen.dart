@@ -17,30 +17,24 @@ class AiSearchScreen extends StatefulWidget {
 }
 
 class _AiSearchScreenState extends State<AiSearchScreen> {
-  static const _bg = Color(0xff070706);
-  static const _panel = Color(0xff191a17);
-  static const _panelBorder = Color(0xff5a3422);
-  static const _orange = Color(0xffff6f1a);
-  static const _text = Color(0xfff5f2ec);
-  static const _muted = Color(0xff888883);
-  static const _disabled = Color(0xff343431);
-
-  static const _suggestions = [
-    _SearchSuggestion('Whole house in Denver for four guests'),
-    _SearchSuggestion('Under \$250 a night with free parking'),
-    _SearchSuggestion('Walkable to the light rail and a park'),
-    _SearchSuggestion('Pet-friendly with a fenced garden', enabled: false),
-    _SearchSuggestion('Free cancellation, self check-in', enabled: false),
-  ];
+  static const _bg = AppTheme.bg;
+  static const _panel = Colors.white;
+  static const _panelBorder = AppTheme.borderMid;
+  static const _accent = AppTheme.accent;
+  static const _text = AppTheme.textPrimary;
+  static const _muted = AppTheme.textMuted;
 
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
+  bool _hasText = false;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialQuery);
     _focusNode = FocusNode();
+    _hasText = widget.initialQuery.trim().isNotEmpty;
+    _controller.addListener(_handleTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
     });
@@ -48,55 +42,53 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
 
   @override
   void dispose() {
+    _controller.removeListener(_handleTextChanged);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
+  void _handleTextChanged() {
+    final hasText = _controller.text.trim().isNotEmpty;
+    if (hasText != _hasText) setState(() => _hasText = hasText);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
+      value: SystemUiOverlayStyle.dark.copyWith(
         statusBarColor: Colors.transparent,
         systemNavigationBarColor: _bg,
-        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
         backgroundColor: _bg,
         resizeToAvoidBottomInset: true,
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _SearchHeader(onBack: () => Navigator.pop(context)),
-                const SizedBox(height: 18),
-                _PromptBox(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  onSubmit: _submit,
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'TRY ASKING',
-                  style: TextStyle(
-                    color: _muted,
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0,
+        body: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.white, AppTheme.bg],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SearchHeader(onBack: () => Navigator.pop(context)),
+                  const SizedBox(height: 18),
+                  _PromptBox(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    hasText: _hasText,
+                    onClear: _controller.clear,
+                    onSubmit: _submit,
                   ),
-                ),
-                const SizedBox(height: 12),
-                for (final suggestion in _suggestions)
-                  _SuggestionTile(
-                    suggestion: suggestion,
-                    onTap: suggestion.enabled
-                        ? () => _submit(suggestion.label)
-                        : null,
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -129,8 +121,8 @@ class _SearchHeader extends StatelessWidget {
               tooltip: 'Back',
               onPressed: onBack,
               style: IconButton.styleFrom(
-                backgroundColor: const Color(0xff1b1c19),
-                foregroundColor: Colors.white,
+                backgroundColor: Colors.white,
+                foregroundColor: AppTheme.textPrimary,
                 fixedSize: const Size.square(36),
                 minimumSize: const Size.square(36),
               ),
@@ -156,27 +148,36 @@ class _PromptBox extends StatelessWidget {
   const _PromptBox({
     required this.controller,
     required this.focusNode,
+    required this.hasText,
+    required this.onClear,
     required this.onSubmit,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
+  final bool hasText;
+  final VoidCallback onClear;
   final ValueChanged<String?> onSubmit;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 108,
-      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      height: 132,
+      padding: const EdgeInsets.fromLTRB(14, 14, 12, 12),
       decoration: BoxDecoration(
         color: _AiSearchScreenState._panel,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: _AiSearchScreenState._panelBorder),
         boxShadow: [
           BoxShadow(
-            color: _AiSearchScreenState._orange.withOpacity(0.12),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+            color: _AiSearchScreenState._accent.withOpacity(0.12),
+            blurRadius: 28,
+            offset: const Offset(0, 14),
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -186,17 +187,17 @@ class _PromptBox extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                height: 19,
-                width: 19,
-                margin: const EdgeInsets.only(top: 2),
+                height: 22,
+                width: 22,
+                margin: const EdgeInsets.only(top: 1),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: _AiSearchScreenState._orange),
+                  border: Border.all(color: _AiSearchScreenState._accent),
                 ),
                 child: const Center(
                   child: Icon(
                     Icons.circle,
-                    color: _AiSearchScreenState._orange,
+                    color: _AiSearchScreenState._accent,
                     size: 6,
                   ),
                 ),
@@ -207,22 +208,22 @@ class _PromptBox extends StatelessWidget {
                   controller: controller,
                   focusNode: focusNode,
                   minLines: 1,
-                  maxLines: 2,
+                  maxLines: 3,
                   textInputAction: TextInputAction.search,
-                  cursorColor: _AiSearchScreenState._orange,
+                  cursorColor: _AiSearchScreenState._accent,
                   style: const TextStyle(
                     color: _AiSearchScreenState._text,
-                    fontSize: 12,
-                    height: 1.35,
+                    fontSize: 14,
+                    height: 1.4,
                   ),
                   decoration: const InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
-                    hintText: 'Describe the stay you are looking for...',
+                    hintText: '',
                     hintStyle: TextStyle(
                       color: _AiSearchScreenState._muted,
-                      fontSize: 12,
+                      fontSize: 14,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
@@ -238,24 +239,41 @@ class _PromptBox extends StatelessWidget {
                 tooltip: 'Voice search',
                 onPressed: () {},
                 style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xff2b2c29),
-                  foregroundColor: Colors.white,
-                  fixedSize: const Size.square(34),
-                  minimumSize: const Size.square(34),
-                ),
-                icon: const Icon(UniconsLine.microphone, size: 15),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Search',
-                onPressed: () => onSubmit(null),
-                style: IconButton.styleFrom(
-                  backgroundColor: _AiSearchScreenState._orange,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppTheme.bgSurface,
+                  foregroundColor: AppTheme.textPrimary,
                   fixedSize: const Size.square(38),
                   minimumSize: const Size.square(38),
                 ),
-                icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                icon: const Icon(UniconsLine.microphone, size: 17),
+              ),
+              const Spacer(),
+              if (hasText) ...[
+                IconButton(
+                  tooltip: 'Clear search',
+                  onPressed: onClear,
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppTheme.bgSurface,
+                    foregroundColor: AppTheme.textSecondary,
+                    fixedSize: const Size.square(38),
+                    minimumSize: const Size.square(38),
+                  ),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                ),
+                const SizedBox(width: 8),
+              ],
+              IconButton(
+                tooltip: 'Search',
+                onPressed: hasText ? () => onSubmit(null) : null,
+                style: IconButton.styleFrom(
+                  backgroundColor:
+                      hasText ? _AiSearchScreenState._accent : AppTheme.border,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppTheme.border,
+                  disabledForegroundColor: AppTheme.textMuted,
+                  fixedSize: const Size.square(42),
+                  minimumSize: const Size.square(42),
+                ),
+                icon: const Icon(Icons.arrow_forward_rounded, size: 21),
               ),
             ],
           ),
@@ -263,60 +281,4 @@ class _PromptBox extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SuggestionTile extends StatelessWidget {
-  const _SuggestionTile({
-    required this.suggestion,
-    required this.onTap,
-  });
-
-  final _SearchSuggestion suggestion;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = suggestion.enabled
-        ? _AiSearchScreenState._text
-        : _AiSearchScreenState._disabled;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          children: [
-            Icon(
-              Icons.search,
-              size: 13,
-              color: suggestion.enabled
-                  ? _AiSearchScreenState._muted
-                  : _AiSearchScreenState._disabled,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                suggestion.label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight:
-                      suggestion.enabled ? FontWeight.w500 : FontWeight.w400,
-                  letterSpacing: 0,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchSuggestion {
-  const _SearchSuggestion(this.label, {this.enabled = true});
-
-  final String label;
-  final bool enabled;
 }
