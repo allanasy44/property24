@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
 import '../state/property24_state.dart';
@@ -33,22 +34,22 @@ class ActivityScreen extends StatelessWidget {
               childAspectRatio: 1.35,
               children: [
                 MetricTile(
-                  icon: Icons.verified_outlined,
+                  icon: CupertinoIcons.checkmark_seal,
                   label: 'Verified listings',
                   value: '${state.verifiedProperties}',
                 ),
                 MetricTile(
-                  icon: Icons.home_work_outlined,
+                  icon: CupertinoIcons.house,
                   label: 'All listings',
                   value: '${state.snapshot.properties.length}',
                 ),
                 MetricTile(
-                  icon: Icons.assignment_outlined,
+                  icon: CupertinoIcons.doc_text,
                   label: 'Applications',
                   value: '${state.snapshot.applications.length}',
                 ),
                 MetricTile(
-                  icon: Icons.build_outlined,
+                  icon: CupertinoIcons.wrench,
                   label: 'Open maintenance',
                   value: '${state.openMaintenance}',
                 ),
@@ -62,7 +63,7 @@ class ActivityScreen extends StatelessWidget {
               children: [
                 for (final item in state.snapshot.applications)
                   ListTile(
-                    leading: const Icon(Icons.assignment_turned_in_outlined),
+                    leading: const Icon(CupertinoIcons.checkmark_square),
                     title: Text(item.property),
                     subtitle: Text(
                         '${item.applicant} · score ${item.score} · ${item.createdAt}'),
@@ -76,7 +77,7 @@ class ActivityScreen extends StatelessWidget {
               children: [
                 for (final item in state.snapshot.payments)
                   ListTile(
-                    leading: const Icon(Icons.payments_outlined),
+                    leading: const Icon(CupertinoIcons.money_dollar),
                     title: Text(item.amount),
                     subtitle: Text(
                         '${item.property} · ${item.method} · ${item.paidAt}'),
@@ -90,7 +91,7 @@ class ActivityScreen extends StatelessWidget {
               children: [
                 for (final item in state.snapshot.leases)
                   ListTile(
-                    leading: const Icon(Icons.description_outlined),
+                    leading: const Icon(CupertinoIcons.doc),
                     title: Text(item.property),
                     subtitle: Text('${item.tenant} · ${item.monthlyRent}'),
                     trailing: Text(item.status),
@@ -103,7 +104,7 @@ class ActivityScreen extends StatelessWidget {
               children: [
                 for (final item in state.snapshot.maintenance)
                   ListTile(
-                    leading: const Icon(Icons.handyman_outlined),
+                    leading: const Icon(CupertinoIcons.wrench),
                     title: Text(item.issue),
                     subtitle: Text(
                         '${item.property} · ${item.category} · ${item.updatedAt}'),
@@ -118,7 +119,7 @@ class ActivityScreen extends StatelessWidget {
                 children: [
                   for (final item in state.snapshot.verifications)
                     ListTile(
-                      leading: const Icon(Icons.fact_check_outlined),
+                      leading: const Icon(CupertinoIcons.checkmark_seal),
                       title: Text(item.name),
                       subtitle:
                           Text('${item.role} · ${item.checks.join(', ')}'),

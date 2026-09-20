@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
-import 'package:unicons/unicons.dart';
 
 import '../models/rental_models.dart';
 import '../state/property24_state.dart';
@@ -68,7 +68,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                             shape: BoxShape.circle,
                             color: _primarySoft,
                           ),
-                          child: const Icon(UniconsLine.user,
+                          child: const Icon(CupertinoIcons.person,
                               color: _primary, size: 22),
                         ),
                         const SizedBox(width: 12),
@@ -112,7 +112,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.search,
+                                  const Icon(CupertinoIcons.search,
                                       color: _textMuted, size: 20),
                                   const SizedBox(width: 10),
                                   Expanded(
@@ -135,7 +135,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                       onPressed: () =>
                                           setState(() => _query = ''),
                                       icon: const Icon(
-                                        Icons.close_rounded,
+                                        CupertinoIcons.xmark,
                                         color: _textMuted,
                                         size: 18,
                                       ),
@@ -156,8 +156,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               color: _primary,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.tune,
-                                color: Colors.white, size: 22),
+                            child: const Icon(
+                                CupertinoIcons.slider_horizontal_3,
+                                color: Colors.white,
+                                size: 22),
                           ),
                         ),
                       ],
@@ -210,7 +212,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             if (properties.isEmpty)
               const SliverFillRemaining(
                 child: EmptyState(
-                  icon: Icons.search_off,
+                  icon: CupertinoIcons.search,
                   title: 'No matching listings',
                   body: 'Try another suburb, city, or property type.',
                 ),
@@ -376,7 +378,7 @@ class _NotificationButton extends StatelessWidget {
                   for (final item in state.notifications)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(UniconsLine.bell),
+                      leading: const Icon(CupertinoIcons.bell),
                       title: Text(item),
                     ),
                 ],
@@ -389,7 +391,7 @@ class _NotificationButton extends StatelessWidget {
             '${state.notifications.length}',
             style: const TextStyle(fontSize: 10),
           ),
-          child: const Icon(UniconsLine.bell,
+          child: const Icon(CupertinoIcons.bell,
               color: AppTheme.textPrimary, size: 20),
         ),
       ),
@@ -439,7 +441,7 @@ class _MapExplorer extends StatelessWidget {
                 bottom: 0,
                 child: FilledButton.icon(
                   onPressed: () {},
-                  icon: const Icon(Icons.directions_outlined),
+                  icon: const Icon(CupertinoIcons.location_north),
                   label: const Text('Open directions handoff'),
                 ),
               ),
@@ -451,7 +453,7 @@ class _MapExplorer extends StatelessWidget {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading:
-                const Icon(Icons.location_on_outlined, color: AppTheme.accent),
+                const Icon(CupertinoIcons.location, color: AppTheme.accent),
             title: Text(property.title,
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text(property.heroLocation),
@@ -633,7 +635,8 @@ class _TrustLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.check_circle_outline, color: AppTheme.accent),
+      leading:
+          const Icon(CupertinoIcons.checkmark_circle, color: AppTheme.accent),
       title: Text(label,
           style: const TextStyle(
             fontWeight: FontWeight.w600,

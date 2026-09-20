@@ -268,6 +268,7 @@ class Property(models.Model):
     suburb = models.CharField(max_length=100, db_index=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    show_exact_location = models.BooleanField(default=False)
     monthly_rent = models.DecimalField(max_digits=12, decimal_places=2)
     deposit_required = models.DecimalField(max_digits=12, decimal_places=2)
     property_type = models.CharField(max_length=32, choices=PropertyType.choices)
@@ -293,6 +294,23 @@ class Property(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class PropertyHold(models.Model):
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="holds")
+    tenant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="property_holds")
+    started_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    released_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["property", "expires_at"], name="property_hold_active_idx"),
+            models.Index(fields=["tenant", "expires_at"], name="property_hold_tenant_idx"),
+        ]
+
+    def is_active(self):
+        return self.released_at is None and timezone.now() < self.expires_at
 
 
 class PropertyPhoto(models.Model):

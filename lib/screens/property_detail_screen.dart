@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:unicons/unicons.dart';
 
 import '../models/rental_models.dart';
+import '../routes/app_routes.dart';
+import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/osm_map_preview.dart';
 import 'supplier_profile_screen.dart';
 
 class PropertyDetailScreen extends StatefulWidget {
@@ -60,6 +64,14 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       _MetaLine(property: property),
                       const SizedBox(height: 14),
                       _GuestChips(property: property),
+                      const SizedBox(height: 18),
+                      OsmMapPreview(
+                        label: property.heroLocation,
+                        latitude: property.mapLatitude,
+                        longitude: property.mapLongitude,
+                        approximate: !property.showExactLocation,
+                        zoom: property.showExactLocation ? 15 : 12,
+                      ),
                       const SizedBox(height: 18),
                       const _DetailTabs(),
                       const SizedBox(height: 14),
@@ -158,7 +170,7 @@ class _HeroGallery extends StatelessWidget {
                 return Container(
                   color: AppTheme.bgSurface,
                   child: const Icon(
-                    Icons.home_work_outlined,
+                    CupertinoIcons.house,
                     color: AppTheme.textMuted,
                     size: 56,
                   ),
@@ -170,7 +182,7 @@ class _HeroGallery extends StatelessWidget {
                 errorBuilder: (_, __, ___) => Container(
                   color: AppTheme.bgSurface,
                   child: const Icon(
-                    Icons.home_work_outlined,
+                    CupertinoIcons.house,
                     color: AppTheme.textMuted,
                     size: 56,
                   ),
@@ -182,7 +194,7 @@ class _HeroGallery extends StatelessWidget {
             top: MediaQuery.paddingOf(context).top + 10,
             left: 18,
             child: _CircleAction(
-              icon: Icons.chevron_left_rounded,
+              icon: CupertinoIcons.chevron_left,
               tooltip: 'Back',
               onPressed: onBack,
             ),
@@ -193,13 +205,14 @@ class _HeroGallery extends StatelessWidget {
             child: Row(
               children: [
                 _CircleAction(
-                  icon: Icons.ios_share_rounded,
+                  icon: CupertinoIcons.share,
                   tooltip: 'Share',
                   onPressed: () {},
                 ),
                 const SizedBox(width: 10),
                 _CircleAction(
-                  icon: saved ? Icons.favorite : Icons.favorite_border,
+                  icon:
+                      saved ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
                   tooltip: saved ? 'Remove saved home' : 'Save home',
                   onPressed: onSave,
                 ),
@@ -308,10 +321,10 @@ class _PriceHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        const _HeaderIcon(icon: UniconsLine.clock),
-        const _HeaderIcon(icon: UniconsLine.bookmark),
-        const _HeaderIcon(icon: UniconsLine.map_marker),
-        const _HeaderIcon(icon: UniconsLine.heart),
+        const _HeaderIcon(icon: CupertinoIcons.clock),
+        const _HeaderIcon(icon: CupertinoIcons.bookmark),
+        const _HeaderIcon(icon: CupertinoIcons.location),
+        const _HeaderIcon(icon: CupertinoIcons.heart),
       ],
     );
   }
@@ -353,7 +366,7 @@ class _MetaLine extends StatelessWidget {
         Row(
           children: [
             const Icon(
-              Icons.visibility_outlined,
+              CupertinoIcons.eye,
               size: 13,
               color: AppTheme.textMuted,
             ),
@@ -383,10 +396,11 @@ class _GuestChips extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        _Pill(icon: Icons.group_outlined, label: property.propertyType),
+        _Pill(icon: CupertinoIcons.person_2, label: property.propertyType),
+        _Pill(icon: CupertinoIcons.drop, label: '${property.bathrooms} baths'),
         _Pill(
-            icon: Icons.bathtub_outlined, label: '${property.bathrooms} baths'),
-        _Pill(icon: Icons.bed_outlined, label: '${property.bedrooms} beds'),
+            icon: CupertinoIcons.bed_double,
+            label: '${property.bedrooms} beds'),
       ],
     );
   }
@@ -450,7 +464,8 @@ class _AmenityChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.check, size: 13, color: AppTheme.accent),
+          const Icon(CupertinoIcons.check_mark,
+              size: 13, color: AppTheme.accent),
           const SizedBox(width: 6),
           Text(
             label,
@@ -587,7 +602,7 @@ class _HostCard extends StatelessWidget {
             ),
             if (supplier?.verified == true)
               const Icon(
-                Icons.verified_rounded,
+                CupertinoIcons.checkmark_seal_fill,
                 color: AppTheme.accent,
                 size: 18,
               ),
@@ -627,8 +642,7 @@ class _BottomActions extends StatelessWidget {
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: () =>
-                  context.read<Property24State>().startConversation(property),
+              onPressed: () => _holdAndOpenChat(context),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
@@ -641,8 +655,7 @@ class _BottomActions extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: FilledButton(
-              onPressed: () =>
-                  context.read<Property24State>().requestViewing(property),
+              onPressed: () => _holdAndOpenChat(context),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
@@ -655,5 +668,18 @@ class _BottomActions extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _holdAndOpenChat(BuildContext context) async {
+    try {
+      await context.read<Property24State>().holdProperty(property);
+      if (context.mounted) context.go(AppRoutes.chatScreen);
+    } catch (exception) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
   }
 }

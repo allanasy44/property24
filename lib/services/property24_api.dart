@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/config.dart';
@@ -13,6 +14,25 @@ class ApiException implements Exception {
 
   @override
   String toString() => message;
+}
+
+String userFacingError(Object error) {
+  if (error is ApiException) {
+    return switch (error.statusCode) {
+      400 => 'Please check the information and try again.',
+      401 => 'Your email or password could not be verified.',
+      403 => 'This action is not available for this account.',
+      404 => 'The requested information could not be found.',
+      409 => 'These account details are already in use.',
+      429 => 'Too many attempts. Please try again later.',
+      500 ||
+      502 ||
+      503 =>
+        'The service is temporarily unavailable. Please try again later.',
+      _ => 'Something went wrong. Please try again.',
+    };
+  }
+  return 'Something went wrong. Please try again.';
 }
 
 class AuthSession {
@@ -33,6 +53,9 @@ class PropertyDraft {
     required this.address,
     required this.city,
     required this.suburb,
+    this.latitude,
+    this.longitude,
+    this.showExactLocation = false,
     required this.monthlyRent,
     required this.depositRequired,
     required this.propertyType,
@@ -52,6 +75,9 @@ class PropertyDraft {
   final String address;
   final String city;
   final String suburb;
+  final String? latitude;
+  final String? longitude;
+  final bool showExactLocation;
   final String monthlyRent;
   final String depositRequired;
   final String propertyType;
@@ -72,6 +98,11 @@ class PropertyDraft {
       'address': address,
       'city': city,
       'suburb': suburb,
+      if (latitude != null && latitude!.trim().isNotEmpty)
+        'latitude': latitude!.trim(),
+      if (longitude != null && longitude!.trim().isNotEmpty)
+        'longitude': longitude!.trim(),
+      'show_exact_location': showExactLocation,
       'monthly_rent': monthlyRent.replaceAll(RegExp(r'[^0-9.]'), ''),
       'deposit_required': depositRequired.replaceAll(RegExp(r'[^0-9.]'), ''),
       'property_type': propertyType.toLowerCase().replaceAll(' ', '_'),
@@ -94,24 +125,42 @@ class Property24Api {
 
   final http.Client _client;
 
+  Future<String> googleSignIn() async {
+    final account = await GoogleSignIn().signIn();
+    if (account == null) {
+      throw const ApiException('Google sign-in was cancelled');
+    }
+    final authentication = await account.authentication;
+    final idToken = authentication.idToken;
+    if (idToken == null || idToken.isEmpty) {
+      throw const ApiException('Google did not return an ID token');
+    }
+    return idToken;
+  }
+
   Future<AuthSession> login({
     required String username,
     required String password,
+    AccountRole? role,
   }) async {
     final body = await _post(
       'auth/login/',
-      body: {'username': username, 'password': password},
+      body: {
+        'username': username,
+        'password': password,
+        if (role != null) 'account_type': role.apiValue,
+      },
     );
     return _authSessionFromBody(body);
   }
 
-  Future<AuthSession> register({
+  Future<Map<String, dynamic>> register({
     required AccountRole role,
     required String name,
     required String email,
     required String password,
   }) async {
-    await _post(
+    return _post(
       'auth/register/',
       body: {
         'account_type': role.apiValue,
@@ -121,7 +170,99 @@ class Property24Api {
         'password': password,
       },
     );
-    return login(username: email, password: password);
+  }
+
+  Future<void> verifyRegistrationEmail({
+    required String challengeId,
+    required String code,
+  }) async {
+    await _post(
+      'auth/register/verify/',
+      body: {'challenge_id': challengeId, 'code': code},
+    );
+  }
+
+  Future<String> resendRegistrationEmail(String challengeId) async {
+    final body = await _post(
+      'auth/register/resend/',
+      body: {'challenge_id': challengeId},
+    );
+    return '${body['challenge_id']}';
+  }
+
+  Future<AuthSession> loginWithGoogle({
+    required String idToken,
+    required AccountRole role,
+  }) async {
+    final body = await _post(
+      'auth/google/',
+      body: {
+        'id_token': idToken,
+        'account_type': role.apiValue,
+      },
+    );
+    return _authSessionFromBody(body);
+  }
+
+  Future<AuthSession> updateProfile({
+    required String token,
+    String? username,
+    String? name,
+    String? bio,
+    String? profilePictureUrl,
+    String? phone,
+  }) async {
+    final body = await _patch(
+      'auth/profile/',
+      token: token,
+      body: {
+        if (username != null) 'username': username,
+        if (name != null) 'name': name,
+        if (bio != null) 'bio': bio,
+        if (profilePictureUrl != null) 'profile_picture_url': profilePictureUrl,
+        if (phone != null) 'phone': phone,
+      },
+    );
+    return AuthSession(
+      token: token,
+      user: AccountUser.fromJson(
+        body['user'] as Map<String, dynamic>,
+        body['account'] as Map<String, dynamic>?,
+      ),
+      account: AccountContext.fromJson(body['account'] as Map<String, dynamic>),
+    );
+  }
+
+  Future<String> requestPhoneVerification({
+    required String token,
+    required String phone,
+  }) async {
+    final body = await _post(
+      'verifications/phone-otp/',
+      token: token,
+      body: {'phone': phone},
+    );
+    return '${body['challenge_id']}';
+  }
+
+  Future<AuthSession> verifyPhone({
+    required String token,
+    required String challengeId,
+    required String code,
+  }) async {
+    final body = await _post(
+      'verifications/phone-otp/verify/',
+      token: token,
+      body: {'challenge_id': challengeId, 'code': code},
+    );
+    return AuthSession(
+      token: token,
+      user: AccountUser.fromJson(
+        body['user'] as Map<String, dynamic>,
+        body['account'] as Map<String, dynamic>?,
+      ),
+      account: AccountContext.fromJson(body['account'] as Map<String, dynamic>),
+    );
   }
 
   Future<AuthSession> me(String token) async {
@@ -239,6 +380,16 @@ class Property24Api {
       body: {'property_id': propertyId},
     );
     return ConversationItem.fromJson(body);
+  }
+
+  Future<ConversationItem> holdProperty(String token, String propertyId) async {
+    final body = await _post(
+      'properties/$propertyId/hold/',
+      token: token,
+      body: const {},
+    );
+    return ConversationItem.fromJson(
+        body['conversation'] as Map<String, dynamic>);
   }
 
   Future<void> sendMessage(

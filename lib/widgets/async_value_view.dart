@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
 import '../state/property24_state.dart';
@@ -19,7 +20,7 @@ class LoadingOverlay extends StatelessWidget {
           Positioned.fill(
             child: ColoredBox(
               color: Colors.black.withOpacity(0.08),
-              child: const Center(child: CircularProgressIndicator()),
+              child: const Center(child: CupertinoActivityIndicator()),
             ),
           ),
       ],

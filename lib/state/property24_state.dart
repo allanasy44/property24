@@ -25,20 +25,7 @@ class Property24State extends ChangeNotifier {
   final Set<String> comparisonPropertyIds = <String>{};
   final List<String> smartAlerts = <String>[];
   final List<String> notifications = <String>[];
-  final List<ChatMessageDraft> localChatMessages = <ChatMessageDraft>[
-    const ChatMessageDraft(
-      id: 'm1',
-      body: 'Hi, is the house still available?',
-      mine: true,
-      attachmentType: AttachmentType.none,
-    ),
-    const ChatMessageDraft(
-      id: 'm2',
-      body: 'Yes, it is available. I can send a walkthrough video.',
-      mine: false,
-      attachmentType: AttachmentType.video,
-    ),
-  ];
+  final List<ChatMessageDraft> localChatMessages = <ChatMessageDraft>[];
   final List<CallLogItem> callHistory = <CallLogItem>[
     const CallLogItem(
       name: 'Tariro Moyo',
@@ -95,7 +82,7 @@ class Property24State extends ChangeNotifier {
     } catch (exception) {
       await _clearToken();
       snapshot = await _api.snapshot();
-      error = '$exception';
+      error = userFacingError(exception);
     } finally {
       loading = false;
       notifyListeners();
@@ -108,31 +95,112 @@ class Property24State extends ChangeNotifier {
     try {
       snapshot = await _api.snapshot(token: _token);
     } catch (exception) {
-      error = '$exception';
+      error = userFacingError(exception);
     } finally {
       notifyListeners();
     }
   }
 
-  Future<void> signIn(String username, String password) async {
+  Future<void> signIn(
+    String username,
+    String password, {
+    AccountRole? role,
+  }) async {
     await _authenticate(
-        () => _api.login(username: username, password: password));
+      () => _api.login(username: username, password: password, role: role),
+    );
   }
 
-  Future<void> register({
+  Future<void> signInWithGoogle(AccountRole role) async {
+    await _authenticate(() async {
+      final google = await _api.googleSignIn();
+      return _api.loginWithGoogle(idToken: google, role: role);
+    });
+  }
+
+  Future<String> register({
     required AccountRole role,
     required String name,
     required String email,
     required String password,
   }) async {
-    await _authenticate(
-      () => _api.register(
+    loading = true;
+    error = null;
+    notifyListeners();
+    try {
+      final response = await _api.register(
         role: role,
         name: name,
         email: email,
         password: password,
-      ),
+      );
+      return '${response['challenge_id']}';
+    } catch (exception) {
+      error = userFacingError(exception);
+      rethrow;
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> verifyRegistrationEmail(String challengeId, String code) async {
+    await _api.verifyRegistrationEmail(
+      challengeId: challengeId,
+      code: code,
     );
+  }
+
+  Future<String> resendRegistrationEmail(String challengeId) {
+    return _api.resendRegistrationEmail(challengeId);
+  }
+
+  Future<void> updateProfile({
+    String? username,
+    required String name,
+    required String bio,
+    String? profilePictureUrl,
+    String? phone,
+  }) async {
+    final activeToken = _requireToken();
+    final session = await _api.updateProfile(
+      token: activeToken,
+      username: username,
+      name: name,
+      bio: bio,
+      profilePictureUrl: profilePictureUrl,
+      phone: phone,
+    );
+    user = session.user;
+    account = session.account;
+    publicUsername = session.user.name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    profileImageUrl = session.user.profilePicture;
+    usernameVerified = session.user.verified;
+    notifyListeners();
+  }
+
+  Future<String> requestPhoneVerification() async {
+    final activeToken = _requireToken();
+    return _api.requestPhoneVerification(
+      token: activeToken,
+      phone: user?.phone ?? '',
+    );
+  }
+
+  Future<void> verifyPhone(String challengeId, String code) async {
+    final activeToken = _requireToken();
+    final session = await _api.verifyPhone(
+      token: activeToken,
+      challengeId: challengeId,
+      code: code,
+    );
+    user = session.user;
+    account = session.account;
+    notifyListeners();
   }
 
   Future<void> _authenticate(Future<AuthSession> Function() request) async {
@@ -148,7 +216,7 @@ class Property24State extends ChangeNotifier {
       await preferences.setString(_tokenKey, session.token);
       snapshot = await _api.snapshot(token: session.token);
     } catch (exception) {
-      error = '$exception';
+      error = userFacingError(exception);
       rethrow;
     } finally {
       loading = false;
@@ -177,7 +245,7 @@ class Property24State extends ChangeNotifier {
       }
       snapshot = await _api.snapshot(token: activeToken);
     } catch (exception) {
-      error = '$exception';
+      error = userFacingError(exception);
       rethrow;
     } finally {
       loading = false;
@@ -204,10 +272,12 @@ class Property24State extends ChangeNotifier {
     await refresh();
   }
 
-  Future<void> startConversation(PropertyListing property) async {
+  Future<ConversationItem> holdProperty(PropertyListing property) async {
     final activeToken = _requireToken();
-    await _api.startConversation(activeToken, property.id);
-    await refresh();
+    final conversation = await _api.holdProperty(activeToken, property.id);
+    snapshot = await _api.snapshot(token: activeToken);
+    notifyListeners();
+    return conversation;
   }
 
   Future<void> sendMessage(String conversationId, String body) async {
@@ -275,6 +345,28 @@ class Property24State extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addLocalLocationMessage({
+    required PropertyListing property,
+    bool liveLocation = true,
+  }) {
+    if (!property.hasCoordinates) return;
+    localChatMessages.add(
+      ChatMessageDraft(
+        id: 'location-${DateTime.now().microsecondsSinceEpoch}',
+        body: liveLocation ? 'Live location' : property.heroLocation,
+        mine: true,
+        attachmentType: AttachmentType.location,
+        latitude: property.latitude,
+        longitude: property.longitude,
+        locationLabel: property.address.isNotEmpty
+            ? property.address
+            : property.heroLocation,
+        liveLocation: liveLocation,
+      ),
+    );
+    notifyListeners();
+  }
+
   void updateLocalChatMessage(String id, String body) {
     final index = localChatMessages.indexWhere((message) => message.id == id);
     if (index == -1) return;
@@ -337,7 +429,7 @@ class CallLogItem {
   final String when;
 }
 
-enum AttachmentType { none, image, video, audio }
+enum AttachmentType { none, image, video, audio, location }
 
 class ChatMessageDraft {
   const ChatMessageDraft({
@@ -345,12 +437,20 @@ class ChatMessageDraft {
     required this.body,
     required this.mine,
     required this.attachmentType,
+    this.latitude,
+    this.longitude,
+    this.locationLabel = '',
+    this.liveLocation = false,
   });
 
   final String id;
   final String body;
   final bool mine;
   final AttachmentType attachmentType;
+  final num? latitude;
+  final num? longitude;
+  final String locationLabel;
+  final bool liveLocation;
 
   ChatMessageDraft copyWith({String? body}) {
     return ChatMessageDraft(
@@ -358,6 +458,10 @@ class ChatMessageDraft {
       body: body ?? this.body,
       mine: mine,
       attachmentType: attachmentType,
+      latitude: latitude,
+      longitude: longitude,
+      locationLabel: locationLabel,
+      liveLocation: liveLocation,
     );
   }
 }

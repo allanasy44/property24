@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:unicons/unicons.dart';
 
 import '../theme/app_theme.dart';
 
@@ -49,19 +49,19 @@ class _BottomNav extends StatelessWidget {
     // Home • Saved • Messages • Profile
     const items = [
       _NavItem(
-        icon: UniconsLine.estate,
+        icon: CupertinoIcons.house,
         label: 'Home',
       ),
       _NavItem(
-        icon: UniconsLine.heart,
+        icon: CupertinoIcons.heart,
         label: 'Saved',
       ),
       _NavItem(
-        icon: UniconsLine.comment_alt_message,
+        icon: CupertinoIcons.chat_bubble,
         label: 'Messages',
       ),
       _NavItem(
-        icon: UniconsLine.user_circle,
+        icon: CupertinoIcons.person_circle,
         label: 'Profile',
       ),
     ];

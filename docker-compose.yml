@@ -60,10 +60,10 @@ services:
       context: ./backend
     restart: unless-stopped
     env_file:
-      - path: ./backend/.env.example
-        required: true
       - path: ./backend/.env
         required: false
+      - path: ./backend/.env.example
+        required: true
     depends_on:
       db:
         condition: service_healthy

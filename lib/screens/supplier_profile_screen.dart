@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
@@ -57,7 +58,7 @@ class SupplierProfileScreen extends StatelessWidget {
                         if (supplier.verified) ...[
                           const SizedBox(width: 8),
                           const Icon(
-                            Icons.check_rounded,
+                            CupertinoIcons.check_mark,
                             color: AppTheme.accent,
                             size: 20,
                           ),
@@ -68,7 +69,7 @@ class SupplierProfileScreen extends StatelessWidget {
                   IconButton(
                     tooltip: 'More',
                     onPressed: () {},
-                    icon: const Icon(Icons.more_horiz_rounded),
+                    icon: const Icon(CupertinoIcons.ellipsis),
                   ),
                 ],
               ),
@@ -199,20 +200,20 @@ class SupplierProfileScreen extends StatelessWidget {
                     children: [
                       Expanded(
                         child: _ProfileTab(
-                          icon: Icons.view_list_rounded,
+                          icon: CupertinoIcons.list_bullet,
                           label: 'POSTS',
                           selected: true,
                         ),
                       ),
                       Expanded(
                         child: _ProfileTab(
-                          icon: Icons.attach_money_rounded,
+                          icon: CupertinoIcons.money_dollar,
                           label: 'SALE',
                         ),
                       ),
                       Expanded(
                         child: _ProfileTab(
-                          icon: Icons.search_rounded,
+                          icon: CupertinoIcons.search,
                           label: 'RENT',
                         ),
                       ),
@@ -241,7 +242,7 @@ class SupplierProfileScreen extends StatelessWidget {
                             ? Container(
                                 color: AppTheme.bgSurface,
                                 child: const Icon(
-                                  Icons.home_work_outlined,
+                                  CupertinoIcons.house,
                                   color: AppTheme.textMuted,
                                 ),
                               )
@@ -251,7 +252,7 @@ class SupplierProfileScreen extends StatelessWidget {
                                 errorBuilder: (_, __, ___) => Container(
                                   color: AppTheme.bgSurface,
                                   child: const Icon(
-                                    Icons.home_work_outlined,
+                                    CupertinoIcons.house,
                                     color: AppTheme.textMuted,
                                   ),
                                 ),

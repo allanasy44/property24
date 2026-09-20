@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import re
+import smtplib
 import uuid
 from base64 import b64encode
 from datetime import timedelta
@@ -18,8 +19,9 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.files.images import get_image_dimensions
 from django.core.mail import send_mail
+from django.core.validators import URLValidator
 from django.core.validators import validate_email as validate_email_value
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db import connection
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import Coalesce
@@ -44,6 +46,7 @@ from .models import (
     Message,
     Payment,
     PendingRegistrationOTP,
+    PropertyHold,
     PhoneVerificationOTP,
     Property,
     PropertyComment,
@@ -110,7 +113,7 @@ EMAIL_MAX_LENGTH = 254
 NAME_MAX_LENGTH = 160
 PHONE_MAX_LENGTH = 16
 CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
-PHONE_RE = re.compile(r"^\+?\d{7,15}$")
+ZIMBABWE_PHONE_RE = re.compile(r"^\+263(?:7[178]\d{7}|2[09]\d{7})$")
 ACCEPTED_ID_DOCUMENT_TYPES = {"identity_document"}
 IDENTITY_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 IDENTITY_IMAGE_MIN_WIDTH = 500
@@ -169,9 +172,9 @@ ROLE_VISIBLE_SECTIONS = {
 }
 
 ROLE_ONBOARDING_REQUIREMENTS = {
-    User.Roles.TENANT: ["email_verification"],
-    User.Roles.LANDLORD: ["email_verification"],
-    User.Roles.AGENT: ["email_verification"],
+    User.Roles.TENANT: ["email_verification", "phone_verification"],
+    User.Roles.LANDLORD: ["email_verification", "phone_verification"],
+    User.Roles.AGENT: ["email_verification", "phone_verification"],
     User.Roles.ADMIN: [],
 }
 
@@ -355,6 +358,14 @@ def auth_login(request):
     if user is None or not user.is_active:
         return json_error("Invalid credentials", status=401)
 
+    requested_role = data.get("account_type") or data.get("role")
+    if requested_role:
+        requested_role = normalise_choice(requested_role, User.Roles, requested_role)
+        if requested_role not in PUBLIC_ACCOUNT_ROLES:
+            return json_error("Only tenant or landlord accounts can sign in here", status=400)
+        if user.role != requested_role:
+            return json_error("These credentials do not belong to a matching account type", status=403)
+
     return JsonResponse({"user": serialize_user(user), "tokens": issue_token_pair(user)})
 
 
@@ -390,12 +401,42 @@ def auth_profile(request):
         return json_error("Invalid request body")
 
     changed_fields = []
+    username = data.get("username")
+    if username is not None:
+        username = str(username).strip()
+        username_error = validate_text_field(username, "Username", USERNAME_MAX_LENGTH, required=True)
+        if username_error:
+            return json_error(username_error)
+        if User.objects.exclude(pk=user.pk).filter(username__iexact=username).exists():
+            return json_error("An account with this username already exists")
+        if user.username != username:
+            user.username = username
+            changed_fields.append("username")
+
+    profile_picture_url = data.get("profile_picture_url") or data.get("profile_picture")
+    if profile_picture_url is not None:
+        profile_picture_url = str(profile_picture_url).strip()
+        if profile_picture_url:
+            try:
+                URLValidator(schemes=["http", "https"])(profile_picture_url)
+            except ValidationError:
+                return json_error("Profile image must be a valid HTTP or HTTPS URL")
     text_updates = {
         "full_name": data.get("name") or data.get("full_name"),
         "bio": data.get("bio"),
-        "profile_picture_url": data.get("profile_picture_url") or data.get("profile_picture"),
+        "profile_picture_url": profile_picture_url,
         "cover_photo_url": data.get("cover_photo_url") or data.get("cover_photo"),
     }
+    phone = normalize_phone(data.get("phone")) if data.get("phone") is not None else None
+    if phone is not None:
+        phone_error = validate_phone_field(phone, required=True)
+        if phone_error:
+            return json_error(phone_error)
+        if User.objects.exclude(pk=user.pk).filter(phone_identity_query(phone)).exists():
+            return json_error("An account with this phone number already exists")
+        if user.phone != phone:
+            user.phone = phone
+            changed_fields.append("phone")
     for field, value in text_updates.items():
         if value is not None and getattr(user, field) != value:
             setattr(user, field, value)
@@ -453,11 +494,20 @@ def auth_register(request):
     if data is None:
         return json_error("Invalid JSON body")
 
-    user, error = create_public_account(data)
+    challenge, _, error = create_registration_otp_challenge(data)
     if error:
         return json_error(error)
 
-    return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user), "requires_sign_in": True}, status=201)
+    return JsonResponse(
+        {
+            "challenge_id": str(challenge.id),
+            "email": mask_email(challenge.email),
+            "otp_required": True,
+            "expires_in_minutes": settings.REGISTRATION_OTP_TTL_MINUTES,
+            "requires_sign_in": True,
+        },
+        status=201,
+    )
 
 
 @csrf_exempt
@@ -496,6 +546,43 @@ def auth_register_verify(request):
     challenge.consumed_at = timezone.now()
     challenge.save(update_fields=["status", "consumed_at", "updated_at"])
     return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user), "tokens": issue_token_pair(user)}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def auth_register_resend(request):
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
+    challenge_id = data.get("challenge_id")
+    challenge = PendingRegistrationOTP.objects.filter(
+        pk=challenge_id,
+        status=PendingRegistrationOTP.Status.PENDING,
+    ).first()
+    if challenge is None:
+        return json_error("Registration challenge was not found or has expired", status=404)
+    if (timezone.now() - challenge.updated_at).total_seconds() < 60:
+        return json_error("Please wait before requesting another code", status=429)
+
+    PendingRegistrationOTP.objects.filter(
+        email=challenge.email,
+        status=PendingRegistrationOTP.Status.PENDING,
+    ).exclude(pk=challenge.pk).update(status=PendingRegistrationOTP.Status.EXPIRED)
+    otp_code = get_random_string(6, allowed_chars="0123456789")
+    challenge.code_hash = hash_otp(otp_code)
+    challenge.attempts = 0
+    challenge.expires_at = timezone.now() + timedelta(minutes=settings.REGISTRATION_OTP_TTL_MINUTES)
+    challenge.save(update_fields=["code_hash", "attempts", "expires_at", "updated_at"])
+    try:
+        send_registration_otp(challenge.email, otp_code)
+    except ValueError as exc:
+        return json_error(str(exc), status=503)
+    return JsonResponse({
+        "challenge_id": str(challenge.id),
+        "email": mask_email(challenge.email),
+        "otp_required": True,
+        "expires_in_minutes": settings.REGISTRATION_OTP_TTL_MINUTES,
+    }, status=201)
 
 
 @csrf_exempt
@@ -675,6 +762,7 @@ def properties_collection(request):
         suburb=data.get("suburb", ""),
         latitude=latitude,
         longitude=longitude,
+        show_exact_location=to_bool(data.get("show_exact_location")),
         monthly_rent=parse_decimal(data.get("monthly_rent") or data.get("price"), "monthly_rent"),
         deposit_required=parse_decimal(data.get("deposit_required") or data.get("deposit"), "deposit_required"),
         property_type=normalise_choice(data.get("property_type") or data.get("type"), Property.PropertyType, Property.PropertyType.HOUSE),
@@ -902,6 +990,16 @@ def applications_collection(request):
         return json_error("Invalid JSON body")
     prop = get_object_or_404(Property, pk=data.get("property_id"))
     tenant = acting_user
+    active_hold = PropertyHold.objects.filter(
+        property=prop,
+        released_at__isnull=True,
+        expires_at__gt=timezone.now(),
+    ).first()
+    if active_hold and active_hold.tenant_id != tenant.id:
+        return json_error(
+            "This property is currently held by another tenant. Please try again later.",
+            status=409,
+        )
     lifecycle_errors = application_lifecycle_errors(tenant, prop)
     if lifecycle_errors:
         return json_error("Applications unlock after the physical viewing is completed", status=409, errors=lifecycle_errors)
@@ -1650,6 +1748,58 @@ def conversations_collection(request):
 
 
 @csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def property_hold(request, property_id):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    if acting_user.role != User.Roles.TENANT:
+        return forbidden()
+
+    with transaction.atomic():
+        prop = get_object_or_404(
+            Property.objects.select_for_update(of=("self",)).select_related("owner", "agent"),
+            pk=property_id,
+        )
+        now = timezone.now()
+        PropertyHold.objects.filter(
+            property=prop,
+            released_at__isnull=True,
+            expires_at__lte=now,
+        ).update(released_at=now)
+        active_hold = PropertyHold.objects.filter(
+            property=prop,
+            released_at__isnull=True,
+            expires_at__gt=now,
+        ).first()
+        if active_hold and active_hold.tenant_id != acting_user.id:
+            return json_error(
+                "This property is currently held by another tenant. Please try again later.",
+                status=409,
+            )
+
+        hold = active_hold or PropertyHold.objects.create(
+            property=prop,
+            tenant=acting_user,
+            expires_at=now + timedelta(minutes=30),
+        )
+        participant_ids = [user.id for user in (prop.owner, prop.agent) if user and user.id != acting_user.id]
+        conversation, _ = open_listing_conversation(
+            acting_user,
+            prop,
+            participant_ids,
+            f"{prop.title} · 30-minute hold",
+        )
+
+    return JsonResponse({
+        "property_id": prop.id,
+        "hold_id": hold.id,
+        "held_until": hold.expires_at.isoformat(),
+        "conversation": serialize_conversation(conversation),
+    }, status=201)
+
+
+@csrf_exempt
 @require_http_methods(["GET", "PATCH", "OPTIONS"])
 def conversation_detail(request, conversation_id):
     conversation = get_object_or_404(Conversation.objects.prefetch_related("participants", "messages"), pk=conversation_id)
@@ -2313,7 +2463,7 @@ def apply_property_updates(prop, data, owner, agent):
         prop.bedrooms = int(data["bedrooms"])
     if data.get("bathrooms") is not None:
         prop.bathrooms = parse_decimal(data["bathrooms"], "bathrooms")
-    for field in ["furnished", "solar_power", "borehole", "pet_friendly", "has_360_tour", "is_active"]:
+    for field in ["furnished", "solar_power", "borehole", "pet_friendly", "has_360_tour", "is_active", "show_exact_location"]:
         if data.get(field) is not None:
             setattr(prop, field, to_bool(data[field]))
     if data.get("listing_status") is not None and is_admin(acting_user):
@@ -2650,8 +2800,8 @@ def validate_phone_field(phone, required=False):
     error = validate_text_field(phone, "Phone number", PHONE_MAX_LENGTH, required=required)
     if error or not phone:
         return error
-    if not PHONE_RE.fullmatch(phone):
-        return "Phone number must use 7 to 15 digits and may start with +"
+    if not ZIMBABWE_PHONE_RE.fullmatch(phone):
+        return "Phone number must be a valid Zimbabwe number, for example +263771234567"
     return ""
 
 
@@ -2694,9 +2844,9 @@ def mask_email(email):
 
 
 def validate_public_registration_payload(data):
-    username = str(data.get("username") or data.get("email") or data.get("phone") or "").strip()
+    username = str(data.get("username") or data.get("email") or "").strip()
     email = normalize_email(data.get("email"))
-    phone = normalize_phone(data.get("phone"))
+    phone = ""
     password = data.get("password") or ""
     role = data.get("account_type") or data.get("role") or User.Roles.TENANT
     role = normalise_choice(role, User.Roles, role)
@@ -2765,6 +2915,10 @@ def send_registration_otp(email, code):
     validate_email_otp_provider()
     try:
         sent = send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email], fail_silently=False)
+    except smtplib.SMTPAuthenticationError as exc:
+        raise ValueError("Gmail SMTP authentication failed. Update EMAIL_HOST_PASSWORD with a valid Gmail app password") from exc
+    except smtplib.SMTPException as exc:
+        raise ValueError("Gmail SMTP could not deliver the verification email") from exc
     except Exception as exc:
         raise ValueError("OTP email could not be sent. Try again later") from exc
     if sent < 1:
@@ -2980,7 +3134,7 @@ def account_onboarding_complete(user):
         return True
     if user.is_verified:
         return True
-    return bool(user.email_verified)
+    return bool(user.email_verified and user.phone_verified)
 
 
 def full_verification_required(user):
@@ -2990,6 +3144,7 @@ def full_verification_required(user):
 def serialize_user(user):
     return {
         "id": user.id,
+        "username": user.username,
         "name": str(user),
         "email": user.email,
         "phone": user.phone,
@@ -3142,6 +3297,9 @@ def serialize_property(prop):
         "city": prop.city,
         "suburb": prop.suburb,
         "gps": f"{prop.latitude}, {prop.longitude}" if prop.latitude is not None and prop.longitude is not None else "",
+        "latitude": str(prop.latitude) if prop.latitude is not None else "",
+        "longitude": str(prop.longitude) if prop.longitude is not None else "",
+        "show_exact_location": prop.show_exact_location,
         "monthly_rent": str(prop.monthly_rent),
         "deposit_required": str(prop.deposit_required),
         "property_type": prop.property_type,

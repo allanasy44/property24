@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:provider/provider.dart';
+
+import '../models/rental_models.dart';
+import '../state/property24_state.dart';
+import '../theme/app_theme.dart';
+import '../widgets/async_value_view.dart';
+import '../widgets/osm_map_preview.dart';
+import 'ai_search_screen.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -9,429 +17,452 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
-  // ─────────── Colors sampled from the design ───────────
-  static const Color _bg = Color(0xFF1A1A1A);
-  static const Color _surface = Color(0xFF232323);
-  static const Color _accent = Color(0xFFFF4D4D);
-  static const Color _textPrimary = Color(0xFFF5F5F5);
-  static const Color _textSecondary = Color(0xFF9E9E9E);
-  static const Color _online = Color(0xFF3DDC84);
-
-  // ─────────── Mock data from the design ───────────
-  final List<_ActiveUser> _activeUsers = const [
-    _ActiveUser(imageUrl: 'https://i.pravatar.cc/150?img=12'),
-    _ActiveUser(imageUrl: 'https://i.pravatar.cc/150?img=32'),
-    _ActiveUser(imageUrl: 'https://i.pravatar.cc/150?img=45'),
-    _ActiveUser(imageUrl: 'https://i.pravatar.cc/150?img=5'),
-    _ActiveUser(imageUrl: 'https://i.pravatar.cc/150?img=68'),
-  ];
-
-  final List<_MessageItem> _messages = const [
-    _MessageItem(
-      name: 'Arlene McCoy',
-      preview: 'Wowem consectetur',
-      time: '12.50 PM',
-      imageUrl: 'https://i.pravatar.cc/150?img=47',
-      unread: 1,
-    ),
-    _MessageItem(
-      name: 'Wade Warren',
-      preview: 'Wowem consectetur',
-      time: '12.50 PM',
-      imageUrl: 'https://i.pravatar.cc/150?img=15',
-      unread: 0,
-    ),
-    _MessageItem(
-      name: 'Courtney Henry',
-      preview: 'Wowem consectetur',
-      time: '12.50 PM',
-      imageUrl: 'https://i.pravatar.cc/150?img=20',
-      unread: 0,
-    ),
-    _MessageItem(
-      name: 'Darlene Robertson',
-      preview: 'Wowem consectetur',
-      time: '12.50 PM',
-      imageUrl: 'https://i.pravatar.cc/150?img=44',
-      unread: 0,
-    ),
-  ];
+  String _query = '';
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
+    final state = context.watch<Property24State>();
+    final conversations = state.snapshot.conversations.where((conversation) {
+      final property = _propertyFor(state, conversation);
+      final haystack = [
+        conversation.title,
+        conversation.preview,
+        property?.title ?? '',
+        property?.heroLocation ?? '',
+      ].join(' ').toLowerCase();
+      return _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
+    }).toList(growable: false);
+
+    return LoadingOverlay(
+      child: RefreshIndicator(
+        onRefresh: state.refresh,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
           children: [
-            // ─────────── Top bar ───────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Row(
-                children: [
-                  _CircleIconButton(
-                    icon: Icons.arrow_back,
-                    onTap: () => Navigator.of(context).maybePop(),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Inbox',
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                  const Expanded(
-                    child: Center(
+                ),
+                IconButton.filled(
+                  tooltip: 'Refresh',
+                  onPressed: state.refresh,
+                  icon: const Icon(CupertinoIcons.refresh),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            InkWell(
+              onTap: _openAiSearch,
+              borderRadius: BorderRadius.circular(28),
+              child: Container(
+                height: 50,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSurface,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      CupertinoIcons.search,
+                      color: AppTheme.textMuted,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
                       child: Text(
-                        'Message',
+                        _query.isEmpty ? '' : _query,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: _textPrimary,
-                          letterSpacing: 0.3,
+                          color: _query.isEmpty
+                              ? AppTheme.textMuted
+                              : AppTheme.textPrimary,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ),
-                  ),
-                  _CircleIconButton(
-                    icon: Icons.more_vert,
-                    onTap: () {},
-                  ),
-                ],
-              ),
-            ),
-
-            // ─────────── Body ───────────
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  // Search bar
-                  Container(
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: _surface,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 16),
-                        const Icon(Icons.search,
-                            color: _textSecondary, size: 22),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            style: const TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                              color: _textPrimary,
-                            ),
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: InputBorder.none,
-                              hintText: 'Search any car...',
-                              hintStyle: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 14,
-                                color: _textSecondary,
-                              ),
-                            ),
-                          ),
+                    if (_query.isNotEmpty)
+                      IconButton(
+                        tooltip: 'Clear search',
+                        onPressed: () => setState(() => _query = ''),
+                        icon: const Icon(
+                          CupertinoIcons.xmark,
+                          color: AppTheme.textMuted,
+                          size: 18,
                         ),
-                        const Icon(Icons.mic_none,
-                            color: _textSecondary, size: 22),
-                        const SizedBox(width: 16),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 26),
-
-                  // Active Now
-                  const Text(
-                    'Active Now',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: _textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 74,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: _activeUsers.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 16),
-                      itemBuilder: (context, index) {
-                        return _ActiveAvatar(
-                          imageUrl: _activeUsers[index].imageUrl,
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-
-                  // Messages
-                  const Text(
-                    'Messages',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: _textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Message list
-                  ..._messages.map((m) => Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: _MessageTile(item: m),
-                      )),
-                ],
+                      ),
+                  ],
+                ),
               ),
             ),
+            const SizedBox(height: 16),
+            const ErrorBanner(),
+            if (conversations.isEmpty)
+              const EmptyState(
+                icon: CupertinoIcons.chat_bubble_2,
+                title: 'No conversations',
+                body: '',
+              )
+            else
+              for (final conversation in conversations)
+                _ConversationTile(
+                  conversation: conversation,
+                  property: _propertyFor(state, conversation),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ConversationScreen(
+                        conversation: conversation,
+                        property: _propertyFor(state, conversation),
+                      ),
+                    ),
+                  ),
+                ),
           ],
         ),
       ),
-
-      // ─────────── FAB ───────────
-      floatingActionButton: Container(
-        width: 60,
-        height: 60,
-        decoration: BoxDecoration(
-          color: _accent,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: _accent.withOpacity(0.45),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () {},
-            child: const Icon(Icons.add, color: Colors.white, size: 30),
-          ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
+  }
+
+  PropertyListing? _propertyFor(
+    Property24State state,
+    ConversationItem conversation,
+  ) {
+    for (final property in state.snapshot.properties) {
+      if (property.id == conversation.propertyId) return property;
+    }
+    return null;
+  }
+
+  Future<void> _openAiSearch() async {
+    final query = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        fullscreenDialog: true,
+        builder: (_) => AiSearchScreen(initialQuery: _query),
+      ),
+    );
+    if (!mounted || query == null) return;
+    setState(() => _query = query);
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Small widgets
-// ─────────────────────────────────────────────────────────────
+class _ConversationTile extends StatelessWidget {
+  const _ConversationTile({
+    required this.conversation,
+    required this.property,
+    required this.onTap,
+  });
 
-class _CircleIconButton extends StatelessWidget {
-  const _CircleIconButton({required this.icon, required this.onTap});
-  final IconData icon;
+  final ConversationItem conversation;
+  final PropertyListing? property;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: const Color(0xFF3A3A3A), width: 1.2),
-        ),
-        child: Icon(icon, color: _InboxScreenState._textPrimary, size: 18),
-      ),
-    );
-  }
-}
+    final participant = conversation.participants.isNotEmpty
+        ? conversation.participants.first
+        : null;
+    final title = property?.title.isNotEmpty == true
+        ? property!.title
+        : conversation.title;
 
-class _ActiveAvatar extends StatelessWidget {
-  const _ActiveAvatar({required this.imageUrl});
-  final String imageUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 66,
-      height: 66,
-      child: Stack(
-        children: [
-          Container(
-            width: 66,
-            height: 66,
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                colors: [Color(0xFFFF4D4D), Color(0xFFFF8A8A)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _InboxScreenState._bg,
-                image: DecorationImage(
-                  image: NetworkImage(imageUrl),
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 2,
-            bottom: 2,
-            child: Container(
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
-                color: _InboxScreenState._online,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: _InboxScreenState._bg,
-                  width: 2.5,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MessageTile extends StatelessWidget {
-  const _MessageTile({required this.item});
-  final _MessageItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: _InboxScreenState._surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          // Avatar + unread badge
-          SizedBox(
-            width: 54,
-            height: 54,
-            child: Stack(
-              clipBehavior: Clip.none,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
               children: [
-                Container(
-                  width: 54,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    image: DecorationImage(
-                      image: NetworkImage(item.imageUrl),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: AppTheme.bgSurface,
+                  backgroundImage:
+                      participant?.profilePicture.isNotEmpty == true
+                          ? NetworkImage(participant!.profilePicture)
+                          : null,
+                  child: participant?.profilePicture.isNotEmpty == true
+                      ? null
+                      : const Icon(
+                          CupertinoIcons.person,
+                          color: AppTheme.textMuted,
+                        ),
                 ),
-                if (item.unread > 0)
-                  Positioned(
-                    top: -4,
-                    right: -4,
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: _InboxScreenState._accent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        '${item.unread}',
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        property?.heroLocation ?? conversation.preview,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  conversation.updatedAt,
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ConversationScreen extends StatefulWidget {
+  const ConversationScreen({
+    required this.conversation,
+    required this.property,
+    super.key,
+  });
+
+  final ConversationItem conversation;
+  final PropertyListing? property;
+
+  @override
+  State<ConversationScreen> createState() => _ConversationScreenState();
+}
+
+class _ConversationScreenState extends State<ConversationScreen> {
+  final _message = TextEditingController();
+
+  @override
+  void dispose() {
+    _message.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<Property24State>();
+    final property = widget.property;
+    final canShareExact =
+        property?.hasCoordinates == true && property?.showExactLocation == true;
+
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      appBar: AppBar(
+        title: Text(
+          property?.title ?? widget.conversation.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      body: Column(
+        children: [
+          if (property != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: OsmMapPreview(
+                label: property.heroLocation,
+                latitude: property.mapLatitude,
+                longitude: property.mapLongitude,
+                approximate: !property.showExactLocation,
+                height: 150,
+                zoom: property.showExactLocation ? 15 : 12,
+              ),
+            ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              children: [
+                if (widget.conversation.preview.trim().isNotEmpty)
+                  _TextBubble(
+                    text: widget.conversation.preview,
+                    mine: false,
+                  ),
+                for (final item in state.localChatMessages)
+                  item.attachmentType == AttachmentType.location
+                      ? _LocationBubble(item: item)
+                      : _TextBubble(text: item.body, mine: item.mine),
+              ],
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: AppTheme.border)),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: canShareExact
+                        ? 'Share live location'
+                        : 'Exact location is private',
+                    onPressed: canShareExact
+                        ? () => context
+                            .read<Property24State>()
+                            .addLocalLocationMessage(property: property!)
+                        : null,
+                    icon: const Icon(CupertinoIcons.location),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _message,
+                      decoration: const InputDecoration(
+                        hintText: '',
+                        border: InputBorder.none,
+                      ),
                     ),
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 14),
-          // Name + preview
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: _InboxScreenState._textPrimary,
+                  IconButton.filled(
+                    tooltip: 'Send',
+                    onPressed: _send,
+                    icon: const Icon(CupertinoIcons.arrow_up),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.preview,
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: _InboxScreenState._textSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Time
-          Text(
-            item.time,
-            style: const TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
-              color: _InboxScreenState._textSecondary,
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
+  Future<void> _send() async {
+    final body = _message.text.trim();
+    if (body.isEmpty) return;
+    _message.clear();
+    try {
+      await context
+          .read<Property24State>()
+          .sendMessage(widget.conversation.id, body);
+    } catch (_) {
+      if (!mounted) return;
+      context.read<Property24State>().addLocalChatMessage(
+            body,
+            AttachmentType.none,
+          );
+    }
+  }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Data models (local)
-// ─────────────────────────────────────────────────────────────
+class _TextBubble extends StatelessWidget {
+  const _TextBubble({required this.text, required this.mine});
 
-class _ActiveUser {
-  const _ActiveUser({required this.imageUrl});
-  final String imageUrl;
+  final String text;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.74,
+        ),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: mine ? AppTheme.accent : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: mine ? Colors.white : AppTheme.textPrimary,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _MessageItem {
-  const _MessageItem({
-    required this.name,
-    required this.preview,
-    required this.time,
-    required this.imageUrl,
-    required this.unread,
-  });
-  final String name;
-  final String preview;
-  final String time;
-  final String imageUrl;
-  final int unread;
+class _LocationBubble extends StatelessWidget {
+  const _LocationBubble({required this.item});
+
+  final ChatMessageDraft item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        width: MediaQuery.sizeOf(context).width * 0.74,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            OsmMapPreview(
+              label: item.locationLabel,
+              latitude: item.latitude,
+              longitude: item.longitude,
+              height: 130,
+              approximate: false,
+              zoom: 16,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(
+                  CupertinoIcons.location_north,
+                  color: AppTheme.accent,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    item.liveLocation ? 'Live location' : item.locationLabel,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

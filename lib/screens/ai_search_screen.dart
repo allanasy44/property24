@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'package:unicons/unicons.dart';
 
 import '../theme/app_theme.dart';
 
@@ -126,7 +126,7 @@ class _SearchHeader extends StatelessWidget {
                 fixedSize: const Size.square(36),
                 minimumSize: const Size.square(36),
               ),
-              icon: const Icon(Icons.chevron_left_rounded, size: 20),
+              icon: const Icon(CupertinoIcons.chevron_left, size: 20),
             ),
           ),
           const Text(
@@ -196,7 +196,7 @@ class _PromptBox extends StatelessWidget {
                 ),
                 child: const Center(
                   child: Icon(
-                    Icons.circle,
+                    CupertinoIcons.circle,
                     color: _AiSearchScreenState._accent,
                     size: 6,
                   ),
@@ -244,7 +244,7 @@ class _PromptBox extends StatelessWidget {
                   fixedSize: const Size.square(38),
                   minimumSize: const Size.square(38),
                 ),
-                icon: const Icon(UniconsLine.microphone, size: 17),
+                icon: const Icon(CupertinoIcons.mic, size: 17),
               ),
               const Spacer(),
               if (hasText) ...[
@@ -257,7 +257,7 @@ class _PromptBox extends StatelessWidget {
                     fixedSize: const Size.square(38),
                     minimumSize: const Size.square(38),
                   ),
-                  icon: const Icon(Icons.close_rounded, size: 18),
+                  icon: const Icon(CupertinoIcons.xmark, size: 18),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -273,7 +273,7 @@ class _PromptBox extends StatelessWidget {
                   fixedSize: const Size.square(42),
                   minimumSize: const Size.square(42),
                 ),
-                icon: const Icon(Icons.arrow_forward_rounded, size: 21),
+                icon: const Icon(CupertinoIcons.arrow_right, size: 21),
               ),
             ],
           ),

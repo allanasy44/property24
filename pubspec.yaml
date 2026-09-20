@@ -21,8 +21,8 @@ dependencies:
   provider: ^6.1.2
   shared_preferences: ^2.3.2
   sizer: ^3.0.5
-  unicons: ^3.0.0
   google_fonts: ^8.2.1
+  google_sign_in: ^6.2.2
   cached_network_image: ^3.4.1
 
   # Maps

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 
 import '../routes/app_routes.dart';
@@ -34,7 +35,7 @@ class CustomErrorWidget extends StatelessWidget {
                     border: Border.all(color: AppTheme.accent.withAlpha(80)),
                   ),
                   child: const Icon(
-                    Icons.error_outline_rounded,
+                    CupertinoIcons.exclamationmark_circle,
                     color: AppTheme.accent,
                     size: 30,
                   ),
@@ -63,7 +64,7 @@ class CustomErrorWidget extends StatelessWidget {
                       context.goNamed(AppRoutes.homeName);
                     }
                   },
-                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                  icon: const Icon(CupertinoIcons.arrow_left, size: 18),
                   label: const Text('Back'),
                 ),
               ],

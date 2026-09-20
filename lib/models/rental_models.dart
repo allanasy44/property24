@@ -42,6 +42,20 @@ String titleize(Object? value) {
       .join(' ');
 }
 
+num? _coordinateValue(Map<String, dynamic> json, String key, int gpsIndex) {
+  final value = json[key];
+  final parsed = num.tryParse('$value');
+  if (parsed != null) return parsed;
+  final gps = '${json['gps'] ?? ''}'.split(',');
+  if (gps.length > gpsIndex) return num.tryParse(gps[gpsIndex].trim());
+  return null;
+}
+
+num? _roundCoordinate(num? value) {
+  if (value == null) return null;
+  return (value * 100).round() / 100;
+}
+
 String money(Object? value, {String suffix = ''}) {
   if (value == null || '$value'.isEmpty)
     return suffix.isEmpty ? r'$0' : '\$0 $suffix';
@@ -64,6 +78,7 @@ String localDate(Object? value, [String fallback = 'Updated']) {
 class AccountUser {
   const AccountUser({
     required this.id,
+    required this.username,
     required this.name,
     required this.email,
     required this.phone,
@@ -81,6 +96,7 @@ class AccountUser {
       [Map<String, dynamic>? account]) {
     return AccountUser(
       id: textValue(json, 'id'),
+      username: textValue(json, 'username', textValue(json, 'email')),
       name:
           textValue(json, 'name', textValue(json, 'email', 'Property24 user')),
       email: textValue(json, 'email'),
@@ -100,6 +116,7 @@ class AccountUser {
   }
 
   final String id;
+  final String username;
   final String name;
   final String email;
   final String phone;
@@ -183,6 +200,9 @@ class PropertyListing {
     required this.address,
     required this.city,
     required this.suburb,
+    required this.latitude,
+    required this.longitude,
+    required this.showExactLocation,
     required this.monthlyRent,
     required this.depositRequired,
     required this.propertyType,
@@ -213,6 +233,9 @@ class PropertyListing {
       address: textValue(json, 'address'),
       city: textValue(json, 'city'),
       suburb: textValue(json, 'suburb'),
+      latitude: _coordinateValue(json, 'latitude', 0),
+      longitude: _coordinateValue(json, 'longitude', 1),
+      showExactLocation: json['show_exact_location'] == true,
       monthlyRent: textValue(json, 'monthly_rent', '0'),
       depositRequired: textValue(json, 'deposit_required', '0'),
       propertyType: titleize(json['property_type']),
@@ -246,6 +269,9 @@ class PropertyListing {
   final String address;
   final String city;
   final String suburb;
+  final num? latitude;
+  final num? longitude;
+  final bool showExactLocation;
   final String monthlyRent;
   final String depositRequired;
   final String propertyType;
@@ -273,6 +299,13 @@ class PropertyListing {
   String get location =>
       [suburb, city].where((value) => value.isNotEmpty).join(', ');
   String get heroLocation => location.isEmpty ? address : location;
+  bool get hasCoordinates => latitude != null && longitude != null;
+  num? get mapLatitude => hasCoordinates
+      ? (showExactLocation ? latitude : _roundCoordinate(latitude))
+      : null;
+  num? get mapLongitude => hasCoordinates
+      ? (showExactLocation ? longitude : _roundCoordinate(longitude))
+      : null;
   String get availabilityLabel =>
       verified ? 'Confirmed this week' : 'Awaiting confirmation';
   String get passportId =>
@@ -545,6 +578,7 @@ class VerificationItem {
 class ConversationItem {
   const ConversationItem({
     required this.id,
+    required this.propertyId,
     required this.title,
     required this.preview,
     required this.updatedAt,
@@ -562,6 +596,7 @@ class ConversationItem {
         : null;
     return ConversationItem(
       id: textValue(json, 'id'),
+      propertyId: textValue(json, 'property_id'),
       title: textValue(
         json,
         'title',
@@ -576,6 +611,7 @@ class ConversationItem {
   }
 
   final String id;
+  final String propertyId;
   final String title;
   final String preview;
   final String updatedAt;

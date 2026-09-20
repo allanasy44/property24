@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../models/rental_models.dart';
 import '../theme/app_theme.dart';
@@ -49,7 +50,7 @@ class PropertyCard extends StatelessWidget {
                             ),
                           ),
                           child: Icon(
-                            Icons.apartment,
+                            CupertinoIcons.building_2_fill,
                             color: colorScheme.secondary,
                             size: 46,
                           ),
@@ -60,7 +61,7 @@ class PropertyCard extends StatelessWidget {
                           errorBuilder: (_, __, ___) => DecoratedBox(
                             decoration: BoxDecoration(
                                 color: colorScheme.primaryContainer),
-                            child: Icon(Icons.apartment,
+                            child: Icon(CupertinoIcons.building_2_fill,
                                 color: colorScheme.onPrimaryContainer),
                           ),
                         ),
@@ -69,7 +70,7 @@ class PropertyCard extends StatelessWidget {
                   left: 12,
                   top: 12,
                   child: _ImageBadge(
-                    icon: Icons.verified_user_outlined,
+                    icon: CupertinoIcons.checkmark_seal,
                     label: '${property.trustScore}% trust',
                     emphasized: property.trustScore >= 80,
                   ),
@@ -81,7 +82,9 @@ class PropertyCard extends StatelessWidget {
                     children: [
                       _RoundIconButton(
                         tooltip: saved ? 'Remove saved home' : 'Save home',
-                        icon: saved ? Icons.favorite : Icons.favorite_border,
+                        icon: saved
+                            ? CupertinoIcons.heart_fill
+                            : CupertinoIcons.heart,
                         selected: saved,
                         onPressed: onSave,
                       ),
@@ -90,7 +93,7 @@ class PropertyCard extends StatelessWidget {
                         tooltip: compared
                             ? 'Remove from comparison'
                             : 'Compare home',
-                        icon: Icons.compare_arrows,
+                        icon: CupertinoIcons.arrow_left_right,
                         selected: compared,
                         onPressed: onCompare,
                       ),
@@ -101,7 +104,7 @@ class PropertyCard extends StatelessWidget {
                   left: 12,
                   bottom: 12,
                   child: _ImageBadge(
-                    icon: Icons.event_available_outlined,
+                    icon: CupertinoIcons.calendar,
                     label: property.availabilityLabel,
                     emphasized: false,
                   ),
@@ -143,13 +146,13 @@ class PropertyCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: _Pill(
-                            icon: Icons.payments_outlined,
+                            icon: CupertinoIcons.money_dollar,
                             label: property.rentLabel),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: _Pill(
-                            icon: Icons.savings_outlined,
+                            icon: CupertinoIcons.money_dollar_circle,
                             label: '${property.moveInTotalLabel} move-in'),
                       ),
                     ],
@@ -160,21 +163,22 @@ class PropertyCard extends StatelessWidget {
                     runSpacing: 8,
                     children: [
                       _Pill(
-                          icon: Icons.bed_outlined,
+                          icon: CupertinoIcons.bed_double,
                           label: '${property.bedrooms} beds'),
                       _Pill(
-                          icon: Icons.bathtub_outlined,
+                          icon: CupertinoIcons.drop,
                           label: '${property.bathrooms} baths'),
                       _Pill(
-                          icon: Icons.water_drop_outlined,
+                          icon: CupertinoIcons.drop,
                           label: property.borehole
                               ? 'Borehole'
                               : property.waterAvailability),
                       if (property.solarPower)
-                        const _Pill(icon: Icons.bolt_outlined, label: 'Solar'),
+                        const _Pill(icon: CupertinoIcons.bolt, label: 'Solar'),
                       if (property.has360Tour)
                         const _Pill(
-                            icon: Icons.threesixty_outlined, label: '360 tour'),
+                            icon: CupertinoIcons.rotate_right,
+                            label: '360 tour'),
                     ],
                   ),
                 ],

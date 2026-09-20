@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../theme/app_theme.dart';
-import '../../routes/app_routes.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -122,7 +122,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _selectRole(String role) {
-    context.go(AppRoutes.homeScreen);
+    context.go('/auth/$role');
   }
 
   @override
@@ -208,7 +208,7 @@ class _OnboardingView extends StatelessWidget {
               errorWidget: (_, __, ___) => Container(
                 color: AppTheme.bgCard,
                 child: const Icon(
-                  Icons.home,
+                  CupertinoIcons.house,
                   color: AppTheme.textMuted,
                   size: 48,
                 ),
@@ -379,7 +379,7 @@ class _OnboardingView extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 8),
                                 const Icon(
-                                  Icons.arrow_forward_rounded,
+                                  CupertinoIcons.arrow_right,
                                   color: Colors.white,
                                   size: 18,
                                 ),
@@ -546,7 +546,7 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
                     title: "I'm Looking to Rent",
                     subtitle:
                         'Browse verified properties, compare listings, and find your perfect home.',
-                    icon: Icons.search_rounded,
+                    icon: CupertinoIcons.search,
                     isSelected: _selectedRole == 'tenant',
                     onTap: () {
                       setState(() {
@@ -567,7 +567,7 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
                     title: "I'm a Landlord / Agent",
                     subtitle:
                         'List your properties, get verified, and connect with quality tenants.',
-                    icon: Icons.apartment_rounded,
+                    icon: CupertinoIcons.building_2_fill,
                     isSelected: _selectedRole == 'landlord',
                     onTap: () {
                       setState(() {
@@ -749,7 +749,7 @@ class _RoleCard extends StatelessWidget {
               ),
               child: isSelected
                   ? const Icon(
-                      Icons.check,
+                      CupertinoIcons.check_mark,
                       color: Colors.white,
                       size: 13,
                     )

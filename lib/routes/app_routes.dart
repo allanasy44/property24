@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../models/rental_models.dart';
 import '../screens/activity_screen.dart';
+import '../screens/auth_screen.dart';
 import '../screens/calls_screen.dart';
 import '../screens/discover_screen.dart';
 import '../screens/inbox_screen.dart';
@@ -24,6 +25,7 @@ class AppRoutes {
   static const String activityName = 'activity';
   static const String profileName = 'profile';
   static const String propertyDetailName = 'property-detail';
+  static const String authName = 'auth';
 
   static const String homeScreen = '/home';
   static const String callsScreen = '/calls';
@@ -33,6 +35,7 @@ class AppRoutes {
   static const String activityScreen = '/activity';
   static const String profileScreen = '/profile';
   static const String propertyDetailScreen = '/property-detail';
+  static const String authScreen = '/auth/:role';
 }
 
 final GoRouter appRouter = GoRouter(
@@ -44,6 +47,14 @@ final GoRouter appRouter = GoRouter(
         state,
         const OnboardingScreen(),
       ),
+    ),
+    GoRoute(
+      path: AppRoutes.authScreen,
+      name: AppRoutes.authName,
+      pageBuilder: (context, state) {
+        final role = accountRoleFromJson(state.pathParameters['role']);
+        return _fadePage(state, AuthScreen(role: role));
+      },
     ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>

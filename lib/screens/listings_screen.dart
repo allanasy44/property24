@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
-import 'package:unicons/unicons.dart';
 
 import '../models/rental_models.dart';
 import '../services/property24_api.dart';
@@ -66,7 +66,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                             shape: BoxShape.circle,
                             color: _primarySoft,
                           ),
-                          child: const Icon(UniconsLine.estate,
+                          child: const Icon(CupertinoIcons.house,
                               color: _primary, size: 22),
                         ),
                         const SizedBox(width: 12),
@@ -97,7 +97,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                               color: _primary,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.add,
+                            child: const Icon(CupertinoIcons.add,
                                 color: Colors.white, size: 22),
                           ),
                         ),
@@ -116,7 +116,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.search,
+                            const Icon(CupertinoIcons.search,
                                 color: _textMuted, size: 20),
                             const SizedBox(width: 10),
                             Expanded(
@@ -136,7 +136,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                                 tooltip: 'Clear search',
                                 onPressed: () => setState(() => _query = ''),
                                 icon: const Icon(
-                                  Icons.close_rounded,
+                                  CupertinoIcons.xmark,
                                   color: _textMuted,
                                   size: 18,
                                 ),
@@ -162,7 +162,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
             if (state.snapshot.properties.isEmpty)
               const SliverFillRemaining(
                 child: EmptyState(
-                  icon: Icons.home_work_outlined,
+                  icon: CupertinoIcons.house,
                   title: 'No listings yet',
                   body:
                       'Create a verified rental listing connected to the Django property API.',
@@ -171,7 +171,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
             else if (listings.isEmpty)
               const SliverFillRemaining(
                 child: EmptyState(
-                  icon: Icons.search_off,
+                  icon: CupertinoIcons.search,
                   title: 'No matching listings',
                   body: '',
                 ),
@@ -192,7 +192,8 @@ class _ListingsScreenState extends State<ListingsScreen> {
                         ),
                       ),
                       trailing: PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_horiz, color: _textMuted),
+                        icon: const Icon(CupertinoIcons.ellipsis,
+                            color: _textMuted),
                         onSelected: (value) {
                           if (value == 'edit') _openEditor(context, property);
                           if (value == 'delete') _delete(context, property);
@@ -264,7 +265,8 @@ class _ChecklistTile extends StatelessWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.verified_outlined, color: AppTheme.accent),
+      leading:
+          const Icon(CupertinoIcons.checkmark_seal, color: AppTheme.accent),
       title: Text(label,
           style: const TextStyle(
             fontWeight: FontWeight.w500,
@@ -329,6 +331,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
   late final TextEditingController _address;
   late final TextEditingController _city;
   late final TextEditingController _suburb;
+  late final TextEditingController _latitude;
+  late final TextEditingController _longitude;
   late final TextEditingController _rent;
   late final TextEditingController _deposit;
   late final TextEditingController _beds;
@@ -346,6 +350,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
   bool _borehole = false;
   bool _pets = false;
   bool _tour = false;
+  bool _showExactLocation = false;
 
   @override
   void initState() {
@@ -355,6 +360,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _address = TextEditingController(text: property?.address ?? '');
     _city = TextEditingController(text: property?.city ?? 'Harare');
     _suburb = TextEditingController(text: property?.suburb ?? '');
+    _latitude = TextEditingController(text: '${property?.latitude ?? ''}');
+    _longitude = TextEditingController(text: '${property?.longitude ?? ''}');
     _rent = TextEditingController(text: property?.monthlyRent ?? '');
     _deposit = TextEditingController(text: property?.depositRequired ?? '');
     _beds = TextEditingController(text: '${property?.bedrooms ?? ''}');
@@ -374,6 +381,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _borehole = property?.borehole ?? false;
     _pets = property?.petFriendly ?? false;
     _tour = property?.has360Tour ?? false;
+    _showExactLocation = property?.showExactLocation ?? false;
   }
 
   @override
@@ -382,6 +390,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _address.dispose();
     _city.dispose();
     _suburb.dispose();
+    _latitude.dispose();
+    _longitude.dispose();
     _rent.dispose();
     _deposit.dispose();
     _beds.dispose();
@@ -406,7 +416,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
         leading: IconButton(
           tooltip: 'Back',
           onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.chevron_left_rounded),
+          icon: const Icon(CupertinoIcons.chevron_left),
         ),
       ),
       body: Form(
@@ -471,6 +481,38 @@ class _PropertyEditorState extends State<PropertyEditor> {
                     ],
                   ),
                   _field(_address, 'House address'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _field(
+                          _latitude,
+                          'Latitude',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            signed: true,
+                            decimal: true,
+                          ),
+                          requiredField: false,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _field(
+                          _longitude,
+                          'Longitude',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            signed: true,
+                            decimal: true,
+                          ),
+                          requiredField: false,
+                        ),
+                      ),
+                    ],
+                  ),
+                  _switch(
+                    'Show exact map location publicly',
+                    _showExactLocation,
+                    (v) => setState(() => _showExactLocation = v),
+                  ),
                 ],
               ),
             ),
@@ -674,11 +716,22 @@ class _PropertyEditorState extends State<PropertyEditor> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final hasLatitude = _latitude.text.trim().isNotEmpty;
+    final hasLongitude = _longitude.text.trim().isNotEmpty;
+    if (hasLatitude != hasLongitude) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter both latitude and longitude.')),
+      );
+      return;
+    }
     final draft = PropertyDraft(
       title: _title.text.trim(),
       address: _address.text.trim(),
       city: _city.text.trim(),
       suburb: _suburb.text.trim(),
+      latitude: _latitude.text.trim(),
+      longitude: _longitude.text.trim(),
+      showExactLocation: _showExactLocation,
       monthlyRent: _rent.text.trim(),
       depositRequired: _deposit.text.trim(),
       propertyType: _type,
@@ -705,7 +758,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
     } catch (exception) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$exception')));
+            .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -738,7 +791,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       color: AppTheme.accent,
                     ),
                     child: const Icon(
-                      Icons.check_rounded,
+                      CupertinoIcons.check_mark,
                       color: Colors.white,
                       size: 28,
                     ),
