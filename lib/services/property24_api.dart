@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../core/config.dart';
 import '../models/rental_models.dart';
@@ -233,6 +235,57 @@ class Property24Api {
     );
   }
 
+  Future<AuthSession> updateProfileMultipart({
+    required String token,
+    String? username,
+    String? name,
+    String? bio,
+    String? phone,
+    Uint8List? profilePictureBytes,
+    String? profilePictureName,
+    String? profilePictureMimeType,
+    bool removeProfilePicture = false,
+  }) async {
+    final request = http.MultipartRequest(
+      'PATCH',
+      AppConfig.apiUri('auth/profile/'),
+    );
+    request.headers.addAll(_multipartHeaders(token));
+    void addField(String key, String? value) {
+      if (value != null) request.fields[key] = value;
+    }
+
+    addField('username', username);
+    addField('name', name);
+    addField('bio', bio);
+    addField('phone', phone);
+    if (removeProfilePicture) {
+      request.fields['remove_profile_picture'] = 'true';
+    }
+    if (profilePictureBytes != null && profilePictureBytes.isNotEmpty) {
+      final filename = _safeFilename(profilePictureName, 'profile-picture.jpg');
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'profile_picture',
+          profilePictureBytes,
+          filename: filename,
+          contentType: _mediaTypeFor(profilePictureMimeType, filename),
+        ),
+      );
+    }
+
+    final response = await http.Response.fromStream(await request.send());
+    final body = _decode(response);
+    return AuthSession(
+      token: token,
+      user: AccountUser.fromJson(
+        body['user'] as Map<String, dynamic>,
+        body['account'] as Map<String, dynamic>?,
+      ),
+      account: AccountContext.fromJson(body['account'] as Map<String, dynamic>),
+    );
+  }
+
   Future<String> requestPhoneVerification({
     required String token,
     required String phone,
@@ -265,6 +318,70 @@ class Property24Api {
     );
   }
 
+  Future<VerificationItem> submitIdentityVerification({
+    required String token,
+    required String role,
+    required String name,
+    required String phone,
+    required String nationalIdNumber,
+    required Uint8List idFrontBytes,
+    required String idFrontName,
+    required String idFrontMimeType,
+    required Uint8List idBackBytes,
+    required String idBackName,
+    required String idBackMimeType,
+    required bool phoneVerified,
+    Uint8List? ownershipBytes,
+    String? ownershipName,
+    String? ownershipMimeType,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      AppConfig.apiUri('verifications/'),
+    );
+    request.headers.addAll(_multipartHeaders(token));
+    request.fields.addAll({
+      'role': role,
+      'name': name,
+      'phone': phone,
+      'document_type': 'identity_document',
+      'national_id_number': nationalIdNumber,
+      'identity_confirmed': 'true',
+      'privacy_notice_accepted': 'true',
+      'declaration_accepted': 'true',
+      'phone_verified': phoneVerified ? 'true' : 'false',
+    });
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'id_front_document',
+        idFrontBytes,
+        filename: _safeFilename(idFrontName, 'id-front.jpg'),
+        contentType: _mediaTypeFor(idFrontMimeType, idFrontName),
+      ),
+    );
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'id_back_document',
+        idBackBytes,
+        filename: _safeFilename(idBackName, 'id-back.jpg'),
+        contentType: _mediaTypeFor(idBackMimeType, idBackName),
+      ),
+    );
+    if (ownershipBytes != null && ownershipBytes.isNotEmpty) {
+      final filename = _safeFilename(ownershipName, 'ownership.jpg');
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'ownership_or_authorization_document',
+          ownershipBytes,
+          filename: filename,
+          contentType: _mediaTypeFor(ownershipMimeType, filename),
+        ),
+      );
+    }
+    final response = await http.Response.fromStream(await request.send());
+    return VerificationItem.fromJson(_decode(response));
+  }
+
   Future<AuthSession> me(String token) async {
     final body = await _get('auth/me/', token: token);
     return AuthSession(
@@ -293,6 +410,7 @@ class Property24Api {
       _get('applications/', token: token),
       _get('verifications/', token: token),
       _get('conversations/', token: token),
+      _get('viewings/', token: token),
     ]);
 
     return PlatformSnapshot(
@@ -307,6 +425,7 @@ class Property24Api {
           _results(responses[4]).map(VerificationItem.fromJson).toList(),
       conversations:
           _results(responses[5]).map(ConversationItem.fromJson).toList(),
+      viewings: _results(responses[6]).map(ViewingItem.fromJson).toList(),
     );
   }
 
@@ -456,6 +575,34 @@ class Property24Api {
     };
   }
 
+  Map<String, String> _multipartHeaders(String token) {
+    return {
+      'Accept': 'application/json',
+      if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+  }
+
+  MediaType _mediaTypeFor(String? mimeType, String filename) {
+    final cleanMime = (mimeType ?? '').split(';').first.trim().toLowerCase();
+    if (cleanMime.contains('/')) {
+      final parts = cleanMime.split('/');
+      return MediaType(parts.first, parts.last);
+    }
+    final lowerName = filename.toLowerCase();
+    if (lowerName.endsWith('.png')) return MediaType('image', 'png');
+    if (lowerName.endsWith('.webp')) return MediaType('image', 'webp');
+    if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+      return MediaType('image', 'jpeg');
+    }
+    return MediaType('image', 'jpeg');
+  }
+
+  String _safeFilename(String? value, String fallback) {
+    final clean = (value?.trim().isNotEmpty == true ? value!.trim() : fallback)
+        .replaceAll(RegExp(r'[/\\]'), '_');
+    return clean.isEmpty ? fallback : clean;
+  }
+
   Map<String, dynamic> _decode(http.Response response) {
     final text = response.body.trim();
     final body = text.isEmpty
@@ -506,6 +653,7 @@ extension on PlatformSnapshot {
     List<ApplicationItem>? applications,
     List<VerificationItem>? verifications,
     List<ConversationItem>? conversations,
+    List<ViewingItem>? viewings,
   }) {
     return PlatformSnapshot(
       properties: properties ?? this.properties,
@@ -515,6 +663,7 @@ extension on PlatformSnapshot {
       applications: applications ?? this.applications,
       verifications: verifications ?? this.verifications,
       conversations: conversations ?? this.conversations,
+      viewings: viewings ?? this.viewings,
     );
   }
 }

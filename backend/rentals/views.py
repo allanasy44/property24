@@ -2429,8 +2429,8 @@ def validate_verification_submission(request, data, role, user):
         errors.append("confirmed document number must match extracted document number")
     if not to_bool(data.get("identity_confirmed")):
         errors.append("identity_confirmed must be true after confirming the document information")
-    if not to_bool(data.get("email_verified")) or not email_otp_verified(user):
-        errors.append("email_verified must be completed using OTP")
+    if not (getattr(user, "email_verified", False) or email_otp_verified(user)):
+        errors.append("account email must be verified before identity verification")
 
     if role == User.Roles.LANDLORD and not (files.get("ownership_or_authorization_document") or data.get("ownership_or_authorization_uploaded")):
         errors.append("ownership_or_authorization_document is required for landlord verification")
@@ -2513,7 +2513,7 @@ def make_receipt_number():
 
 
 def default_checks_for_role(role):
-    base_checks = ["Email OTP", "Identity document", "Document number confirmation"]
+    base_checks = ["Phone verification", "Identity document", "Document number confirmation"]
     if role == User.Roles.LANDLORD:
         return base_checks + ["Estate setup"]
     if role == User.Roles.AGENT:

@@ -161,16 +161,34 @@ class Property24State extends ChangeNotifier {
     required String bio,
     String? profilePictureUrl,
     String? phone,
+    Uint8List? profilePictureBytes,
+    String? profilePictureName,
+    String? profilePictureMimeType,
+    bool removeProfilePicture = false,
   }) async {
     final activeToken = _requireToken();
-    final session = await _api.updateProfile(
-      token: activeToken,
-      username: username,
-      name: name,
-      bio: bio,
-      profilePictureUrl: profilePictureUrl,
-      phone: phone,
-    );
+    final hasUploadedPicture =
+        profilePictureBytes != null && profilePictureBytes.isNotEmpty;
+    final session = hasUploadedPicture || removeProfilePicture
+        ? await _api.updateProfileMultipart(
+            token: activeToken,
+            username: username,
+            name: name,
+            bio: bio,
+            phone: phone,
+            profilePictureBytes: profilePictureBytes,
+            profilePictureName: profilePictureName,
+            profilePictureMimeType: profilePictureMimeType,
+            removeProfilePicture: removeProfilePicture,
+          )
+        : await _api.updateProfile(
+            token: activeToken,
+            username: username,
+            name: name,
+            bio: bio,
+            profilePictureUrl: profilePictureUrl,
+            phone: phone,
+          );
     user = session.user;
     account = session.account;
     publicUsername = session.user.name
@@ -200,6 +218,43 @@ class Property24State extends ChangeNotifier {
     );
     user = session.user;
     account = session.account;
+    notifyListeners();
+  }
+
+  Future<void> submitIdentityVerification({
+    required String nationalIdNumber,
+    required Uint8List idFrontBytes,
+    required String idFrontName,
+    required String idFrontMimeType,
+    required Uint8List idBackBytes,
+    required String idBackName,
+    required String idBackMimeType,
+  }) async {
+    final activeToken = _requireToken();
+    final activeUser = user;
+    if (activeUser == null) {
+      throw const ApiException('Sign in to verify your account.');
+    }
+    await _api.submitIdentityVerification(
+      token: activeToken,
+      role: activeUser.role.apiValue,
+      name: activeUser.name,
+      phone: activeUser.phone,
+      // Newly required by Property24Api.submitIdentityVerification.
+      // If your AccountUser uses a different field name, change it here.
+      phoneVerified: activeUser.phoneVerified,
+      nationalIdNumber: nationalIdNumber,
+      idFrontBytes: idFrontBytes,
+      idFrontName: idFrontName,
+      idFrontMimeType: idFrontMimeType,
+      idBackBytes: idBackBytes,
+      idBackName: idBackName,
+      idBackMimeType: idBackMimeType,
+    );
+    final session = await _api.me(activeToken);
+    user = session.user;
+    account = session.account;
+    snapshot = await _api.snapshot(token: activeToken);
     notifyListeners();
   }
 

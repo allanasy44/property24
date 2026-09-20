@@ -575,6 +575,48 @@ class VerificationItem {
   final List<String> checks;
 }
 
+class ViewingItem {
+  const ViewingItem({
+    required this.id,
+    required this.propertyId,
+    required this.property,
+    required this.tenant,
+    required this.agent,
+    required this.scheduledFor,
+    required this.status,
+    required this.notes,
+  });
+
+  factory ViewingItem.fromJson(Map<String, dynamic> json) {
+    return ViewingItem(
+      id: textValue(json, 'id'),
+      propertyId: textValue(json, 'property_id'),
+      property: textValue(json, 'property'),
+      tenant: textValue(json, 'tenant'),
+      agent: textValue(json, 'agent'),
+      scheduledFor: localDate(json['scheduled_for'], 'Scheduled'),
+      status: titleize(json['status']),
+      notes: textValue(json, 'notes'),
+    );
+  }
+
+  final String id;
+  final String propertyId;
+  final String property;
+  final String tenant;
+  final String agent;
+  final String scheduledFor;
+  final String status;
+  final String notes;
+
+  bool get isAvailableBooking {
+    final normalized = status.toLowerCase();
+    return normalized == 'pending' ||
+        normalized == 'confirmed' ||
+        normalized == 'reserved';
+  }
+}
+
 class ConversationItem {
   const ConversationItem({
     required this.id,
@@ -628,6 +670,7 @@ class PlatformSnapshot {
     required this.applications,
     required this.verifications,
     required this.conversations,
+    required this.viewings,
   });
 
   factory PlatformSnapshot.empty() {
@@ -639,6 +682,7 @@ class PlatformSnapshot {
       applications: [],
       verifications: [],
       conversations: [],
+      viewings: [],
     );
   }
 
@@ -649,4 +693,5 @@ class PlatformSnapshot {
   final List<ApplicationItem> applications;
   final List<VerificationItem> verifications;
   final List<ConversationItem> conversations;
+  final List<ViewingItem> viewings;
 }
