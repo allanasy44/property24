@@ -1,10 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:unicons/unicons.dart';
-
-import '../models/rental_models.dart';
-import '../state/property24_state.dart';
-import '../widgets/async_value_view.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -14,395 +9,429 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
-  int _tab = 0;
+  // ─────────── Colors sampled from the design ───────────
+  static const Color _bg = Color(0xFF1A1A1A);
+  static const Color _surface = Color(0xFF232323);
+  static const Color _accent = Color(0xFFFF4D4D);
+  static const Color _textPrimary = Color(0xFFF5F5F5);
+  static const Color _textSecondary = Color(0xFF9E9E9E);
+  static const Color _online = Color(0xFF3DDC84);
+
+  // ─────────── Mock data from the design ───────────
+  final List<_ActiveUser> _activeUsers = const [
+    _ActiveUser(imageUrl: 'https://i.pravatar.cc/150?img=12'),
+    _ActiveUser(imageUrl: 'https://i.pravatar.cc/150?img=32'),
+    _ActiveUser(imageUrl: 'https://i.pravatar.cc/150?img=45'),
+    _ActiveUser(imageUrl: 'https://i.pravatar.cc/150?img=5'),
+    _ActiveUser(imageUrl: 'https://i.pravatar.cc/150?img=68'),
+  ];
+
+  final List<_MessageItem> _messages = const [
+    _MessageItem(
+      name: 'Arlene McCoy',
+      preview: 'Wowem consectetur',
+      time: '12.50 PM',
+      imageUrl: 'https://i.pravatar.cc/150?img=47',
+      unread: 1,
+    ),
+    _MessageItem(
+      name: 'Wade Warren',
+      preview: 'Wowem consectetur',
+      time: '12.50 PM',
+      imageUrl: 'https://i.pravatar.cc/150?img=15',
+      unread: 0,
+    ),
+    _MessageItem(
+      name: 'Courtney Henry',
+      preview: 'Wowem consectetur',
+      time: '12.50 PM',
+      imageUrl: 'https://i.pravatar.cc/150?img=20',
+      unread: 0,
+    ),
+    _MessageItem(
+      name: 'Darlene Robertson',
+      preview: 'Wowem consectetur',
+      time: '12.50 PM',
+      imageUrl: 'https://i.pravatar.cc/150?img=44',
+      unread: 0,
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<Property24State>();
-    return LoadingOverlay(
-      child: RefreshIndicator(
-        onRefresh: state.refresh,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-          children: [
-            Text('Inbox', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 6),
-            Text(
-              'Chat, normal calls, video calls, and the history tenants and landlords need.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(
-                    value: 0,
-                    icon: Icon(Icons.forum_outlined),
-                    label: Text('Chats')),
-                ButtonSegment(
-                    value: 1,
-                    icon: Icon(Icons.call_outlined),
-                    label: Text('Calls')),
-              ],
-              selected: {_tab},
-              onSelectionChanged: (value) => setState(() => _tab = value.first),
-            ),
-            const ErrorBanner(),
-            const SizedBox(height: 12),
-            if (!state.signedIn)
-              const EmptyState(
-                icon: Icons.lock_outline,
-                title: 'Sign in for messages',
-                body:
-                    'Conversations, protected phone numbers, and call sessions load after authentication.',
-              )
-            else if (_tab == 0)
-              _ConversationList(state: state)
-            else
-              _CallHistory(state: state),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ConversationList extends StatelessWidget {
-  const _ConversationList({required this.state});
-
-  final Property24State state;
-
-  @override
-  Widget build(BuildContext context) {
-    if (state.snapshot.conversations.isEmpty) {
-      return const EmptyState(
-        icon: Icons.chat_bubble_outline,
-        title: 'No conversations yet',
-        body: 'Open a property and message the landlord or agent.',
-      );
-    }
-    return Column(
-      children: [
-        for (final conversation in state.snapshot.conversations)
-          Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: ListTile(
-              leading: CircleAvatar(
-                child: Text(
-                  conversation.title.isEmpty
-                      ? 'C'
-                      : conversation.title.characters.first.toUpperCase(),
-                ),
-              ),
-              title: Text(conversation.title,
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text(conversation.preview,
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(conversation.updatedAt,
-                      style: Theme.of(context).textTheme.labelSmall),
-                  Icon(
-                    conversation.phoneNumbersRevealed
-                        ? Icons.phone_enabled_outlined
-                        : Icons.phone_locked_outlined,
-                    size: 16,
-                  ),
-                ],
-              ),
-              onTap: () => _openChat(context, conversation),
-            ),
-          ),
-      ],
-    );
-  }
-
-  void _openChat(BuildContext context, ConversationItem conversation) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => _ChatSheet(conversation: conversation),
-    );
-  }
-}
-
-class _ChatSheet extends StatefulWidget {
-  const _ChatSheet({required this.conversation});
-
-  final ConversationItem conversation;
-
-  @override
-  State<_ChatSheet> createState() => _ChatSheetState();
-}
-
-class _ChatSheetState extends State<_ChatSheet> {
-  final _message = TextEditingController();
-  AttachmentType _attachmentType = AttachmentType.none;
-
-  @override
-  void dispose() {
-    _message.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final inset = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, inset + 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(widget.conversation.title,
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Consumer<Property24State>(
-            builder: (context, state, _) {
-              return Column(
-                children: [
-                  for (final message in state.localChatMessages)
-                    _Bubble(
-                      message: message,
-                      onEdit: message.mine
-                          ? () => _editMessage(context, state, message)
-                          : null,
-                      onDelete: message.mine
-                          ? () => state.deleteLocalChatMessage(message.id)
-                          : null,
-                    ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 14),
-          SegmentedButton<AttachmentType>(
-            segments: const [
-              ButtonSegment(
-                value: AttachmentType.none,
-                icon: Icon(UniconsLine.comment),
-              ),
-              ButtonSegment(
-                value: AttachmentType.image,
-                icon: Icon(UniconsLine.image),
-              ),
-              ButtonSegment(
-                value: AttachmentType.video,
-                icon: Icon(UniconsLine.video),
-              ),
-              ButtonSegment(
-                value: AttachmentType.audio,
-                icon: Icon(UniconsLine.microphone),
-              ),
-            ],
-            selected: {_attachmentType},
-            showSelectedIcon: false,
-            onSelectionChanged: (value) {
-              setState(() => _attachmentType = value.first);
-            },
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _message,
-                  decoration: const InputDecoration(
-                    hintText: 'Write a message',
-                    prefixIcon: Icon(Icons.attach_file_outlined),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                tooltip: 'Send message',
-                onPressed: _send,
-                icon: const Icon(Icons.send_outlined),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _send() async {
-    final text = _message.text.trim();
-    if (text.isEmpty && _attachmentType == AttachmentType.none) return;
-    final state = context.read<Property24State>();
-    state.addLocalChatMessage(
-      text.isEmpty ? _attachmentLabel(_attachmentType) : text,
-      _attachmentType,
-    );
-    _message.clear();
-    setState(() => _attachmentType = AttachmentType.none);
-    try {
-      if (text.isNotEmpty) {
-        await state.sendMessage(widget.conversation.id, text);
-      }
-    } catch (exception) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$exception')));
-      }
-    }
-  }
-
-  String _attachmentLabel(AttachmentType type) {
-    return switch (type) {
-      AttachmentType.image => 'Image attachment',
-      AttachmentType.video => 'Video attachment',
-      AttachmentType.audio => 'Audio attachment',
-      AttachmentType.none => '',
-    };
-  }
-
-  void _editMessage(
-    BuildContext context,
-    Property24State state,
-    ChatMessageDraft message,
-  ) {
-    final controller = TextEditingController(text: message.body);
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit message'),
-        content: TextField(controller: controller),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              state.updateLocalChatMessage(message.id, controller.text);
-              Navigator.pop(context);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CallHistory extends StatelessWidget {
-  const _CallHistory({required this.state});
-
-  final Property24State state;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.video_call_outlined),
-            title: const Text('Start new call from a property'),
-            subtitle: const Text(
-                'Open any listing and use Call or Video on the contact card.'),
-            trailing: const Icon(Icons.arrow_forward),
-            onTap: () {},
-          ),
-        ),
-        const SizedBox(height: 8),
-        for (final item in state.callHistory)
-          Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: ListTile(
-              leading: Icon(item.mode == CallMode.video
-                  ? Icons.videocam_outlined
-                  : Icons.call_outlined),
-              title: Text(item.name),
-              subtitle: Text('${item.property} · ${item.direction}'),
-              trailing: Text(item.when,
-                  style: Theme.of(context).textTheme.labelSmall),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _Bubble extends StatelessWidget {
-  const _Bubble({
-    required this.message,
-    this.onEdit,
-    this.onDelete,
-  });
-
-  final ChatMessageDraft message;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 320),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: message.mine
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: message.mine
-              ? null
-              : Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        ),
+    return Scaffold(
+      backgroundColor: _bg,
+      body: SafeArea(
+        bottom: false,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (message.attachmentType != AttachmentType.none)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Icon(
-                  _attachmentIcon(message.attachmentType),
-                  color: message.mine
-                      ? Theme.of(context).colorScheme.onPrimary
-                      : Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            Text(
-              message.body,
-              style: TextStyle(
-                color: message.mine
-                    ? Theme.of(context).colorScheme.onPrimary
-                    : null,
-              ),
-            ),
-            if (onEdit != null || onDelete != null) ...[
-              const SizedBox(height: 6),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+            // ─────────── Top bar ───────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
                 children: [
-                  if (onEdit != null)
-                    TextButton(onPressed: onEdit, child: const Text('Edit')),
-                  if (onDelete != null)
-                    TextButton(
-                        onPressed: onDelete, child: const Text('Delete')),
+                  _CircleIconButton(
+                    icon: Icons.arrow_back,
+                    onTap: () => Navigator.of(context).maybePop(),
+                  ),
+                  const Expanded(
+                    child: Center(
+                      child: Text(
+                        'Message',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: _textPrimary,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                  _CircleIconButton(
+                    icon: Icons.more_vert,
+                    onTap: () {},
+                  ),
                 ],
               ),
-            ],
+            ),
+
+            // ─────────── Body ───────────
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                physics: const BouncingScrollPhysics(),
+                children: [
+                  // Search bar
+                  Container(
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 16),
+                        const Icon(Icons.search,
+                            color: _textSecondary, size: 22),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            style: const TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              color: _textPrimary,
+                            ),
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              hintText: 'Search any car...',
+                              hintStyle: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 14,
+                                color: _textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.mic_none,
+                            color: _textSecondary, size: 22),
+                        const SizedBox(width: 16),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 26),
+
+                  // Active Now
+                  const Text(
+                    'Active Now',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: _textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 74,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: _activeUsers.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 16),
+                      itemBuilder: (context, index) {
+                        return _ActiveAvatar(
+                          imageUrl: _activeUsers[index].imageUrl,
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+
+                  // Messages
+                  const Text(
+                    'Messages',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: _textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Message list
+                  ..._messages.map((m) => Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: _MessageTile(item: m),
+                      )),
+                ],
+              ),
+            ),
           ],
         ),
       ),
+
+      // ─────────── FAB ───────────
+      floatingActionButton: Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+          color: _accent,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: _accent.withOpacity(0.45),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () {},
+            child: const Icon(Icons.add, color: Colors.white, size: 30),
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
+}
 
-  bool get mine => message.mine;
+// ─────────────────────────────────────────────────────────────
+// Small widgets
+// ─────────────────────────────────────────────────────────────
 
-  IconData _attachmentIcon(AttachmentType type) {
-    return switch (type) {
-      AttachmentType.image => UniconsLine.image,
-      AttachmentType.video => UniconsLine.video,
-      AttachmentType.audio => UniconsLine.microphone,
-      AttachmentType.none => UniconsLine.comment,
-    };
+class _CircleIconButton extends StatelessWidget {
+  const _CircleIconButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFF3A3A3A), width: 1.2),
+        ),
+        child: Icon(icon, color: _InboxScreenState._textPrimary, size: 18),
+      ),
+    );
   }
+}
+
+class _ActiveAvatar extends StatelessWidget {
+  const _ActiveAvatar({required this.imageUrl});
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 66,
+      height: 66,
+      child: Stack(
+        children: [
+          Container(
+            width: 66,
+            height: 66,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFF4D4D), Color(0xFFFF8A8A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _InboxScreenState._bg,
+                image: DecorationImage(
+                  image: NetworkImage(imageUrl),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 2,
+            bottom: 2,
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                color: _InboxScreenState._online,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _InboxScreenState._bg,
+                  width: 2.5,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MessageTile extends StatelessWidget {
+  const _MessageTile({required this.item});
+  final _MessageItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: _InboxScreenState._surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          // Avatar + unread badge
+          SizedBox(
+            width: 54,
+            height: 54,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    image: DecorationImage(
+                      image: NetworkImage(item.imageUrl),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                if (item.unread > 0)
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: _InboxScreenState._accent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '${item.unread}',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          // Name + preview
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.name,
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: _InboxScreenState._textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.preview,
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: _InboxScreenState._textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Time
+          Text(
+            item.time,
+            style: const TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
+              color: _InboxScreenState._textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Data models (local)
+// ─────────────────────────────────────────────────────────────
+
+class _ActiveUser {
+  const _ActiveUser({required this.imageUrl});
+  final String imageUrl;
+}
+
+class _MessageItem {
+  const _MessageItem({
+    required this.name,
+    required this.preview,
+    required this.time,
+    required this.imageUrl,
+    required this.unread,
+  });
+  final String name;
+  final String preview;
+  final String time;
+  final String imageUrl;
+  final int unread;
 }

@@ -68,7 +68,7 @@ final GoRouter appRouter = GoRouter(
               name: AppRoutes.callsName,
               pageBuilder: (context, state) => _fadePage(
                 state,
-                const CallsScreen(),
+                const MapScreen(),
               ),
             ),
           ],
