@@ -18,6 +18,8 @@ class IdentityVerificationResult:
     score: float | None = None
     failure_reason: str = ""
     warnings: list[str] = field(default_factory=list)
+    extracted_fields: dict = field(default_factory=dict)
+    checks: list[dict] = field(default_factory=list)
 
 
 class IdentityVerificationProvider:

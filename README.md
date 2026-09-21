@@ -71,6 +71,18 @@ docker compose up --build backend
 The Docker API will be available at `http://localhost:8010/api/`, PostgreSQL on `localhost:5433`, MinIO on `localhost:9010`, and the MinIO console on `http://localhost:9011`.
 To customize secrets or service addresses, copy `backend/.env.example` to `backend/.env` and pass it to your deployment/runtime environment.
 
+## Identity verification runtime
+
+Verification performs upload validation, image quality checks, optional OCR, ID-number reuse detection, document-image reuse detection, and manual-review routing. Install the Python dependencies and the Tesseract binary for OCR extraction:
+
+```bash
+sudo apt-get install tesseract-ocr
+cd backend
+.venv/bin/pip install -r requirements.txt
+```
+
+Without Tesseract, submissions remain explicitly marked for manual review; they are never auto-approved from the user-entered ID number alone. Verification files use randomized storage paths and should be served only through authenticated, signed storage in production.
+
 ## Django API
 
 The local Django backend and Docker expose JSON endpoints under `http://localhost:8010/api/`.

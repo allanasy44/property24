@@ -7,6 +7,10 @@ from django.db import models
 from django.utils import timezone
 
 
+def verification_document_path(instance, filename):
+    return f"verification/{instance.user_id}/{uuid.uuid4().hex}.bin"
+
+
 class User(AbstractUser):
     class Roles(models.TextChoices):
         TENANT = "tenant", "Tenant"
@@ -23,6 +27,16 @@ class User(AbstractUser):
     google_email_verified = models.BooleanField(default=False)
     email_verified = models.BooleanField(default=False)
     phone_verified = models.BooleanField(default=False)
+    parent_landlord = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="managed_agent_accounts",
+        limit_choices_to={"role": Roles.LANDLORD},
+    )
+    agent_permissions = models.JSONField(default=list, blank=True)
+    agent_is_active = models.BooleanField(default=True)
     profile_picture = models.ImageField(upload_to="accounts/profile-pictures/", blank=True)
     cover_photo = models.ImageField(upload_to="accounts/cover-photos/", blank=True)
     profile_picture_url = models.URLField(blank=True)
@@ -197,6 +211,7 @@ class VerificationRequest(models.Model):
     role = models.CharField(max_length=16, choices=User.Roles.choices)
     national_id_number = models.CharField(max_length=64, blank=True)
     id_number_hash = models.CharField(max_length=128, blank=True, db_index=True)
+    document_fingerprint = models.CharField(max_length=128, blank=True, db_index=True)
     verification_method = models.CharField(max_length=40, default="local_ocr")
     verification_provider = models.CharField(max_length=80, default="local_ocr")
     provider_reference = models.CharField(max_length=120, blank=True)
@@ -211,17 +226,20 @@ class VerificationRequest(models.Model):
     document_type = models.CharField(max_length=40, blank=True)
     residential_address = models.TextField(blank=True)
     address_gps_confirmed = models.BooleanField(default=False)
-    proof_of_address_document = models.FileField(upload_to="verification/address/", blank=True)
+    proof_of_address_document = models.FileField(upload_to=verification_document_path, blank=True)
     proof_of_address_confirmed = models.BooleanField(default=False)
     politically_exposed_person = models.BooleanField(default=False)
     declaration_accepted = models.BooleanField(default=False)
-    id_front_document = models.FileField(upload_to="verification/id-front/", blank=True)
-    id_back_document = models.FileField(upload_to="verification/id-back/", blank=True)
+    id_front_document = models.FileField(upload_to=verification_document_path, blank=True)
+    id_back_document = models.FileField(upload_to=verification_document_path, blank=True)
     extracted_national_id_number = models.CharField(max_length=64, blank=True)
+    extracted_full_name = models.CharField(max_length=160, blank=True)
+    extracted_date_of_birth = models.CharField(max_length=32, blank=True)
+    ocr_confidence = models.CharField(max_length=32, blank=True)
     identity_confirmed = models.BooleanField(default=False)
-    liveness_document = models.FileField(upload_to="verification/liveness/", blank=True)
-    selfie_document = models.FileField(upload_to="verification/selfies/", blank=True)
-    ownership_or_authorization_document = models.FileField(upload_to="verification/ownership/", blank=True)
+    liveness_document = models.FileField(upload_to=verification_document_path, blank=True)
+    selfie_document = models.FileField(upload_to=verification_document_path, blank=True)
+    ownership_or_authorization_document = models.FileField(upload_to=verification_document_path, blank=True)
     estate_agency_registration = models.CharField(max_length=120, blank=True)
     agency_name = models.CharField(max_length=160, blank=True)
     contact_details = models.TextField(blank=True)
@@ -259,6 +277,16 @@ class Property(models.Model):
         REJECTED = "rejected", "Rejected"
         ARCHIVED = "archived", "Archived"
 
+    class ListingIntent(models.TextChoices):
+        RENT = "rent", "For rent"
+        SALE = "sale", "For sale"
+
+    class AvailabilityStatus(models.TextChoices):
+        AVAILABLE = "available", "Available"
+        RESERVED = "reserved", "Reserved"
+        RENTED = "rented", "Rented"
+        SOLD = "sold", "Sold"
+
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="properties")
     agent = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="managed_properties")
     title = models.CharField(max_length=180)
@@ -269,6 +297,8 @@ class Property(models.Model):
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     show_exact_location = models.BooleanField(default=False)
+    listing_intent = models.CharField(max_length=12, choices=ListingIntent.choices, default=ListingIntent.RENT, db_index=True)
+    availability_status = models.CharField(max_length=16, choices=AvailabilityStatus.choices, default=AvailabilityStatus.AVAILABLE, db_index=True)
     monthly_rent = models.DecimalField(max_digits=12, decimal_places=2)
     deposit_required = models.DecimalField(max_digits=12, decimal_places=2)
     property_type = models.CharField(max_length=32, choices=PropertyType.choices)

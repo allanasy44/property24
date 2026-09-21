@@ -1,4 +1,5 @@
 import json
+import shutil
 from io import BytesIO
 from datetime import timedelta
 from unittest.mock import patch
@@ -453,7 +454,7 @@ class RentalApiTests(TestCase):
         self.assertEqual(self.tenant.phone, phone)
         self.assertTrue(self.tenant.phone_verified)
 
-    def test_verification_id_extract_requires_manual_entry_without_ocr(self):
+    def test_verification_id_extract_reports_ocr_state(self):
         response = self.client.post(
             "/api/verifications/id-extract/",
             data={
@@ -466,7 +467,8 @@ class RentalApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["extracted_national_id_number"], "")
-        self.assertEqual(response.json()["confidence"], "manual_entry_required")
+        expected_confidence = "ocr_uncertain" if shutil.which("tesseract") else "manual_entry_required"
+        self.assertEqual(response.json()["confidence"], expected_confidence)
         self.assertTrue(response.json()["requires_confirmation"])
 
     def test_verified_landlord_can_create_agent_account(self):

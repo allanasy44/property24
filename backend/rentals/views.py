@@ -244,7 +244,14 @@ def is_admin(user):
 
 
 def can_manage_property(user, prop):
-    return is_admin(user) or prop.owner_id == user.id or prop.agent_id == user.id
+    if is_admin(user) or prop.owner_id == user.id:
+        return True
+    return (
+        prop.agent_id == user.id
+        and user.role == User.Roles.AGENT
+        and getattr(user, "agent_is_active", True)
+        and agent_has_permission(user, "list_properties")
+    )
 
 
 def allowed_conversation_participant_ids(user, prop, requested_ids):
@@ -282,8 +289,31 @@ def user_properties(user):
     if user.role == User.Roles.LANDLORD:
         return Property.objects.filter(owner=user)
     if user.role == User.Roles.AGENT:
-        return Property.objects.filter(Q(agent=user) | Q(owner=user))
+        landlord_id = getattr(user, "parent_landlord_id", None)
+        if not landlord_id or not getattr(user, "agent_is_active", True):
+            return Property.objects.none()
+        return Property.objects.filter(owner_id=landlord_id, agent=user)
     return Property.objects.none()
+
+
+def agent_has_permission(agent, permission):
+    if not agent or agent.role != User.Roles.AGENT:
+        return False
+    if not getattr(agent, "agent_is_active", True) or not getattr(agent, "parent_landlord_id", None):
+        return False
+    permissions = getattr(agent, "agent_permissions", None) or []
+    return permission in permissions or "manage_listings" in permissions
+
+
+def assigned_agent_for_landlord(landlord, agent_id):
+    if not agent_id:
+        return None
+    return User.objects.filter(
+        pk=agent_id,
+        role=User.Roles.AGENT,
+        parent_landlord=landlord,
+        agent_is_active=True,
+    ).first()
 
 
 def has_completed_viewing(tenant, prop):
@@ -465,6 +495,7 @@ def auth_profile(request):
             if user.profile_picture:
                 delete_file(user.profile_picture)
             user.profile_picture = optimize_image_upload(upload)
+            user.profile_picture.name = f"profile-{uuid.uuid4().hex}.jpg"
             user.profile_picture_url = ""
             changed_fields.extend(["profile_picture", "profile_picture_url"])
         if files.get("cover_photo"):
@@ -618,7 +649,10 @@ def landlord_agents_collection(request):
         return json_error("Landlord verification is required before creating agents", status=403)
 
     if request.method == "GET":
-        agents = User.objects.filter(role=User.Roles.AGENT).order_by("full_name", "email")
+        agents = User.objects.filter(
+            role=User.Roles.AGENT,
+            parent_landlord=acting_user,
+        ).order_by("full_name", "email")
         return JsonResponse({"results": [serialize_user(agent) for agent in agents]})
 
     data = request_data(request)
@@ -651,10 +685,63 @@ def landlord_agents_collection(request):
             phone=phone,
             role=User.Roles.AGENT,
             is_verified=False,
+            parent_landlord=acting_user,
+            agent_permissions=normalise_agent_permissions(data.get("permissions")),
+            agent_is_active=True,
         )
     except IntegrityError:
         return json_error("An account with these details already exists")
     return JsonResponse({"user": serialize_user(agent), "temporary_password_created": not bool(data.get("password"))}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PATCH", "DELETE", "OPTIONS"])
+def landlord_agent_detail(request, agent_id):
+    acting_user, auth_response = require_roles(request, {User.Roles.LANDLORD})
+    if auth_response:
+        return auth_response
+    agent = get_object_or_404(
+        User,
+        pk=agent_id,
+        role=User.Roles.AGENT,
+        parent_landlord=acting_user,
+    )
+    if request.method == "GET":
+        return JsonResponse(serialize_user(agent))
+    if request.method == "DELETE":
+        agent.agent_is_active = False
+        agent.is_active = False
+        agent.save(update_fields=["agent_is_active", "is_active"])
+        Property.objects.filter(agent=agent).update(agent=None)
+        return JsonResponse({"removed": True, "user": serialize_user(agent)})
+
+    data = request_data(request)
+    if data is None:
+        return json_error("Invalid request body")
+    changed_fields = []
+    if data.get("permissions") is not None:
+        agent.agent_permissions = normalise_agent_permissions(data.get("permissions"))
+        changed_fields.append("agent_permissions")
+    if data.get("agent_is_active") is not None or data.get("active") is not None:
+        active = to_bool(data.get("agent_is_active") if data.get("agent_is_active") is not None else data.get("active"))
+        agent.agent_is_active = active
+        agent.is_active = active
+        changed_fields.extend(["agent_is_active", "is_active"])
+        if not active:
+            Property.objects.filter(agent=agent).update(agent=None)
+    if data.get("name") is not None or data.get("full_name") is not None:
+        agent.full_name = str(data.get("name") or data.get("full_name") or "").strip()
+        changed_fields.append("full_name")
+    if data.get("phone") is not None:
+        phone = normalize_phone(data.get("phone"))
+        phone_error = validate_phone_field(phone, required=False)
+        if phone_error:
+            return json_error(phone_error)
+        agent.phone = phone
+        changed_fields.append("phone")
+    if changed_fields:
+        agent.save(update_fields=sorted(set(changed_fields)))
+    return JsonResponse(serialize_user(agent))
 
 @csrf_exempt
 @require_http_methods(["GET", "POST", "OPTIONS"])
@@ -729,15 +816,17 @@ def properties_collection(request):
 
     if acting_user.role == User.Roles.LANDLORD:
         owner = acting_user
-        agent = User.objects.filter(pk=data.get("agent_id"), role=User.Roles.AGENT).first() if data.get("agent_id") else None
+        agent = assigned_agent_for_landlord(acting_user, data.get("agent_id"))
+        if data.get("agent_id") and agent is None:
+            return json_error("agent_id must belong to an active agent created by this landlord")
     elif acting_user.role == User.Roles.AGENT:
-        owner = User.objects.filter(pk=data.get("owner_id")).first() if data.get("owner_id") else acting_user
-        if owner is None:
-            return json_error("owner_id was not found")
+        if not agent_has_permission(acting_user, "list_properties"):
+            return json_error("This agent account cannot create landlord listings", status=403)
+        owner = acting_user.parent_landlord
         agent = acting_user
     else:
         owner = get_object_or_404(User, pk=data.get("owner_id"))
-        agent = User.objects.filter(pk=data.get("agent_id")).first() if data.get("agent_id") else None
+        agent = assigned_agent_for_landlord(owner, data.get("agent_id"))
     if len(data.get("photos") or []) > MAX_PROPERTY_PHOTOS:
         return json_error(f"A property can have a maximum of {MAX_PROPERTY_PHOTOS} photos", status=400)
 
@@ -763,6 +852,8 @@ def properties_collection(request):
         latitude=latitude,
         longitude=longitude,
         show_exact_location=to_bool(data.get("show_exact_location")),
+        listing_intent=normalise_choice(data.get("listing_intent") or data.get("intent"), Property.ListingIntent, Property.ListingIntent.RENT),
+        availability_status=normalise_choice(data.get("availability_status"), Property.AvailabilityStatus, Property.AvailabilityStatus.AVAILABLE),
         monthly_rent=parse_decimal(data.get("monthly_rent") or data.get("price"), "monthly_rent"),
         deposit_required=parse_decimal(data.get("deposit_required") or data.get("deposit"), "deposit_required"),
         property_type=normalise_choice(data.get("property_type") or data.get("type"), Property.PropertyType, Property.PropertyType.HOUSE),
@@ -813,15 +904,20 @@ def property_detail(request, property_id):
     agent = prop.agent
     if data.get("owner_id") and is_admin(acting_user):
         owner = get_object_or_404(User, pk=data["owner_id"])
-    if data.get("agent_id") and is_admin(acting_user):
-        agent = get_object_or_404(User, pk=data["agent_id"])
+    if data.get("agent_id") is not None:
+        if is_admin(acting_user) or acting_user.id == owner.id:
+            agent = assigned_agent_for_landlord(owner, data.get("agent_id")) if data.get("agent_id") else None
+            if data.get("agent_id") and agent is None:
+                return json_error("agent_id must belong to an active agent created by this landlord")
+        else:
+            return forbidden()
 
     listing_status = data.get("listing_status", prop.listing_status) if is_admin(acting_user) else prop.listing_status
     validation_error = validate_listing_participants(owner, agent, listing_status)
     if validation_error:
         return json_error(validation_error)
 
-    apply_property_updates(prop, data, owner, agent)
+    apply_property_updates(prop, data, owner, agent, acting_user)
     prop.save()
     payload = serialize_property(prop)
     if settings.AI_ASSISTED_REVIEW_ENABLED:
@@ -951,7 +1047,7 @@ def property_videos_collection(request, property_id):
 
 
 @csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
+@require_http_methods(["GET", "POST", "DELETE", "OPTIONS"])
 def saved_properties_collection(request, property_id):
     prop = get_object_or_404(Property, pk=property_id)
     acting_user, auth_response = require_roles(request, {User.Roles.TENANT})
@@ -963,6 +1059,38 @@ def saved_properties_collection(request, property_id):
     prop.saved_count = prop.saved_by.count()
     prop.save(update_fields=["saved_count"])
     return JsonResponse({"id": saved.id, "property_id": prop.id, "tenant_id": tenant.id, "saved_count": prop.saved_count}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "OPTIONS"])
+def saved_reserved_properties_collection(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    if acting_user.role != User.Roles.TENANT:
+        return JsonResponse({"results": []})
+    now = timezone.now()
+    PropertyHold.objects.filter(
+        tenant=acting_user,
+        released_at__isnull=True,
+        expires_at__lte=now,
+    ).update(released_at=now)
+    saved_ids = set(SavedProperty.objects.filter(tenant=acting_user).values_list("property_id", flat=True))
+    held_ids = set(PropertyHold.objects.filter(
+        tenant=acting_user,
+        released_at__isnull=True,
+        expires_at__gt=now,
+    ).values_list("property_id", flat=True))
+    properties = Property.objects.filter(
+        Q(id__in=saved_ids) | Q(id__in=held_ids),
+    ).select_related("owner", "agent").prefetch_related("photos", "videos")
+    results = []
+    for prop in properties.order_by("-updated_at"):
+        payload = serialize_property(prop)
+        payload["saved"] = prop.id in saved_ids
+        payload["reserved"] = prop.id in held_ids
+        results.append(payload)
+    return JsonResponse({"results": results})
 
 
 @csrf_exempt
@@ -1175,6 +1303,14 @@ def lease_sign(request, lease_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
+    if request.method == "GET":
+        saved = SavedProperty.objects.filter(property=prop, tenant=acting_user).first()
+        return JsonResponse({"saved": saved is not None, "property_id": prop.id})
+    if request.method == "DELETE":
+        SavedProperty.objects.filter(property=prop, tenant=acting_user).delete()
+        prop.saved_count = prop.saved_by.count()
+        prop.save(update_fields=["saved_count"])
+        return JsonResponse({"saved": False, "property_id": prop.id})
     data = request_json(request)
     if data is None:
         return json_error("Invalid JSON body")
@@ -1540,6 +1676,7 @@ def verification_id_extract(request):
     return JsonResponse({
         "extracted_national_id_number": extraction.document_number,
         "confidence": extraction.confidence,
+        "extracted_fields": extraction.extracted_fields,
         "requires_confirmation": True,
     })
 
@@ -1586,12 +1723,41 @@ def verifications_collection(request):
     provider_result = run_identity_verification_provider(data, files)
     confirmed_document_number = str(data.get("national_id_number") or "").strip()
     id_number_hash = hash_identity_number(confirmed_document_number)
+    document_fingerprint = fingerprint_identity_documents(files)
+    duplicate_document = bool(
+        document_fingerprint
+        and VerificationRequest.objects.exclude(user=user).filter(
+            document_fingerprint=document_fingerprint,
+            status__in=IDENTITY_ACTIVE_STATUSES,
+        ).exists()
+    )
     verification_status = provider_result_to_status(provider_result)
+    extracted_fields = provider_result.extracted_fields or {}
+    checks = list(provider_result.checks or [])
+    registered_tokens = set(normalize_person_name(user.full_name).split())
+    extracted_tokens = set(normalize_person_name(extracted_fields.get("raw_name_hint", "")).split())
+    if registered_tokens and extracted_tokens:
+        overlap = len(registered_tokens & extracted_tokens) / len(registered_tokens)
+        checks.append({
+            "type": "registered_name_match",
+            "result": "pass" if overlap >= 0.5 else "review",
+            "details": "OCR text is consistent with the registered name" if overlap >= 0.5 else "Registered name requires manual comparison",
+        })
+    else:
+        checks.append({"type": "registered_name_match", "result": "review", "details": "Name comparison requires manual review"})
+    checks.append({
+        "type": "duplicate_document",
+        "result": "review" if duplicate_document else "pass",
+        "details": "The same document image was submitted by another account" if duplicate_document else "No matching document image found",
+    })
+    if duplicate_document:
+        verification_status = VerificationRequest.Status.MANUAL_REVIEW
     verification = VerificationRequest.objects.create(
         user=user,
         role=requested_role,
         national_id_number=mask_identity_number(confirmed_document_number),
         id_number_hash=id_number_hash,
+        document_fingerprint=document_fingerprint,
         verification_method="local_ocr",
         verification_provider=provider_result.provider,
         provider_reference=provider_result.provider_reference,
@@ -1612,7 +1778,10 @@ def verifications_collection(request):
         declaration_accepted=to_bool(data.get("declaration_accepted")),
         id_front_document=files.get("id_front_document"),
         id_back_document=files.get("id_back_document"),
-        extracted_national_id_number=mask_identity_number(provider_result.extracted_document_number or data.get("extracted_national_id_number", "")),
+        extracted_national_id_number=mask_identity_number(provider_result.extracted_document_number or extracted_fields.get("document_number") or data.get("extracted_national_id_number", "")),
+        extracted_full_name=str(extracted_fields.get("raw_name_hint", ""))[:160],
+        extracted_date_of_birth=str(extracted_fields.get("date_of_birth", ""))[:32],
+        ocr_confidence=str(data.get("ocr_confidence") or ("available" if extracted_fields else "manual_review_required")),
         identity_confirmed=to_bool(data.get("identity_confirmed")),
         liveness_document=files.get("liveness_document"),
         selfie_document=files.get("selfie_document"),
@@ -1620,7 +1789,7 @@ def verifications_collection(request):
         estate_agency_registration=data.get("estate_agency_registration", ""),
         agency_name=data.get("agency_name", ""),
         contact_details=data.get("contact_details", ""),
-        checks=default_checks_for_role(data.get("role", user.role)),
+        checks=default_checks_for_role(data.get("role", user.role)) + checks,
         status=verification_status,
     )
     if verification.status == VerificationRequest.Status.VERIFIED:
@@ -2326,6 +2495,12 @@ def apply_property_filters(properties, params):
     property_type = params.get("property_type") or params.get("type")
     if property_type:
         properties = properties.filter(property_type=normalise_choice(property_type, Property.PropertyType, property_type))
+    listing_intent = params.get("listing_intent") or params.get("intent")
+    if listing_intent:
+        properties = properties.filter(listing_intent=normalise_choice(listing_intent, Property.ListingIntent, listing_intent))
+    availability_status = params.get("availability_status")
+    if availability_status:
+        properties = properties.filter(availability_status=normalise_choice(availability_status, Property.AvailabilityStatus, availability_status))
     if params.get("rent_min"):
         properties = properties.filter(monthly_rent__gte=parse_decimal(params["rent_min"], "rent_min"))
     if params.get("rent_max"):
@@ -2446,7 +2621,7 @@ def validate_verification_submission(request, data, role, user):
     return errors
 
 
-def apply_property_updates(prop, data, owner, agent):
+def apply_property_updates(prop, data, owner, agent, acting_user):
     prop.owner = owner
     prop.agent = agent
     text_fields = ["title", "description", "address", "city", "suburb", "water_availability", "parking"]
@@ -2459,6 +2634,12 @@ def apply_property_updates(prop, data, owner, agent):
         prop.deposit_required = parse_decimal(data["deposit_required"], "deposit_required")
     if data.get("property_type") is not None:
         prop.property_type = normalise_choice(data["property_type"], Property.PropertyType, prop.property_type)
+    if data.get("listing_intent") is not None or data.get("intent") is not None:
+        prop.listing_intent = normalise_choice(data.get("listing_intent") or data.get("intent"), Property.ListingIntent, prop.listing_intent)
+    if data.get("availability_status") is not None:
+        if not (is_admin(acting_user) or acting_user.id == owner.id):
+            raise PermissionError("Only the landlord or an administrator can change listing availability")
+        prop.availability_status = normalise_choice(data["availability_status"], Property.AvailabilityStatus, prop.availability_status)
     if data.get("bedrooms") is not None:
         prop.bedrooms = int(data["bedrooms"])
     if data.get("bathrooms") is not None:
@@ -2506,6 +2687,23 @@ def normalise_choice(value, choices, default):
         if normalized in {choice_value, choice_label.lower().replace(" ", "_")}:
             return choice_value
     return default
+
+
+def normalise_agent_permissions(value):
+    allowed = {
+        "list_properties",
+        "manage_listings",
+        "schedule_viewings",
+        "track_applications",
+        "message_clients",
+    }
+    if value is None or value == "":
+        return ["list_properties", "schedule_viewings", "message_clients"]
+    if isinstance(value, str):
+        raw_values = re.split(r"[,\\s]+", value)
+    else:
+        raw_values = list(value or [])
+    return sorted({str(item).strip() for item in raw_values if str(item).strip() in allowed})
 
 
 def make_receipt_number():
@@ -2643,6 +2841,24 @@ def hash_identity_number(value):
         return ""
     key = str(getattr(settings, "IDENTITY_DOCUMENT_HMAC_KEY", "") or settings.SECRET_KEY)
     return hmac.new(key.encode("utf-8"), normalized.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def normalize_person_name(value):
+    return re.sub(r"[^a-z0-9 ]", " ", str(value or "").lower()).replace("  ", " ").strip()
+
+
+def fingerprint_identity_documents(files):
+    digest = hashlib.sha256()
+    found = False
+    for field_name in ("id_front_document", "id_back_document"):
+        upload = files.get(field_name)
+        if not upload:
+            continue
+        found = True
+        upload.seek(0)
+        digest.update(upload.read())
+        upload.seek(0)
+    return digest.hexdigest() if found else ""
 
 
 def mask_identity_number(value):

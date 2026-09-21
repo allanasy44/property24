@@ -334,8 +334,21 @@ class _NotificationButton extends StatelessWidget {
 
   final Property24State state;
 
+  List<String> get notifications => [
+        for (final item in state.snapshot.conversations)
+          '${item.title}: ${item.preview}',
+        for (final item in state.snapshot.applications)
+          '${item.property}: application ${item.status.toLowerCase()}',
+        for (final item in state.snapshot.viewings)
+          '${item.property}: booking ${item.status.toLowerCase()}',
+        for (final item in state.snapshot.verifications)
+          'Verification ${item.status.toLowerCase()}: ${item.role}',
+        ...state.notifications,
+      ].where((item) => item.trim().isNotEmpty).toList(growable: false);
+
   @override
   Widget build(BuildContext context) {
+    final syncedNotifications = notifications;
     return Container(
       height: 44,
       width: 44,
@@ -352,21 +365,91 @@ class _NotificationButton extends StatelessWidget {
       ),
       child: IconButton(
         padding: EdgeInsets.zero,
-        onPressed: () {
-          showModalBottomSheet<void>(
-            context: context,
-            showDragHandle: true,
-            backgroundColor: Colors.white,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        onPressed: () => _openNotificationPanel(
+          context,
+          syncedNotifications,
+        ),
+        icon: Badge(
+          isLabelVisible: syncedNotifications.isNotEmpty,
+          backgroundColor: AppTheme.accent,
+          textColor: Colors.white,
+          label: Text(
+            '${syncedNotifications.length}',
+            style: const TextStyle(fontSize: 10),
+          ),
+          child: const Icon(
+            CupertinoIcons.bell,
+            color: AppTheme.textPrimary,
+            size: 24,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+void _openNotificationPanel(BuildContext context, List<String> notifications) {
+  final width = MediaQuery.sizeOf(context).width;
+  showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.black.withAlpha(71),
+    transitionDuration: const Duration(milliseconds: 260),
+    pageBuilder: (context, animation, secondaryAnimation) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: SafeArea(
+          left: false,
+          child: Material(
+            color: AppTheme.bgCard,
+            elevation: 12,
+            borderRadius: const BorderRadius.horizontal(
+              left: Radius.circular(24),
             ),
-            builder: (context) => Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
+            child: SizedBox(
+              width: width < 560 ? width * 0.92 : 440,
+              height: double.infinity,
+              child: _NotificationPanel(notifications: notifications),
+            ),
+          ),
+        ),
+      );
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(1, 0),
+          end: Offset.zero,
+        ).animate(curved),
+        child: child,
+      );
+    },
+  );
+}
+
+class _NotificationPanel extends StatelessWidget {
+  const _NotificationPanel({required this.notifications});
+
+  final List<String> notifications;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
                     'Notifications',
                     style: TextStyle(
                       fontSize: 20,
@@ -374,25 +457,38 @@ class _NotificationButton extends StatelessWidget {
                       color: AppTheme.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  for (final item in state.notifications)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(CupertinoIcons.bell),
-                      title: Text(item),
-                    ),
-                ],
-              ),
+                ),
+                IconButton(
+                  tooltip: 'Close notifications',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(CupertinoIcons.xmark),
+                ),
+              ],
             ),
-          );
-        },
-        icon: Badge(
-          label: Text(
-            '${state.notifications.length}',
-            style: const TextStyle(fontSize: 10),
-          ),
-          child: const Icon(CupertinoIcons.bell,
-              color: AppTheme.textPrimary, size: 20),
+            const SizedBox(height: 12),
+            Expanded(
+              child: notifications.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No new notifications',
+                        style: TextStyle(color: AppTheme.textMuted),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: notifications.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(color: AppTheme.border),
+                      itemBuilder: (context, index) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(
+                          CupertinoIcons.bell,
+                          color: AppTheme.accent,
+                        ),
+                        title: Text(notifications[index]),
+                      ),
+                    ),
+            ),
+          ],
         ),
       ),
     );

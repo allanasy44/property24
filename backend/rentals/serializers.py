@@ -10,6 +10,9 @@ def serialize_user(user):
         "cover_photo": account_media_url(user, "cover_photo"),
         "bio": user.bio,
         "last_seen_at": user.last_seen_at.isoformat() if user.last_seen_at else None,
+        "parent_landlord_id": user.parent_landlord_id,
+        "agent_permissions": user.agent_permissions if user.role == "agent" else [],
+        "agent_is_active": user.agent_is_active if user.role == "agent" else True,
     }
 
 
@@ -40,6 +43,8 @@ def serialize_property(prop):
         "latitude": str(prop.latitude) if prop.latitude is not None else "",
         "longitude": str(prop.longitude) if prop.longitude is not None else "",
         "show_exact_location": prop.show_exact_location,
+        "listing_intent": prop.listing_intent,
+        "availability_status": prop.availability_status,
         "monthly_rent": str(prop.monthly_rent),
         "deposit_required": str(prop.deposit_required),
         "property_type": prop.property_type,
@@ -139,6 +144,14 @@ def serialize_verification(verification):
         "name": str(verification.user),
         "role": verification.role,
         "checks": verification.checks,
+        "ocr_confidence": verification.ocr_confidence,
+        "extracted_date_of_birth": verification.extracted_date_of_birth,
+        "duplicate_document": any(
+            isinstance(check, dict)
+            and check.get("type") == "duplicate_document"
+            and check.get("result") == "review"
+            for check in verification.checks
+        ),
         "phone_verified": verification.phone_verified,
         "status": verification.status,
         "reviewed_by": str(verification.reviewed_by) if verification.reviewed_by else "",

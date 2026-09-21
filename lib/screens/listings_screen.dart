@@ -376,6 +376,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _audio = TextEditingController();
     _type =
         (property?.propertyType.toLowerCase().replaceAll(' ', '_') ?? 'house');
+    _intent = property?.listingIntent == 'sale' ? 'Sale' : 'Rent';
     _furnished = property?.furnished ?? false;
     _solar = property?.solarPower ?? false;
     _borehole = property?.borehole ?? false;
@@ -732,6 +733,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
       latitude: _latitude.text.trim(),
       longitude: _longitude.text.trim(),
       showExactLocation: _showExactLocation,
+      listingIntent: _intent.toLowerCase(),
       monthlyRent: _rent.text.trim(),
       depositRequired: _deposit.text.trim(),
       propertyType: _type,

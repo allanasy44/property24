@@ -203,6 +203,8 @@ class PropertyListing {
     required this.latitude,
     required this.longitude,
     required this.showExactLocation,
+    required this.listingIntent,
+    required this.availabilityStatus,
     required this.monthlyRent,
     required this.depositRequired,
     required this.propertyType,
@@ -223,6 +225,8 @@ class PropertyListing {
     required this.applicationsCount,
     required this.owner,
     required this.agent,
+    this.saved = false,
+    this.reserved = false,
   });
 
   factory PropertyListing.fromJson(Map<String, dynamic> json) {
@@ -236,6 +240,8 @@ class PropertyListing {
       latitude: _coordinateValue(json, 'latitude', 0),
       longitude: _coordinateValue(json, 'longitude', 1),
       showExactLocation: json['show_exact_location'] == true,
+      listingIntent: textValue(json, 'listing_intent', 'rent'),
+      availabilityStatus: textValue(json, 'availability_status', 'available'),
       monthlyRent: textValue(json, 'monthly_rent', '0'),
       depositRequired: textValue(json, 'deposit_required', '0'),
       propertyType: titleize(json['property_type']),
@@ -260,6 +266,8 @@ class PropertyListing {
       agent: json['agent'] is Map<String, dynamic>
           ? AccountUser.fromJson(json['agent'] as Map<String, dynamic>)
           : null,
+      saved: json['saved'] == true,
+      reserved: json['reserved'] == true,
     );
   }
 
@@ -272,6 +280,8 @@ class PropertyListing {
   final num? latitude;
   final num? longitude;
   final bool showExactLocation;
+  final String listingIntent;
+  final String availabilityStatus;
   final String monthlyRent;
   final String depositRequired;
   final String propertyType;
@@ -292,6 +302,8 @@ class PropertyListing {
   final int applicationsCount;
   final AccountUser? owner;
   final AccountUser? agent;
+  final bool saved;
+  final bool reserved;
 
   AccountUser? get supplier => agent ?? owner;
   String get rentLabel => money(monthlyRent, suffix: '/ month');
@@ -556,6 +568,9 @@ class VerificationItem {
     required this.role,
     required this.status,
     required this.checks,
+    required this.ocrConfidence,
+    required this.extractedDateOfBirth,
+    required this.duplicateDocument,
   });
 
   factory VerificationItem.fromJson(Map<String, dynamic> json) {
@@ -564,7 +579,15 @@ class VerificationItem {
       name: textValue(json, 'name'),
       role: titleize(json['role']),
       status: titleize(json['status']),
-      checks: List<String>.from(json['checks'] ?? const []),
+      checks: (json['checks'] as List<dynamic>? ?? const []).map((check) {
+        if (check is Map<String, dynamic>) {
+          return '${titleize(check['type'])}: ${check['details'] ?? check['result'] ?? 'review'}';
+        }
+        return '$check';
+      }).toList(),
+      ocrConfidence: textValue(json, 'ocr_confidence'),
+      extractedDateOfBirth: textValue(json, 'extracted_date_of_birth'),
+      duplicateDocument: json['duplicate_document'] == true,
     );
   }
 
@@ -573,6 +596,9 @@ class VerificationItem {
   final String role;
   final String status;
   final List<String> checks;
+  final String ocrConfidence;
+  final String extractedDateOfBirth;
+  final bool duplicateDocument;
 }
 
 class ViewingItem {
@@ -661,6 +687,43 @@ class ConversationItem {
   final List<AccountUser> participants;
 }
 
+enum CallMode { voice, video }
+
+class CallLogItem {
+  const CallLogItem({
+    this.id = '',
+    required this.name,
+    required this.property,
+    required this.mode,
+    required this.direction,
+    required this.when,
+    this.status = '',
+  });
+
+  factory CallLogItem.fromJson(Map<String, dynamic> json) {
+    final status = titleize(json['status']);
+    return CallLogItem(
+      id: textValue(json, 'id'),
+      name: textValue(json, 'contact_name', 'Property24 contact'),
+      property: textValue(json, 'property_title', 'Property conversation'),
+      mode: textValue(json, 'mode', 'voice') == 'video'
+          ? CallMode.video
+          : CallMode.voice,
+      direction: status == 'Missed' ? 'Missed' : 'Call',
+      when: localDate(json['created_at'], 'Recent'),
+      status: status,
+    );
+  }
+
+  final String id;
+  final String name;
+  final String property;
+  final CallMode mode;
+  final String direction;
+  final String when;
+  final String status;
+}
+
 class PlatformSnapshot {
   const PlatformSnapshot({
     required this.properties,
@@ -671,6 +734,8 @@ class PlatformSnapshot {
     required this.verifications,
     required this.conversations,
     required this.viewings,
+    required this.calls,
+    required this.savedProperties,
   });
 
   factory PlatformSnapshot.empty() {
@@ -683,6 +748,8 @@ class PlatformSnapshot {
       verifications: [],
       conversations: [],
       viewings: [],
+      calls: [],
+      savedProperties: [],
     );
   }
 
@@ -694,4 +761,6 @@ class PlatformSnapshot {
   final List<VerificationItem> verifications;
   final List<ConversationItem> conversations;
   final List<ViewingItem> viewings;
+  final List<CallLogItem> calls;
+  final List<PropertyListing> savedProperties;
 }

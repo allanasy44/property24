@@ -51,11 +51,6 @@ class _InboxScreenState extends State<InboxScreen> {
                     ),
                   ),
                 ),
-                IconButton.filled(
-                  tooltip: 'Refresh',
-                  onPressed: state.refresh,
-                  icon: const Icon(CupertinoIcons.refresh),
-                ),
               ],
             ),
             const SizedBox(height: 14),

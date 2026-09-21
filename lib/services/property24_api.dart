@@ -58,6 +58,7 @@ class PropertyDraft {
     this.latitude,
     this.longitude,
     this.showExactLocation = false,
+    this.listingIntent = 'rent',
     required this.monthlyRent,
     required this.depositRequired,
     required this.propertyType,
@@ -80,6 +81,7 @@ class PropertyDraft {
   final String? latitude;
   final String? longitude;
   final bool showExactLocation;
+  final String listingIntent;
   final String monthlyRent;
   final String depositRequired;
   final String propertyType;
@@ -105,6 +107,7 @@ class PropertyDraft {
       if (longitude != null && longitude!.trim().isNotEmpty)
         'longitude': longitude!.trim(),
       'show_exact_location': showExactLocation,
+      'listing_intent': listingIntent,
       'monthly_rent': monthlyRent.replaceAll(RegExp(r'[^0-9.]'), ''),
       'deposit_required': depositRequired.replaceAll(RegExp(r'[^0-9.]'), ''),
       'property_type': propertyType.toLowerCase().replaceAll(' ', '_'),
@@ -247,7 +250,7 @@ class Property24Api {
     bool removeProfilePicture = false,
   }) async {
     final request = http.MultipartRequest(
-      'PATCH',
+      'POST',
       AppConfig.apiUri('auth/profile/'),
     );
     request.headers.addAll(_multipartHeaders(token));
@@ -334,6 +337,9 @@ class Property24Api {
     Uint8List? ownershipBytes,
     String? ownershipName,
     String? ownershipMimeType,
+    String? estateAgencyRegistration,
+    String? agencyName,
+    String? contactDetails,
   }) async {
     final request = http.MultipartRequest(
       'POST',
@@ -350,6 +356,12 @@ class Property24Api {
       'privacy_notice_accepted': 'true',
       'declaration_accepted': 'true',
       'phone_verified': phoneVerified ? 'true' : 'false',
+      if (estateAgencyRegistration?.trim().isNotEmpty == true)
+        'estate_agency_registration': estateAgencyRegistration!.trim(),
+      if (agencyName?.trim().isNotEmpty == true)
+        'agency_name': agencyName!.trim(),
+      if (contactDetails?.trim().isNotEmpty == true)
+        'contact_details': contactDetails!.trim(),
     });
     request.files.add(
       http.MultipartFile.fromBytes(
@@ -410,7 +422,9 @@ class Property24Api {
       _get('applications/', token: token),
       _get('verifications/', token: token),
       _get('conversations/', token: token),
+      _get('calls/', token: token),
       _get('viewings/', token: token),
+      _get('saved-properties/', token: token),
     ]);
 
     return PlatformSnapshot(
@@ -425,7 +439,10 @@ class Property24Api {
           _results(responses[4]).map(VerificationItem.fromJson).toList(),
       conversations:
           _results(responses[5]).map(ConversationItem.fromJson).toList(),
-      viewings: _results(responses[6]).map(ViewingItem.fromJson).toList(),
+      calls: _results(responses[6]).map(CallLogItem.fromJson).toList(),
+      viewings: _results(responses[7]).map(ViewingItem.fromJson).toList(),
+      savedProperties:
+          _results(responses[8]).map(PropertyListing.fromJson).toList(),
     );
   }
 
@@ -465,6 +482,19 @@ class Property24Api {
 
   Future<void> deleteProperty(String token, String propertyId) async {
     await _delete('properties/$propertyId/', token: token);
+  }
+
+  Future<void> toggleSavedProperty(
+    String token,
+    String propertyId, {
+    required bool saved,
+  }) async {
+    final path = 'properties/$propertyId/save/';
+    if (saved) {
+      await _post(path, token: token, body: const {});
+    } else {
+      await _delete(path, token: token);
+    }
   }
 
   Future<void> requestViewing(String token, String propertyId) async {
@@ -654,6 +684,8 @@ extension on PlatformSnapshot {
     List<VerificationItem>? verifications,
     List<ConversationItem>? conversations,
     List<ViewingItem>? viewings,
+    List<CallLogItem>? calls,
+    List<PropertyListing>? savedProperties,
   }) {
     return PlatformSnapshot(
       properties: properties ?? this.properties,
@@ -664,6 +696,8 @@ extension on PlatformSnapshot {
       verifications: verifications ?? this.verifications,
       conversations: conversations ?? this.conversations,
       viewings: viewings ?? this.viewings,
+      calls: calls ?? this.calls,
+      savedProperties: savedProperties ?? this.savedProperties,
     );
   }
 }

@@ -26,22 +26,7 @@ class Property24State extends ChangeNotifier {
   final List<String> smartAlerts = <String>[];
   final List<String> notifications = <String>[];
   final List<ChatMessageDraft> localChatMessages = <ChatMessageDraft>[];
-  final List<CallLogItem> callHistory = <CallLogItem>[
-    const CallLogItem(
-      name: 'Tariro Moyo',
-      property: 'Borrowdale garden flat',
-      mode: CallMode.video,
-      direction: 'Missed',
-      when: 'Today, 09:42',
-    ),
-    const CallLogItem(
-      name: 'Nyasha Properties',
-      property: 'Avondale townhouse',
-      mode: CallMode.voice,
-      direction: 'Outgoing',
-      when: 'Yesterday, 16:10',
-    ),
-  ];
+  List<CallLogItem> get callHistory => snapshot.calls;
 
   String? get token => _token;
   bool get signedIn => _token != null && user != null;
@@ -229,6 +214,12 @@ class Property24State extends ChangeNotifier {
     required Uint8List idBackBytes,
     required String idBackName,
     required String idBackMimeType,
+    Uint8List? ownershipBytes,
+    String? ownershipName,
+    String? ownershipMimeType,
+    String? estateAgencyRegistration,
+    String? agencyName,
+    String? contactDetails,
   }) async {
     final activeToken = _requireToken();
     final activeUser = user;
@@ -240,8 +231,6 @@ class Property24State extends ChangeNotifier {
       role: activeUser.role.apiValue,
       name: activeUser.name,
       phone: activeUser.phone,
-      // Newly required by Property24Api.submitIdentityVerification.
-      // If your AccountUser uses a different field name, change it here.
       phoneVerified: activeUser.phoneVerified,
       nationalIdNumber: nationalIdNumber,
       idFrontBytes: idFrontBytes,
@@ -250,6 +239,12 @@ class Property24State extends ChangeNotifier {
       idBackBytes: idBackBytes,
       idBackName: idBackName,
       idBackMimeType: idBackMimeType,
+      ownershipBytes: ownershipBytes,
+      ownershipName: ownershipName,
+      ownershipMimeType: ownershipMimeType,
+      estateAgencyRegistration: estateAgencyRegistration,
+      agencyName: agencyName,
+      contactDetails: contactDetails,
     );
     final session = await _api.me(activeToken);
     user = session.user;
@@ -341,11 +336,16 @@ class Property24State extends ChangeNotifier {
     await refresh();
   }
 
-  void toggleSaved(PropertyListing property) {
-    if (!savedPropertyIds.add(property.id)) {
+  Future<void> toggleSaved(PropertyListing property) async {
+    final activeToken = _requireToken();
+    final saved = !savedPropertyIds.contains(property.id);
+    await _api.toggleSavedProperty(activeToken, property.id, saved: saved);
+    if (saved) {
+      savedPropertyIds.add(property.id);
+    } else {
       savedPropertyIds.remove(property.id);
     }
-    notifyListeners();
+    await refresh();
   }
 
   void toggleComparison(PropertyListing property) {
@@ -464,24 +464,6 @@ class Property24State extends ChangeNotifier {
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_tokenKey);
   }
-}
-
-enum CallMode { voice, video }
-
-class CallLogItem {
-  const CallLogItem({
-    required this.name,
-    required this.property,
-    required this.mode,
-    required this.direction,
-    required this.when,
-  });
-
-  final String name;
-  final String property;
-  final CallMode mode;
-  final String direction;
-  final String when;
 }
 
 enum AttachmentType { none, image, video, audio, location }
