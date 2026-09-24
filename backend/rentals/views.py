@@ -3171,6 +3171,7 @@ def create_public_account_from_otp(challenge):
             phone=challenge.phone,
             role=challenge.role,
             is_verified=False,
+            email_verified=True,
         )
         user.save()
     except IntegrityError:

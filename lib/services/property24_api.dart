@@ -177,14 +177,15 @@ class Property24Api {
     );
   }
 
-  Future<void> verifyRegistrationEmail({
+  Future<AuthSession> verifyRegistrationEmail({
     required String challengeId,
     required String code,
   }) async {
-    await _post(
+    final body = await _post(
       'auth/register/verify/',
       body: {'challenge_id': challengeId, 'code': code},
     );
+    return _authSessionFromBody(body);
   }
 
   Future<String> resendRegistrationEmail(String challengeId) async {

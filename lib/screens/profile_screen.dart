@@ -11,26 +11,6 @@ import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 
-class _ProfileInitials extends StatelessWidget {
-  const _ProfileInitials({required this.initials});
-
-  final String initials;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        initials.isEmpty ? 'P' : initials,
-        style: const TextStyle(
-          fontSize: 40,
-          fontWeight: FontWeight.w700,
-          color: AppTheme.textPrimary,
-        ),
-      ),
-    );
-  }
-}
-
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -63,6 +43,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
     final user = state.user;
+    final notificationCount = _profileNotifications(state).length;
     final bookingCount = _availableBookings(state).length;
 
     final name =
@@ -83,17 +64,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
           physics: const BouncingScrollPhysics(),
           children: [
-            // ─── Profile title ───
-            Center(
-              child: Text(
-                'Profile',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
-                  letterSpacing: 0.3,
+            // ─── Back arrow + "Profile" title ───
+            Row(
+              children: [
+                _CircleIconButton(
+                  icon: CupertinoIcons.back,
+                  onTap: () => Navigator.of(context).maybePop(),
                 ),
-              ),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      'Profile',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 40),
+              ],
             ),
             const SizedBox(height: 28),
 
@@ -109,18 +101,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       shape: BoxShape.circle,
                       color: AppTheme.bgCard,
                       border: Border.all(color: AppTheme.border, width: 2),
+                      image: hasImage
+                          ? DecorationImage(
+                              image: NetworkImage(user!.profilePicture),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: hasImage
-                        ? Image.network(
-                            user!.profilePicture,
-                            key: ValueKey(user.profilePicture),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _ProfileInitials(
-                              initials: initials,
+                    child: !hasImage
+                        ? Center(
+                            child: Text(
+                              initials.isEmpty ? 'P' : initials,
+                              style: TextStyle(
+                                fontSize: 40,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary,
+                              ),
                             ),
                           )
-                        : _ProfileInitials(initials: initials),
+                        : null,
                   ),
                   Positioned(
                     bottom: 2,
@@ -189,6 +188,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onTap: () => _openSettings(context),
             ),
             _MenuCardTile(
+              icon: CupertinoIcons.bell,
+              label: 'Notifications',
+              subtitle: notificationCount == 0
+                  ? 'No new synced updates'
+                  : '$notificationCount synced updates',
+              badge: notificationCount,
+              onTap: () => _openNotifications(context),
+            ),
+            _MenuCardTile(
               icon: CupertinoIcons.calendar,
               label: 'Available Bookings',
               subtitle: bookingCount == 0
@@ -198,15 +206,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onTap: () => _openBookings(context),
             ),
             _MenuCardTile(
+              icon: CupertinoIcons.person_2,
+              label: 'Help Center',
+              onTap: () => _openHelp(context),
+            ),
+            _MenuCardTile(
               icon: CupertinoIcons.checkmark_shield,
               label: 'Verification',
               subtitle: _verificationSummary(user),
               onTap: () => _openVerification(context, user),
-            ),
-            _MenuCardTile(
-              icon: CupertinoIcons.person_2,
-              label: 'Help Center',
-              onTap: () => _openHelp(context),
               showBottomSpacing: false,
             ),
 
@@ -238,6 +246,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  List<String> _profileNotifications(Property24State state) {
+    final items = <String>[
+      for (final item in state.snapshot.conversations)
+        '${item.title}: ${item.preview}',
+      for (final item in state.snapshot.applications)
+        '${item.property}: application ${item.status.toLowerCase()}',
+      for (final item in state.snapshot.viewings)
+        '${item.property}: booking ${item.status.toLowerCase()}',
+      for (final item in state.snapshot.verifications)
+        'Verification ${item.status.toLowerCase()}: ${item.role}',
+      ...state.notifications,
+    ];
+    return items.where((item) => item.trim().isNotEmpty).toList();
   }
 
   List<ViewingItem> _availableBookings(Property24State state) {
@@ -278,6 +301,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _openSidePanel<void>(
       context: context,
       child: _VerificationSheet(user: user),
+    );
+  }
+
+  void _openNotifications(BuildContext context) {
+    _openSidePanel<void>(
+      context: context,
+      child: _NotificationsPanel(notificationsBuilder: _profileNotifications),
     );
   }
 
@@ -454,6 +484,32 @@ class _MenuCardTile extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Circular outlined back button
+// ─────────────────────────────────────────────────────────────
+class _CircleIconButton extends StatelessWidget {
+  const _CircleIconButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: AppTheme.border, width: 1.2),
+        ),
+        child: Icon(icon, color: AppTheme.textPrimary, size: 18),
       ),
     );
   }
@@ -968,7 +1024,6 @@ class _ProfileEditorState extends State<_ProfileEditor> {
   Uint8List? _selectedImageBytes;
   bool _removeImage = false;
   bool _saving = false;
-  String? _saveError;
 
   @override
   void initState() {
@@ -1031,26 +1086,6 @@ class _ProfileEditorState extends State<_ProfileEditor> {
               const SizedBox(height: 12),
               _ThemedField(controller: _bio, label: 'Bio', maxLines: 3),
               const SizedBox(height: 18),
-              if (_saveError != null) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withAlpha(18),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.red.withAlpha(70)),
-                  ),
-                  child: Text(
-                    _saveError!,
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 12,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
@@ -1089,10 +1124,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
   }
 
   Future<void> _save() async {
-    setState(() {
-      _saving = true;
-      _saveError = null;
-    });
+    setState(() => _saving = true);
     try {
       await context.read<Property24State>().updateProfile(
             username: _username.text.trim(),
@@ -1107,11 +1139,8 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       if (mounted) Navigator.pop(context);
     } catch (exception) {
       if (mounted) {
-        setState(() {
-          _saveError = exception is ApiException
-              ? exception.message
-              : 'Profile could not be saved. Please try again.';
-        });
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1261,6 +1290,74 @@ class _ThemedField extends StatelessWidget {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: AppTheme.accent, width: 1.2),
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationsPanel extends StatelessWidget {
+  const _NotificationsPanel({required this.notificationsBuilder});
+  final List<String> Function(Property24State state) notificationsBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<Property24State>();
+    final notifications = notificationsBuilder(state);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _PanelHeader(
+              title: 'Notifications',
+              onClose: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => context.read<Property24State>().refresh(),
+                child: notifications.isEmpty
+                    ? ListView(
+                        children: [
+                          const SizedBox(height: 80),
+                          Icon(
+                            CupertinoIcons.bell_slash,
+                            color: AppTheme.textMuted,
+                            size: 40,
+                          ),
+                          const SizedBox(height: 12),
+                          Center(
+                            child: Text(
+                              'No synced notifications yet.',
+                              style: TextStyle(color: AppTheme.textMuted),
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        itemCount: notifications.length,
+                        separatorBuilder: (_, __) =>
+                            Divider(color: AppTheme.border, height: 1),
+                        itemBuilder: (context, index) {
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              CupertinoIcons.bell,
+                              color: AppTheme.accent,
+                            ),
+                            title: Text(
+                              notifications[index],
+                              style: TextStyle(color: AppTheme.textPrimary),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1473,16 +1570,11 @@ class _VerificationSheet extends StatefulWidget {
 class _VerificationSheetState extends State<_VerificationSheet> {
   final _code = TextEditingController();
   final _nationalId = TextEditingController();
-  final _agencyRegistration = TextEditingController();
-  final _agencyName = TextEditingController();
-  final _contactDetails = TextEditingController();
   final _picker = ImagePicker();
   XFile? _frontDocument;
   XFile? _backDocument;
-  XFile? _ownershipDocument;
   Uint8List? _frontBytes;
   Uint8List? _backBytes;
-  Uint8List? _ownershipBytes;
   String? _challengeId;
   String? _error;
   bool _busy = false;
@@ -1491,22 +1583,12 @@ class _VerificationSheetState extends State<_VerificationSheet> {
   void dispose() {
     _code.dispose();
     _nationalId.dispose();
-    _agencyRegistration.dispose();
-    _agencyName.dispose();
-    _contactDetails.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<Property24State>();
-    final user = state.user ?? widget.user;
-    final matchingVerifications = state.snapshot.verifications
-        .where(
-            (item) => item.role.toLowerCase() == user?.role.label.toLowerCase())
-        .toList();
-    final latestVerification =
-        matchingVerifications.isEmpty ? null : matchingVerifications.first;
+    final user = context.watch<Property24State>().user ?? widget.user;
     if (user == null) {
       return Padding(
         padding: const EdgeInsets.all(24),
@@ -1587,10 +1669,6 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                     : 'National ID review required',
                 verified: user.verified,
               ),
-              if (latestVerification != null && !user.verified) ...[
-                const SizedBox(height: 8),
-                _VerificationStatusCard(item: latestVerification),
-              ],
               if (!user.verified) ...[
                 const SizedBox(height: 12),
                 _ThemedField(
@@ -1603,46 +1681,18 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                   label: 'ID front image',
                   fileName: _frontDocument?.name,
                   selected: _frontBytes != null,
-                  onPick: () => _pickDocument(_VerificationUploadSlot.front),
+                  onPick: () => _pickDocument(front: true),
                 ),
                 const SizedBox(height: 10),
                 _DocumentPickerTile(
                   label: 'ID back image',
                   fileName: _backDocument?.name,
                   selected: _backBytes != null,
-                  onPick: () => _pickDocument(_VerificationUploadSlot.back),
+                  onPick: () => _pickDocument(front: false),
                 ),
-                if (user.role == AccountRole.landlord) ...[
-                  const SizedBox(height: 10),
-                  _DocumentPickerTile(
-                    label: 'Ownership or authorization image',
-                    fileName: _ownershipDocument?.name,
-                    selected: _ownershipBytes != null,
-                    onPick: () =>
-                        _pickDocument(_VerificationUploadSlot.ownership),
-                  ),
-                ],
-                if (user.role == AccountRole.agent) ...[
-                  const SizedBox(height: 12),
-                  _ThemedField(
-                    controller: _agencyRegistration,
-                    label: 'Estate agency registration',
-                  ),
-                  const SizedBox(height: 12),
-                  _ThemedField(
-                    controller: _agencyName,
-                    label: 'Agency name',
-                  ),
-                  const SizedBox(height: 12),
-                  _ThemedField(
-                    controller: _contactDetails,
-                    label: 'Business contact details',
-                    maxLines: 3,
-                  ),
-                ],
                 const SizedBox(height: 14),
                 Text(
-                  'Upload clear JPEG, PNG, or WEBP images. Files are checked for size, dimensions, quality, OCR availability, and duplicate reuse. Results may require manual review.',
+                  'Upload clear JPEG, PNG, or WEBP images. The backend validates file type, size, resolution, document readability, duplicate use, and consistency with your account before review.',
                   style: TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 12,
@@ -1674,7 +1724,7 @@ class _VerificationSheetState extends State<_VerificationSheet> {
     );
   }
 
-  Future<void> _pickDocument(_VerificationUploadSlot slot) async {
+  Future<void> _pickDocument({required bool front}) async {
     final image = await _picker.pickImage(
       source: ImageSource.gallery,
       maxWidth: 2600,
@@ -1685,19 +1735,12 @@ class _VerificationSheetState extends State<_VerificationSheet> {
     final bytes = await image.readAsBytes();
     if (!mounted) return;
     setState(() {
-      switch (slot) {
-        case _VerificationUploadSlot.front:
-          _frontDocument = image;
-          _frontBytes = bytes;
-          break;
-        case _VerificationUploadSlot.back:
-          _backDocument = image;
-          _backBytes = bytes;
-          break;
-        case _VerificationUploadSlot.ownership:
-          _ownershipDocument = image;
-          _ownershipBytes = bytes;
-          break;
+      if (front) {
+        _frontDocument = image;
+        _frontBytes = bytes;
+      } else {
+        _backDocument = image;
+        _backBytes = bytes;
       }
       _error = null;
     });
@@ -1753,26 +1796,6 @@ class _VerificationSheetState extends State<_VerificationSheet> {
       setState(() => _error = 'Upload the back of your ID');
       return;
     }
-    final user = context.read<Property24State>().user ?? widget.user;
-    if (user?.role == AccountRole.landlord &&
-        (_ownershipBytes == null || _ownershipDocument == null)) {
-      setState(() => _error = 'Upload ownership or authorization proof');
-      return;
-    }
-    if (user?.role == AccountRole.agent) {
-      if (_agencyRegistration.text.trim().isEmpty) {
-        setState(() => _error = 'Enter the estate agency registration');
-        return;
-      }
-      if (_agencyName.text.trim().isEmpty) {
-        setState(() => _error = 'Enter the agency name');
-        return;
-      }
-      if (_contactDetails.text.trim().isEmpty) {
-        setState(() => _error = 'Enter business contact details');
-        return;
-      }
-    }
     setState(() {
       _busy = true;
       _error = null;
@@ -1786,25 +1809,14 @@ class _VerificationSheetState extends State<_VerificationSheet> {
             idBackBytes: _backBytes!,
             idBackName: _backDocument!.name,
             idBackMimeType: _backDocument!.mimeType ?? '',
-            ownershipBytes: _ownershipBytes,
-            ownershipName: _ownershipDocument?.name,
-            ownershipMimeType: _ownershipDocument?.mimeType,
-            estateAgencyRegistration: _agencyRegistration.text.trim(),
-            agencyName: _agencyName.text.trim(),
-            contactDetails: _contactDetails.text.trim(),
           );
       if (mounted) {
         setState(() {
           _frontDocument = null;
           _backDocument = null;
-          _ownershipDocument = null;
           _frontBytes = null;
           _backBytes = null;
-          _ownershipBytes = null;
           _nationalId.clear();
-          _agencyRegistration.clear();
-          _agencyName.clear();
-          _contactDetails.clear();
         });
       }
     } catch (exception) {
@@ -1814,52 +1826,6 @@ class _VerificationSheetState extends State<_VerificationSheet> {
     }
   }
 }
-
-class _VerificationStatusCard extends StatelessWidget {
-  const _VerificationStatusCard({required this.item});
-
-  final VerificationItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final needsReview = item.status.toLowerCase().contains('review');
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.bgSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Latest result: ${item.status}',
-            style: TextStyle(
-              color: needsReview ? AppTheme.accent : AppTheme.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (item.ocrConfidence.isNotEmpty)
-            Text('OCR: ${item.ocrConfidence}',
-                style: TextStyle(color: AppTheme.textMuted)),
-          if (item.duplicateDocument)
-            Text('Duplicate document detected: manual review required',
-                style: TextStyle(color: AppTheme.accent)),
-          if (item.checks.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            for (final check in item.checks.take(5))
-              Text('• $check',
-                  style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-enum _VerificationUploadSlot { front, back, ownership }
 
 class _DocumentPickerTile extends StatelessWidget {
   const _DocumentPickerTile({

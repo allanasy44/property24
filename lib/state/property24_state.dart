@@ -130,10 +130,17 @@ class Property24State extends ChangeNotifier {
   }
 
   Future<void> verifyRegistrationEmail(String challengeId, String code) async {
-    await _api.verifyRegistrationEmail(
+    final session = await _api.verifyRegistrationEmail(
       challengeId: challengeId,
       code: code,
     );
+    _token = session.token;
+    user = session.user;
+    account = session.account;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_tokenKey, session.token);
+    snapshot = await _api.snapshot(token: session.token);
+    notifyListeners();
   }
 
   Future<String> resendRegistrationEmail(String challengeId) {

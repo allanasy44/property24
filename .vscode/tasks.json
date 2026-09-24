@@ -4,7 +4,7 @@
     {
       "label": "Property24: Backend API",
       "type": "shell",
-      "command": "DJANGO_ALLOWED_HOSTS='*' POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 REDIS_URL=redis://127.0.0.1:6379/0 OBJECT_STORAGE_ENDPOINT_URL=http://127.0.0.1:9010 backend/venv/bin/python backend/manage.py migrate && DJANGO_ALLOWED_HOSTS='*' POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 REDIS_URL=redis://127.0.0.1:6379/0 OBJECT_STORAGE_ENDPOINT_URL=http://127.0.0.1:9010 backend/venv/bin/python backend/manage.py runserver 0.0.0.0:8011",
+      "command": "docker compose up --build backend",
       "isBackground": true,
       "problemMatcher": [],
       "presentation": {

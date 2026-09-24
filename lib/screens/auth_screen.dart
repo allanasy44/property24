@@ -238,7 +238,13 @@ class _AuthScreenState extends State<AuthScreen> {
       await context.read<Property24State>().signInWithGoogle(widget.role);
       if (mounted) context.go(AppRoutes.homeScreen);
     } catch (exception) {
-      if (mounted) setState(() => _error = userFacingError(exception));
+      if (mounted) {
+        setState(() {
+          _error = exception is ApiException
+              ? exception.message
+              : userFacingError(exception);
+        });
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -413,12 +419,7 @@ class _AuthScreenState extends State<AuthScreen> {
           await state.verifyRegistrationEmail(
               _registrationChallengeId!, _emailCode.text.trim());
           if (!mounted) return;
-          setState(() {
-            _registrationChallengeId = null;
-            _registering = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Email verified. You can now sign in.')));
+          context.go(AppRoutes.homeScreen);
           return;
         }
         _registrationChallengeId = await state.register(
@@ -437,7 +438,13 @@ class _AuthScreenState extends State<AuthScreen> {
         if (mounted) context.go(AppRoutes.homeScreen);
       }
     } catch (exception) {
-      if (mounted) setState(() => _error = userFacingError(exception));
+      if (mounted) {
+        setState(() {
+          _error = exception is ApiException
+              ? exception.message
+              : userFacingError(exception);
+        });
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
