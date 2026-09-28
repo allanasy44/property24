@@ -2,6 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
+import 'package:provider/provider.dart';
+
+import '../models/rental_models.dart';
+import '../state/property24_state.dart';
+import '../services/property24_api.dart';
+import '../widgets/property_card.dart';
+import 'property_detail_screen.dart';
 import '../theme/app_theme.dart';
 
 class AiSearchScreen extends StatefulWidget {
@@ -21,6 +28,9 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
   static const _panel = Colors.white;
   static const _panelBorder = AppTheme.borderMid;
   static const _accent = AppTheme.accent;
+  AiSearchResponse? _response;
+  bool _searching = false;
+  String? _error;
   static const _text = AppTheme.textPrimary;
   static const _muted = AppTheme.textMuted;
 
@@ -87,6 +97,14 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
                     onClear: _controller.clear,
                     onSubmit: _submit,
                   ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: _SearchResults(
+                      response: _response,
+                      searching: _searching,
+                      error: _error,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -99,7 +117,69 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
   void _submit([String? value]) {
     final query = (value ?? _controller.text).trim();
     if (query.isEmpty) return;
-    Navigator.pop(context, query);
+    _runSearch(query);
+  }
+
+  Future<void> _runSearch(String query) async {
+    setState(() {
+      _searching = true;
+      _error = null;
+    });
+    try {
+      final response =
+          await context.read<Property24State>().searchWithAi(query);
+      if (!mounted) return;
+      setState(() => _response = response);
+    } catch (exception) {
+      if (!mounted) return;
+      setState(() => _error = userFacingError(exception));
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+}
+
+class _SearchResults extends StatelessWidget {
+  const _SearchResults(
+      {required this.response, required this.searching, required this.error});
+
+  final AiSearchResponse? response;
+  final bool searching;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    if (searching) return const Center(child: CircularProgressIndicator());
+    if (error != null)
+      return Center(
+          child: Text(error!, style: const TextStyle(color: Colors.redAccent)));
+    final result = response;
+    if (result == null) {
+      return const Center(
+          child: Text(
+              'Describe the home you need and I will rank live listings for you.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppTheme.textMuted, fontSize: 13)));
+    }
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 24),
+      children: [
+        Text(result.explanation,
+            style: const TextStyle(
+                color: AppTheme.textSecondary, fontSize: 13, height: 1.4)),
+        const SizedBox(height: 14),
+        for (final item in result.results)
+          PropertyCard(
+            property: item.property,
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => PropertyDetailScreen(property: item.property))),
+          ),
+        if (result.results.isEmpty)
+          const Padding(
+              padding: EdgeInsets.only(top: 28),
+              child: Center(child: Text('No matching live listings yet.'))),
+      ],
+    );
   }
 }
 

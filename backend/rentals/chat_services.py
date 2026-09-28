@@ -16,6 +16,7 @@ MAX_CHAT_BODY_LENGTH = 2000
 MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 MAX_TYPING_LENGTH = 120
 CHAT_GROUP_PREFIX = "conversation"
+PUBLIC_GROUP_PREFIX = "public"
 USER_GROUP_PREFIX = "user"
 
 User = get_user_model()
@@ -28,6 +29,9 @@ def conversation_group_name(conversation_id):
 def user_group_name(user_id):
     return f"{USER_GROUP_PREFIX}.{user_id}"
 
+
+def public_group_name():
+    return f"{PUBLIC_GROUP_PREFIX}.properties"
 
 def is_conversation_participant(user, conversation):
     return bool(user and user.is_authenticated and (is_admin(user) or conversation.participants.filter(id=user.id).exists()))
@@ -314,21 +318,39 @@ def broadcast_to_conversation(conversation_id, event_type, payload):
     channel_layer = get_channel_layer()
     if not channel_layer:
         return
-    async_to_sync(channel_layer.group_send)(
-        conversation_group_name(conversation_id),
-        {"type": "chat.event", "event": event_type, "payload": payload},
-    )
+    try:
+        async_to_sync(channel_layer.group_send)(
+            conversation_group_name(conversation_id),
+            {"type": "chat.event", "event": event_type, "payload": payload},
+        )
+    except Exception:
+        return
 
 
 def broadcast_to_user(user_id, event_type, payload):
     channel_layer = get_channel_layer()
     if not channel_layer:
         return
-    async_to_sync(channel_layer.group_send)(
-        user_group_name(user_id),
-        {"type": "chat.event", "event": event_type, "payload": payload},
-    )
+    try:
+        async_to_sync(channel_layer.group_send)(
+            user_group_name(user_id),
+            {"type": "chat.event", "event": event_type, "payload": payload},
+        )
+    except Exception:
+        return
 
+
+def broadcast_to_public(event_type, payload):
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        return
+    try:
+        async_to_sync(channel_layer.group_send)(
+            public_group_name(),
+            {"type": "chat.event", "event": event_type, "payload": payload},
+        )
+    except Exception:
+        return
 
 def broadcast_presence(user, online, conversation_ids: Iterable[int] | None = None):
     payload = {

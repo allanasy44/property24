@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/config.dart';
 
 import '../models/rental_models.dart';
 import '../services/property24_api.dart';
@@ -18,6 +21,9 @@ class Property24State extends ChangeNotifier {
   static const _darkModeKey = 'property24.flutter.darkMode';
 
   final Property24Api _api;
+  WebSocketChannel? _liveChannel;
+  StreamSubscription<dynamic>? _liveSubscription;
+  Timer? _liveReconnectTimer;
   Timer? _syncTimer;
   bool _refreshing = false;
 
@@ -93,6 +99,7 @@ class Property24State extends ChangeNotifier {
     } finally {
       loading = false;
       notifyListeners();
+      if (signedIn) unawaited(_connectLiveSocket());
     }
   }
 
@@ -130,9 +137,64 @@ class Property24State extends ChangeNotifier {
     }
   }
 
+  Future<void> _connectLiveSocket() async {
+    final activeToken = _token;
+    if (activeToken == null || activeToken.isEmpty || !signedIn) return;
+    await _closeLiveSocket();
+    try {
+      final channel = WebSocketChannel.connect(
+        AppConfig.liveSocketUri(activeToken),
+      );
+      _liveChannel = channel;
+      _liveSubscription = channel.stream.listen(
+        _handleLiveEvent,
+        onError: (_) => _scheduleLiveReconnect(),
+        onDone: _scheduleLiveReconnect,
+        cancelOnError: true,
+      );
+    } catch (_) {
+      _scheduleLiveReconnect();
+    }
+  }
+
+  Future<void> _closeLiveSocket() async {
+    _liveReconnectTimer?.cancel();
+    _liveReconnectTimer = null;
+    await _liveSubscription?.cancel();
+    _liveSubscription = null;
+    await _liveChannel?.sink.close();
+    _liveChannel = null;
+  }
+
+  void _scheduleLiveReconnect() {
+    if (!signedIn || _liveReconnectTimer?.isActive == true) return;
+    _liveReconnectTimer = Timer(const Duration(seconds: 5), () {
+      unawaited(_connectLiveSocket());
+    });
+  }
+
+  void _handleLiveEvent(dynamic raw) {
+    if (raw is! String) return;
+    try {
+      final event = jsonDecode(raw);
+      if (event is! Map<String, dynamic>) return;
+      final type = '${event['type'] ?? ''}';
+      if (type == 'property.changed' ||
+          type == 'notification.created' ||
+          type == 'account.changed') {
+        unawaited(refresh(silent: true));
+      }
+    } catch (_) {
+      // Polling remains the fallback for malformed or unsupported frames.
+    }
+  }
+
+  @override
   @override
   void dispose() {
     _syncTimer?.cancel();
+    _liveReconnectTimer?.cancel();
+    unawaited(_closeLiveSocket());
     super.dispose();
   }
 
@@ -338,15 +400,21 @@ class Property24State extends ChangeNotifier {
     } finally {
       loading = false;
       notifyListeners();
+      if (signedIn) unawaited(_connectLiveSocket());
     }
   }
 
   Future<void> signOut() async {
+    await _closeLiveSocket();
     await _clearToken();
     user = null;
     account = AccountContext.guest();
     snapshot = await _api.snapshot();
     notifyListeners();
+  }
+
+  Future<AiSearchResponse> searchWithAi(String query) {
+    return _api.aiPropertySearch(token: _token, query: query.trim());
   }
 
   Future<PropertyListing> saveProperty(PropertyDraft draft,
@@ -375,6 +443,19 @@ class Property24State extends ChangeNotifier {
     await _api.deleteProperty(activeToken, propertyId);
     snapshot = await _api.snapshot(token: activeToken);
     notifyListeners();
+  }
+
+  Future<void> confirmPropertyAvailability(
+    PropertyListing property, {
+    String action = 'available',
+  }) async {
+    final activeToken = _requireToken();
+    await _api.confirmPropertyAvailability(
+      activeToken,
+      property.id,
+      action: action,
+    );
+    await refresh();
   }
 
   Future<void> requestViewing(PropertyListing property) async {

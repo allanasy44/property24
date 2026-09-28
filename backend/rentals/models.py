@@ -269,6 +269,7 @@ class Property(models.Model):
         COTTAGE = "cottage", "Cottage"
         STUDENT = "student_accommodation", "Student accommodation"
         COMMERCIAL = "commercial_property", "Commercial property"
+        LAND = "land", "Land / Stand"
 
     class ListingStatus(models.TextChoices):
         DRAFT = "draft", "Draft"
@@ -303,6 +304,17 @@ class Property(models.Model):
     deposit_required = models.DecimalField(max_digits=12, decimal_places=2)
     property_type = models.CharField(max_length=32, choices=PropertyType.choices)
     bedrooms = models.PositiveSmallIntegerField(default=0)
+    stand_reference = models.CharField(max_length=120, blank=True)
+    stands_available = models.PositiveIntegerField(default=1)
+    land_size = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    land_size_unit = models.CharField(max_length=16, default="sqm", blank=True)
+    title_deed_status = models.CharField(max_length=40, default="not_provided", blank=True)
+    servicing_status = models.CharField(max_length=40, default="not_serviced", blank=True)
+    zoning = models.CharField(max_length=120, blank=True)
+    road_access = models.CharField(max_length=120, blank=True)
+    electricity_available = models.BooleanField(default=False)
+    land_water_available = models.BooleanField(default=False)
+    payment_terms = models.CharField(max_length=240, blank=True)
     bathrooms = models.DecimalField(max_digits=4, decimal_places=1, default=1)
     furnished = models.BooleanField(default=False)
     water_availability = models.CharField(max_length=160, blank=True)
@@ -316,6 +328,7 @@ class Property(models.Model):
     views_count = models.PositiveIntegerField(default=0)
     saved_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+    availability_confirmed_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     @property

@@ -146,14 +146,20 @@ class PropertyCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: _Pill(
-                            icon: CupertinoIcons.money_dollar,
-                            label: property.rentLabel),
+                          icon: CupertinoIcons.money_dollar,
+                          label: property.rentLabel,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: _Pill(
-                            icon: CupertinoIcons.money_dollar_circle,
-                            label: '${property.moveInTotalLabel} move-in'),
+                          icon: property.isLand
+                              ? CupertinoIcons.square_stack_3d_up
+                              : CupertinoIcons.money_dollar_circle,
+                          label: property.isLand
+                              ? property.standSummary
+                              : '${property.moveInTotalLabel} move-in',
+                        ),
                       ),
                     ],
                   ),
@@ -162,19 +168,38 @@ class PropertyCard extends StatelessWidget {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _Pill(
-                          icon: CupertinoIcons.bed_double,
-                          label: '${property.bedrooms} beds'),
-                      _Pill(
-                          icon: CupertinoIcons.drop,
-                          label: '${property.bathrooms} baths'),
-                      _Pill(
-                          icon: CupertinoIcons.drop,
-                          label: property.borehole
-                              ? 'Borehole'
-                              : property.waterAvailability),
-                      if (property.solarPower)
-                        const _Pill(icon: CupertinoIcons.bolt, label: 'Solar'),
+                      if (property.isLand) ...[
+                        _Pill(
+                            icon: CupertinoIcons.square,
+                            label: property.landSizeLabel),
+                        _Pill(
+                            icon: CupertinoIcons.doc_text,
+                            label: property.landTitleLabel),
+                        _Pill(
+                            icon: CupertinoIcons.location,
+                            label: property.landServicingLabel),
+                        if (property.electricityAvailable)
+                          const _Pill(
+                              icon: CupertinoIcons.bolt, label: 'Electricity'),
+                        if (property.landWaterAvailable)
+                          const _Pill(
+                              icon: CupertinoIcons.drop, label: 'Water'),
+                      ] else ...[
+                        _Pill(
+                            icon: CupertinoIcons.bed_double,
+                            label: '${property.bedrooms} beds'),
+                        _Pill(
+                            icon: CupertinoIcons.drop,
+                            label: '${property.bathrooms} baths'),
+                        _Pill(
+                            icon: CupertinoIcons.drop,
+                            label: property.borehole
+                                ? 'Borehole'
+                                : property.waterAvailability),
+                        if (property.solarPower)
+                          const _Pill(
+                              icon: CupertinoIcons.bolt, label: 'Solar'),
+                      ],
                       if (property.has360Tour)
                         const _Pill(
                             icon: CupertinoIcons.rotate_right,

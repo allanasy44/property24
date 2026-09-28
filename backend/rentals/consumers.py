@@ -18,6 +18,7 @@ from .chat_services import (
     mark_conversation_read,
     touch_user_presence,
     user_conversation_ids,
+    public_group_name,
     user_group_name,
 )
 from .models import CallSession, SecurityAuditEvent
@@ -47,6 +48,7 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         for conversation_id in self.conversation_ids:
             await self.channel_layer.group_add(conversation_group_name(conversation_id), self.channel_name)
         await self.channel_layer.group_add(user_group_name(self.user.id), self.channel_name)
+        await self.channel_layer.group_add(public_group_name(), self.channel_name)
 
         last_seen_at = await database_sync_to_async(touch_user_presence)(self.user)
         await self.accept()
@@ -70,6 +72,7 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         for conversation_id in self.conversation_ids:
             await self.channel_layer.group_discard(conversation_group_name(conversation_id), self.channel_name)
         await self.channel_layer.group_discard(user_group_name(self.user.id), self.channel_name)
+        await self.channel_layer.group_discard(public_group_name(), self.channel_name)
 
     async def receive_json(self, content, **kwargs):
         if not await self.within_rate_limit():

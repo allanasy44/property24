@@ -256,8 +256,12 @@ class _PropertyCard extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 4,
                       children: [
-                        _DetailChip('${property.bedrooms} bd'),
-                        _DetailChip('${property.bathrooms} ba'),
+                        _DetailChip(property.isLand
+                            ? property.standSummary
+                            : '${property.bedrooms} bd'),
+                        _DetailChip(property.isLand
+                            ? property.landSizeLabel
+                            : '${property.bathrooms} ba'),
                         _DetailChip(lifecycle),
                       ],
                     ),
@@ -291,8 +295,9 @@ class _PropertyCard extends StatelessWidget {
                   ? 'No description provided.'
                   : property.description),
               const SizedBox(height: 14),
-              Text(
-                  '${property.bedrooms} bedrooms · ${property.bathrooms} bathrooms'),
+              Text(property.isLand
+                  ? '${property.landSizeLabel} · ${property.standSummary}'
+                  : '${property.bedrooms} bedrooms · ${property.bathrooms} bathrooms'),
               Text('Status: ${property.availabilityStatus}'),
               Text(
                   'Listing: ${property.listingIntent == 'sale' ? 'For sale' : 'For rent'}'),

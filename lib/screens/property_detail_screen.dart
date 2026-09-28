@@ -63,6 +63,8 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       const SizedBox(height: 14),
                       _MetaLine(property: property),
                       const SizedBox(height: 14),
+                      _TrustPassportCard(property: property),
+                      const SizedBox(height: 14),
                       _GuestChips(property: property),
                       const SizedBox(height: 18),
                       OsmMapPreview(
@@ -123,17 +125,34 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   }
 
   List<String> _amenities(PropertyListing property) {
-    return [
+    final items = <String>[
       if (property.has360Tour) '360 tour',
-      if (property.parking.trim().isNotEmpty) property.parking.trim(),
-      if (property.waterAvailability.trim().isNotEmpty)
-        property.waterAvailability.trim(),
-      if (property.furnished) 'Furnished',
-      if (property.solarPower) 'Solar power',
-      if (property.borehole) 'Borehole',
-      if (property.petFriendly) 'Pet friendly',
+      if (property.isLand) ...[
+        property.landSizeLabel,
+        property.standSummary,
+        property.landTitleLabel,
+        property.landServicingLabel,
+        if (property.zoning.trim().isNotEmpty)
+          'Zoning: ${property.zoning.trim()}',
+        if (property.roadAccess.trim().isNotEmpty)
+          'Road access: ${property.roadAccess.trim()}',
+        if (property.electricityAvailable) 'Electricity available',
+        if (property.landWaterAvailable) 'Water available',
+      ] else ...[
+        if (property.parking.trim().isNotEmpty) property.parking.trim(),
+        if (property.waterAvailability.trim().isNotEmpty)
+          property.waterAvailability.trim(),
+        if (property.furnished) 'Furnished',
+        if (property.solarPower) 'Solar power',
+        if (property.borehole) 'Borehole',
+        if (property.petFriendly) 'Pet friendly',
+      ],
       property.propertyType,
-    ].where((item) => item.trim().isNotEmpty).toSet().toList(growable: false);
+    ];
+    return items
+        .where((item) => item.trim().isNotEmpty)
+        .toSet()
+        .toList(growable: false);
   }
 }
 
@@ -355,7 +374,7 @@ class _MetaLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${property.trustScore}% trust / ${property.moveInTotalLabel} move-in',
+          '${property.trustScore}% trust / ${property.isLand ? property.standSummary : '${property.moveInTotalLabel} move-in'}',
           style: const TextStyle(
             color: AppTheme.textPrimary,
             fontSize: 12,
@@ -385,6 +404,137 @@ class _MetaLine extends StatelessWidget {
   }
 }
 
+class _TrustPassportCard extends StatelessWidget {
+  const _TrustPassportCard({required this.property});
+
+  final PropertyListing property;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<Property24State>();
+    final theme = Theme.of(context);
+    final liveProperty =
+        state.snapshot.properties.cast<PropertyListing?>().firstWhere(
+                  (item) => item?.id == property.id,
+                  orElse: () => property,
+                ) ??
+            property;
+    final canConfirm = state.user?.id == liveProperty.owner?.id;
+    final signals = liveProperty.trustBreakdown;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Property Passport',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    )),
+              ),
+              Text('${liveProperty.trustScore}/100',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w800,
+                  )),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(liveProperty.passportId,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              )),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                liveProperty.availabilityNeedsConfirmation
+                    ? CupertinoIcons.exclamationmark_triangle
+                    : CupertinoIcons.checkmark_seal,
+                size: 18,
+                color: liveProperty.availabilityNeedsConfirmation
+                    ? theme.colorScheme.tertiary
+                    : theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  liveProperty.availabilityLabel,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (liveProperty.lastConfirmedAt.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text('Last confirmed ${liveProperty.lastConfirmedAt}',
+                style: theme.textTheme.bodySmall),
+          ],
+          if (signals.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            for (final signal in signals)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Row(
+                  children: [
+                    Icon(
+                      signal.complete
+                          ? CupertinoIcons.checkmark_circle_fill
+                          : CupertinoIcons.minus_circle,
+                      size: 15,
+                      color: signal.complete
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(child: Text(signal.label)),
+                    Text('${signal.score}/${signal.maxScore}',
+                        style: theme.textTheme.labelSmall),
+                  ],
+                ),
+              ),
+          ],
+          if (canConfirm) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  try {
+                    await state.confirmPropertyAvailability(property);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Availability confirmed')),
+                      );
+                    }
+                  } catch (error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(userFacingError(error))),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(CupertinoIcons.refresh, size: 16),
+                label: const Text('Confirm availability'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _GuestChips extends StatelessWidget {
   const _GuestChips({required this.property});
 
@@ -397,10 +547,22 @@ class _GuestChips extends StatelessWidget {
       runSpacing: 8,
       children: [
         _Pill(icon: CupertinoIcons.person_2, label: property.propertyType),
-        _Pill(icon: CupertinoIcons.drop, label: '${property.bathrooms} baths'),
-        _Pill(
-            icon: CupertinoIcons.bed_double,
-            label: '${property.bedrooms} beds'),
+        if (property.isLand) ...[
+          _Pill(icon: CupertinoIcons.square, label: property.landSizeLabel),
+          _Pill(
+              icon: CupertinoIcons.square_stack_3d_up,
+              label: property.standSummary),
+          _Pill(icon: CupertinoIcons.doc_text, label: property.landTitleLabel),
+          _Pill(
+              icon: CupertinoIcons.location,
+              label: property.landServicingLabel),
+        ] else ...[
+          _Pill(
+              icon: CupertinoIcons.drop, label: '${property.bathrooms} baths'),
+          _Pill(
+              icon: CupertinoIcons.bed_double,
+              label: '${property.bedrooms} beds'),
+        ],
       ],
     );
   }

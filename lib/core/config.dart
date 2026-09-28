@@ -6,6 +6,19 @@ class AppConfig {
     defaultValue: 'http://127.0.0.1:8010/api',
   );
 
+  static Uri liveSocketUri(String token) {
+    final base = Uri.parse(apiBaseUrl);
+    final scheme = base.scheme == 'https' ? 'wss' : 'ws';
+    var root = base.path;
+    if (root.endsWith('/api')) root = root.substring(0, root.length - 4);
+    if (root.endsWith('/')) root = root.substring(0, root.length - 1);
+    return base.replace(
+      scheme: scheme,
+      path: '$root/ws/live/',
+      queryParameters: {'token': token},
+    );
+  }
+
   static Uri apiUri(String path, [Map<String, String?> query = const {}]) {
     final normalizedBase = apiBaseUrl.endsWith('/')
         ? apiBaseUrl.substring(0, apiBaseUrl.length - 1)

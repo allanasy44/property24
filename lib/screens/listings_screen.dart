@@ -463,6 +463,17 @@ class _PropertyEditorState extends State<PropertyEditor> {
   late final TextEditingController _images;
   late final TextEditingController _videos;
   late final TextEditingController _audio;
+  late final TextEditingController _standReference;
+  late final TextEditingController _stands;
+  String _landSizeUnit = 'sqm';
+  String _titleDeedStatus = 'not_provided';
+  String _servicingStatus = 'not_serviced';
+  bool _electricityAvailable = false;
+  bool _landWaterAvailable = false;
+  late final TextEditingController _landSize;
+  late final TextEditingController _zoning;
+  late final TextEditingController _roadAccess;
+  late final TextEditingController _paymentTerms;
   String _intent = 'Rent';
   String _type = 'house';
   bool _furnished = false;
@@ -486,9 +497,21 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _latitude = TextEditingController(text: '${property?.latitude ?? ''}');
     _longitude = TextEditingController(text: '${property?.longitude ?? ''}');
     _rent = TextEditingController(text: property?.monthlyRent ?? '');
+    _standReference =
+        TextEditingController(text: property?.standReference ?? '');
+    _stands = TextEditingController(text: '${property?.standsAvailable ?? 1}');
+    _landSize = TextEditingController(text: property?.landSize ?? '');
+    _zoning = TextEditingController(text: property?.zoning ?? '');
+    _roadAccess = TextEditingController(text: property?.roadAccess ?? '');
+    _paymentTerms = TextEditingController(text: property?.paymentTerms ?? '');
     _deposit = TextEditingController(text: property?.depositRequired ?? '');
     _beds = TextEditingController(text: '${property?.bedrooms ?? ''}');
     _baths = TextEditingController(text: '${property?.bathrooms ?? ''}');
+    _landSizeUnit = property?.landSizeUnit ?? 'sqm';
+    _titleDeedStatus = property?.titleDeedStatus ?? 'not_provided';
+    _servicingStatus = property?.servicingStatus ?? 'not_serviced';
+    _electricityAvailable = property?.electricityAvailable ?? false;
+    _landWaterAvailable = property?.landWaterAvailable ?? false;
     _description = TextEditingController(text: property?.description ?? '');
     _water =
         TextEditingController(text: property?.waterAvailability ?? 'Available');
@@ -526,6 +549,12 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _images.dispose();
     _videos.dispose();
     _audio.dispose();
+    _standReference.dispose();
+    _stands.dispose();
+    _landSize.dispose();
+    _zoning.dispose();
+    _roadAccess.dispose();
+    _paymentTerms.dispose();
     super.dispose();
   }
 
@@ -591,8 +620,10 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         ),
                       ),
                     ),
-                    onSelectionChanged: (value) =>
-                        setState(() => _intent = value.first),
+                    onSelectionChanged: (value) {
+                      if (_type == 'land' && value.first == 'Rent') return;
+                      setState(() => _intent = value.first);
+                    },
                   );
                 },
               ),
@@ -614,16 +645,21 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         DropdownMenuItem(
                             value: 'cottage', child: Text('Cottage')),
                         DropdownMenuItem(
-                          value: 'student_accommodation',
-                          child: Text('Student accommodation'),
-                        ),
+                            value: 'student_accommodation',
+                            child: Text('Student accommodation')),
                         DropdownMenuItem(
-                          value: 'commercial_property',
-                          child: Text('Commercial property'),
-                        ),
+                            value: 'commercial_property',
+                            child: Text('Commercial property')),
+                        DropdownMenuItem(
+                            value: 'land', child: Text('Land / Stand')),
                       ],
-                      onChanged: (value) =>
-                          setState(() => _type = value ?? 'house'),
+                      onChanged: (value) {
+                        final next = value ?? 'house';
+                        setState(() {
+                          _type = next;
+                          if (next == 'land') _intent = 'Sale';
+                        });
+                      },
                     ),
                   ),
                 ],
@@ -721,6 +757,114 @@ class _PropertyEditorState extends State<PropertyEditor> {
                 ],
               ),
             ),
+            if (_type == 'land')
+              _Section(
+                title: 'Land / stand details',
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: _field(_landSize, 'Plot size')),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _landSizeUnit,
+                            decoration: _inputDeco('Unit'),
+                            items: const [
+                              DropdownMenuItem(value: 'sqm', child: Text('m²')),
+                              DropdownMenuItem(
+                                  value: 'hectares', child: Text('Hectares')),
+                              DropdownMenuItem(
+                                  value: 'acres', child: Text('Acres')),
+                            ],
+                            onChanged: (value) =>
+                                setState(() => _landSizeUnit = value ?? 'sqm'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _field(
+                            _stands,
+                            'Stands available',
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                            child: _field(
+                                _standReference, 'Stand / scheme reference',
+                                requiredField: false)),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _titleDeedStatus,
+                            decoration: _inputDeco('Title / deed status'),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: 'title_deed',
+                                  child: Text('Title deed')),
+                              DropdownMenuItem(
+                                  value: 'cession', child: Text('Cession')),
+                              DropdownMenuItem(
+                                  value: 'council_approved',
+                                  child: Text('Council approved')),
+                              DropdownMenuItem(
+                                  value: 'not_provided',
+                                  child: Text('Not provided')),
+                            ],
+                            onChanged: (value) => setState(() =>
+                                _titleDeedStatus = value ?? 'not_provided'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _servicingStatus,
+                            decoration: _inputDeco('Servicing'),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: 'serviced', child: Text('Serviced')),
+                              DropdownMenuItem(
+                                  value: 'partially_serviced',
+                                  child: Text('Partly serviced')),
+                              DropdownMenuItem(
+                                  value: 'not_serviced',
+                                  child: Text('Not serviced')),
+                            ],
+                            onChanged: (value) => setState(() =>
+                                _servicingStatus = value ?? 'not_serviced'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                            child: _field(_zoning, 'Zoning / permitted use')),
+                        const SizedBox(width: 10),
+                        Expanded(
+                            child: _field(_roadAccess, 'Road access',
+                                requiredField: false)),
+                      ],
+                    ),
+                    _switch(
+                        'Electricity available',
+                        _electricityAvailable,
+                        (value) =>
+                            setState(() => _electricityAvailable = value)),
+                    _switch('Water available', _landWaterAvailable,
+                        (value) => setState(() => _landWaterAvailable = value)),
+                    _field(_paymentTerms, 'Payment terms',
+                        maxLines: 2, requiredField: false),
+                  ],
+                ),
+              ),
             _Section(
               title: 'Features',
               child: Column(
@@ -1035,6 +1179,17 @@ class _PropertyEditorState extends State<PropertyEditor> {
       borehole: _borehole,
       petFriendly: _pets,
       has360Tour: _tour,
+      standReference: _standReference.text.trim(),
+      standsAvailable: int.tryParse(_stands.text) ?? 1,
+      landSize: _landSize.text.trim(),
+      landSizeUnit: _landSizeUnit,
+      titleDeedStatus: _titleDeedStatus,
+      servicingStatus: _servicingStatus,
+      zoning: _zoning.text.trim(),
+      roadAccess: _roadAccess.text.trim(),
+      electricityAvailable: _electricityAvailable,
+      landWaterAvailable: _landWaterAvailable,
+      paymentTerms: _paymentTerms.text.trim(),
     );
 
     try {

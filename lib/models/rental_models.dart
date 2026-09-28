@@ -230,6 +230,24 @@ class PropertyListing {
     required this.agent,
     this.saved = false,
     this.reserved = false,
+    this.backendTrustScore,
+    this.trustBreakdown = const [],
+    this.backendPassportId = '',
+    this.backendAvailabilityLabel = '',
+    this.lastConfirmedAt = '',
+    this.availabilityNeedsConfirmation = false,
+    this.availabilityTemporarilyHidden = false,
+    this.standReference = '',
+    this.standsAvailable = 1,
+    this.landSize = '',
+    this.landSizeUnit = 'sqm',
+    this.titleDeedStatus = 'not_provided',
+    this.servicingStatus = 'not_serviced',
+    this.zoning = '',
+    this.roadAccess = '',
+    this.electricityAvailable = false,
+    this.landWaterAvailable = false,
+    this.paymentTerms = '',
   });
 
   factory PropertyListing.fromJson(Map<String, dynamic> json) {
@@ -271,6 +289,29 @@ class PropertyListing {
           : null,
       saved: json['saved'] == true,
       reserved: json['reserved'] == true,
+      backendTrustScore: int.tryParse('${json['trust_score']}'),
+      trustBreakdown: (json['trust_breakdown'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(TrustSignal.fromJson)
+          .toList(growable: false),
+      backendPassportId: textValue(json, 'passport_id'),
+      backendAvailabilityLabel: textValue(json, 'availability_label'),
+      lastConfirmedAt: localDate(json['last_confirmed_at'], ''),
+      availabilityNeedsConfirmation:
+          json['availability_needs_confirmation'] == true,
+      availabilityTemporarilyHidden:
+          json['availability_temporarily_hidden'] == true,
+      standReference: textValue(json, 'stand_reference'),
+      standsAvailable: int.tryParse('${json['stands_available']}') ?? 1,
+      landSize: textValue(json, 'land_size'),
+      landSizeUnit: textValue(json, 'land_size_unit', 'sqm'),
+      titleDeedStatus: textValue(json, 'title_deed_status', 'not_provided'),
+      servicingStatus: textValue(json, 'servicing_status', 'not_serviced'),
+      zoning: textValue(json, 'zoning'),
+      roadAccess: textValue(json, 'road_access'),
+      electricityAvailable: json['electricity_available'] == true,
+      landWaterAvailable: json['land_water_available'] == true,
+      paymentTerms: textValue(json, 'payment_terms'),
     );
   }
 
@@ -307,9 +348,42 @@ class PropertyListing {
   final AccountUser? agent;
   final bool saved;
   final bool reserved;
+  final int? backendTrustScore;
+  final List<TrustSignal> trustBreakdown;
+  final String backendPassportId;
+  final String backendAvailabilityLabel;
+  final String lastConfirmedAt;
+  final bool availabilityNeedsConfirmation;
+  final bool availabilityTemporarilyHidden;
+  final String standReference;
+  final int standsAvailable;
+  final String landSize;
+  final String landSizeUnit;
+  final String titleDeedStatus;
+  final String servicingStatus;
+  final String zoning;
+  final String roadAccess;
+  final bool electricityAvailable;
+  final bool landWaterAvailable;
+  final String paymentTerms;
 
   AccountUser? get supplier => agent ?? owner;
-  String get rentLabel => money(monthlyRent, suffix: '/ month');
+  String get rentLabel => listingIntent == 'sale'
+      ? money(monthlyRent)
+      : money(monthlyRent, suffix: '/ month');
+  bool get isLand => propertyType.toLowerCase().contains('land');
+  String get landSizeLabel => landSize.trim().isEmpty
+      ? 'Size not provided'
+      : '${landSize.trim()} $landSizeUnit';
+  String get landTitleLabel => titleDeedStatus == 'not_provided'
+      ? 'Title status not provided'
+      : titleDeedStatus.replaceAll('_', ' ');
+  String get landServicingLabel => servicingStatus == 'not_serviced'
+      ? 'Not serviced'
+      : servicingStatus.replaceAll('_', ' ');
+  String get standSummary =>
+      '${standsAvailable < 1 ? 1 : standsAvailable} ${standsAvailable == 1 ? 'stand' : 'stands'} available';
+
   String get depositLabel => money(depositRequired);
   String get location =>
       [suburb, city].where((value) => value.isNotEmpty).join(', ');
@@ -321,10 +395,14 @@ class PropertyListing {
   num? get mapLongitude => hasCoordinates
       ? (showExactLocation ? longitude : _roundCoordinate(longitude))
       : null;
-  String get availabilityLabel =>
-      verified ? 'Confirmed this week' : 'Awaiting confirmation';
-  String get passportId =>
-      'P24-${id.isEmpty ? title.hashCode.abs() : id.hashCode.abs()}';
+  String get availabilityLabel => backendAvailabilityLabel.isNotEmpty
+      ? backendAvailabilityLabel
+      : verified
+          ? 'Confirmed this week'
+          : 'Awaiting confirmation';
+  String get passportId => backendPassportId.isNotEmpty
+      ? backendPassportId
+      : 'P24-${id.isEmpty ? title.hashCode.abs() : id.hashCode.abs()}';
 
   num get monthlyRentValue =>
       num.tryParse(monthlyRent.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
@@ -387,6 +465,17 @@ class PropertyListing {
       PropertyFact(iconName: 'bed', label: 'Bedrooms', value: '$bedrooms'),
       PropertyFact(iconName: 'bath', label: 'Bathrooms', value: '$bathrooms'),
       PropertyFact(iconName: 'type', label: 'Type', value: propertyType),
+      if (isLand)
+        PropertyFact(
+            iconName: 'land', label: 'Land size', value: landSizeLabel),
+      if (isLand)
+        PropertyFact(iconName: 'stand', label: 'Stands', value: standSummary),
+      if (isLand)
+        PropertyFact(
+            iconName: 'document', label: 'Title', value: landTitleLabel),
+      if (isLand)
+        PropertyFact(
+            iconName: 'road', label: 'Servicing', value: landServicingLabel),
       PropertyFact(
           iconName: 'water',
           label: 'Water',
@@ -398,6 +487,80 @@ class PropertyListing {
       PropertyFact(iconName: 'parking', label: 'Parking', value: parking),
     ];
   }
+}
+
+class TrustSignal {
+  const TrustSignal({
+    required this.label,
+    required this.score,
+    required this.maxScore,
+    required this.complete,
+    required this.detail,
+  });
+
+  factory TrustSignal.fromJson(Map<String, dynamic> json) {
+    return TrustSignal(
+      label: textValue(json, 'label'),
+      score: int.tryParse('${json['score']}') ?? 0,
+      maxScore: int.tryParse('${json['max_score']}') ?? 0,
+      complete: json['complete'] == true,
+      detail: textValue(json, 'detail'),
+    );
+  }
+
+  final String label;
+  final int score;
+  final int maxScore;
+  final bool complete;
+  final String detail;
+}
+
+class AiSearchResponse {
+  const AiSearchResponse({
+    required this.query,
+    required this.intent,
+    required this.explanation,
+    required this.results,
+  });
+
+  factory AiSearchResponse.fromJson(Map<String, dynamic> json) {
+    return AiSearchResponse(
+      query: textValue(json, 'query'),
+      intent: json['intent'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(json['intent'] as Map)
+          : const <String, dynamic>{},
+      explanation: textValue(json, 'explanation'),
+      results: (json['results'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(AiSearchCandidate.fromJson)
+          .toList(growable: false),
+    );
+  }
+
+  final String query;
+  final Map<String, dynamic> intent;
+  final String explanation;
+  final List<AiSearchCandidate> results;
+}
+
+class AiSearchCandidate {
+  const AiSearchCandidate({
+    required this.property,
+    required this.score,
+    required this.reasons,
+  });
+
+  factory AiSearchCandidate.fromJson(Map<String, dynamic> json) {
+    return AiSearchCandidate(
+      property: PropertyListing.fromJson(json),
+      score: int.tryParse('${json['search_score']}') ?? 0,
+      reasons: List<String>.from(json['match_reasons'] ?? const []),
+    );
+  }
+
+  final PropertyListing property;
+  final int score;
+  final List<String> reasons;
 }
 
 class VerificationLevel {

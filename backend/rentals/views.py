@@ -59,12 +59,14 @@ from .models import (
     VerificationRequest,
     Viewing,
 )
-from .ai import review_listing_payload, score_application_payload, triage_maintenance_payload
+from .ai import parse_search_intent, property_insights, rank_property_candidates, review_listing_payload, score_application_payload, search_explanation, triage_maintenance_payload
 from .auth import issue_token_pair, user_from_authorization_header, user_from_token
 from .chat_services import (
     audit_event,
     block_chat_user,
     broadcast_to_conversation,
+    broadcast_to_public,
+    broadcast_to_user,
     create_call,
     create_chat_message,
     default_attachment_body,
@@ -851,6 +853,11 @@ def properties_collection(request):
         return json_error("AI listing review flagged this listing for administrator review before verification")
 
     latitude, longitude = parse_coordinates(data)
+    listing_intent = normalise_choice(data.get("listing_intent") or data.get("intent"), Property.ListingIntent, Property.ListingIntent.RENT)
+    property_type = normalise_choice(data.get("property_type") or data.get("type"), Property.PropertyType, Property.PropertyType.HOUSE)
+    if property_type == Property.PropertyType.LAND and listing_intent != Property.ListingIntent.SALE:
+        return json_error("Land and stands must be listed for sale", status=400)
+    land_size = parse_decimal(data.get("land_size"), "land_size") if data.get("land_size") not in (None, "") else None
 
     prop = Property.objects.create(
         owner=owner,
@@ -863,12 +870,23 @@ def properties_collection(request):
         latitude=latitude,
         longitude=longitude,
         show_exact_location=to_bool(data.get("show_exact_location")),
-        listing_intent=normalise_choice(data.get("listing_intent") or data.get("intent"), Property.ListingIntent, Property.ListingIntent.RENT),
+        listing_intent=listing_intent,
         availability_status=normalise_choice(data.get("availability_status"), Property.AvailabilityStatus, Property.AvailabilityStatus.AVAILABLE),
         monthly_rent=parse_decimal(data.get("monthly_rent") or data.get("price"), "monthly_rent"),
         deposit_required=parse_decimal(data.get("deposit_required") or data.get("deposit"), "deposit_required"),
-        property_type=normalise_choice(data.get("property_type") or data.get("type"), Property.PropertyType, Property.PropertyType.HOUSE),
+        property_type=property_type,
         bedrooms=int(data.get("bedrooms", 0)),
+        stand_reference=data.get("stand_reference", ""),
+        stands_available=max(1, int(data.get("stands_available", 1))),
+        land_size=land_size,
+        land_size_unit=data.get("land_size_unit") or "sqm",
+        title_deed_status=data.get("title_deed_status") or "not_provided",
+        servicing_status=data.get("servicing_status") or "not_serviced",
+        zoning=data.get("zoning", ""),
+        road_access=data.get("road_access", ""),
+        electricity_available=to_bool(data.get("electricity_available")),
+        land_water_available=to_bool(data.get("land_water_available")),
+        payment_terms=data.get("payment_terms", ""),
         bathrooms=parse_decimal(data.get("bathrooms", 1), "bathrooms"),
         furnished=to_bool(data.get("furnished")),
         water_availability=data.get("water_availability") or data.get("water", ""),
@@ -885,6 +903,7 @@ def properties_collection(request):
     if ai_review:
         analysis = record_ai_analysis(ai_review, "property", prop.id)
         payload["ai_review"] = serialize_ai_analysis(analysis)
+    broadcast_property_change(prop, "created")
     return JsonResponse(payload, status=201)
 
 
@@ -905,6 +924,7 @@ def property_detail(request, property_id):
         prop.is_active = False
         prop.listing_status = Property.ListingStatus.ARCHIVED
         prop.save(update_fields=["is_active", "listing_status", "updated_at"])
+        broadcast_property_change(prop, "archived")
         return JsonResponse(serialize_property(prop))
 
     data = request_json(request)
@@ -948,6 +968,7 @@ def property_detail(request, property_id):
             owner,
         )
         payload["ai_review"] = serialize_ai_analysis(record_ai_analysis(ai_review, "property", prop.id))
+    broadcast_property_change(prop, "updated")
     return JsonResponse(payload)
 
 
@@ -1157,6 +1178,8 @@ def applications_collection(request):
         },
     )
     payload = serialize_application(application)
+    for recipient_id in {tenant.id, prop.owner_id, prop.agent_id} - {None}:
+        broadcast_to_user(recipient_id, "notification.created", {"kind": "application", "application_id": application.id, "property_id": prop.id})
     if ai_score:
         payload["ai_score"] = serialize_ai_analysis(record_ai_analysis(ai_score, "application", application.id))
     return JsonResponse(payload, status=201)
@@ -1392,6 +1415,8 @@ def maintenance_collection(request):
     if ticket.photo:
         register_media_asset(acting_user, ticket.photo, scope=MediaAsset.Scope.MAINTENANCE, source_model="maintenance_request", source_id=ticket.id, original_name="maintenance_photo", mime_type="image/jpeg")
     payload = serialize_maintenance(ticket)
+    for recipient_id in {acting_user.id, prop.owner_id} - {None}:
+        broadcast_to_user(recipient_id, "notification.created", {"kind": "maintenance", "maintenance_id": ticket.id, "property_id": prop.id})
     if ai_triage:
         payload["ai_triage"] = serialize_ai_analysis(record_ai_analysis(ai_triage, "maintenance_request", ticket.id))
     return JsonResponse(payload, status=201)
@@ -1869,6 +1894,8 @@ def viewings_collection(request):
         status=data.get("status", Viewing.Status.PENDING),
         notes=data.get("notes", ""),
     )
+    for recipient_id in {acting_user.id, viewing.property.owner_id, viewing.agent_id} - {None}:
+        broadcast_to_user(recipient_id, "notification.created", {"kind": "viewing", "viewing_id": viewing.id, "property_id": viewing.property_id})
     return JsonResponse(serialize_viewing(viewing), status=201)
 
 
@@ -2518,6 +2545,16 @@ def apply_property_filters(properties, params):
         properties = properties.filter(monthly_rent__lte=parse_decimal(params["rent_max"], "rent_max"))
     if params.get("bedrooms_min"):
         properties = properties.filter(bedrooms__gte=int(params["bedrooms_min"]))
+    if params.get("furnished") is not None:
+        properties = properties.filter(furnished=to_bool(params.get("furnished")))
+    if params.get("pet_friendly") is not None:
+        properties = properties.filter(pet_friendly=to_bool(params.get("pet_friendly")))
+    if params.get("solar_power") is not None:
+        properties = properties.filter(solar_power=to_bool(params.get("solar_power")))
+    if params.get("borehole") is not None:
+        properties = properties.filter(borehole=to_bool(params.get("borehole")))
+    if params.get("has_360_tour") is not None:
+        properties = properties.filter(has_360_tour=to_bool(params.get("has_360_tour")))
     if to_bool(params.get("verified_only")):
         properties = properties.filter(listing_status=Property.ListingStatus.VERIFIED, owner__is_verified=True).filter(Q(agent__isnull=True) | Q(agent__is_verified=True))
     return properties.filter(is_active=True)
@@ -2641,10 +2678,21 @@ def apply_property_updates(prop, data, owner, agent, acting_user):
         prop.monthly_rent = parse_decimal(data["monthly_rent"], "monthly_rent")
     if data.get("deposit_required") is not None:
         prop.deposit_required = parse_decimal(data["deposit_required"], "deposit_required")
+    if data.get("stand_reference") is not None:
+        prop.stand_reference = data["stand_reference"]
+    if data.get("stands_available") is not None:
+        prop.stands_available = max(1, int(data["stands_available"]))
+    if data.get("land_size") is not None:
+        prop.land_size = parse_decimal(data["land_size"], "land_size") if str(data["land_size"]).strip() else None
+    for field in ["land_size_unit", "title_deed_status", "servicing_status", "zoning", "road_access", "payment_terms"]:
+        if data.get(field) is not None:
+            setattr(prop, field, data[field])
     if data.get("property_type") is not None:
         prop.property_type = normalise_choice(data["property_type"], Property.PropertyType, prop.property_type)
     if data.get("listing_intent") is not None or data.get("intent") is not None:
         prop.listing_intent = normalise_choice(data.get("listing_intent") or data.get("intent"), Property.ListingIntent, prop.listing_intent)
+    if prop.property_type == Property.PropertyType.LAND:
+        prop.listing_intent = Property.ListingIntent.SALE
     if data.get("availability_status") is not None:
         if not (is_admin(acting_user) or acting_user.id == owner.id):
             raise PermissionError("Only the landlord or an administrator can change listing availability")
@@ -2653,7 +2701,7 @@ def apply_property_updates(prop, data, owner, agent, acting_user):
         prop.bedrooms = int(data["bedrooms"])
     if data.get("bathrooms") is not None:
         prop.bathrooms = parse_decimal(data["bathrooms"], "bathrooms")
-    for field in ["furnished", "solar_power", "borehole", "pet_friendly", "has_360_tour", "is_active", "show_exact_location"]:
+    for field in ["furnished", "solar_power", "borehole", "pet_friendly", "has_360_tour", "is_active", "show_exact_location", "electricity_available", "land_water_available"]:
         if data.get(field) is not None:
             setattr(prop, field, to_bool(data[field]))
     if data.get("listing_status") is not None and is_admin(acting_user):
@@ -3521,7 +3569,17 @@ def clear_media_source(asset):
                 user.save(update_fields=["cover_photo", "cover_photo_url"])
 
 
+def broadcast_property_change(prop, action):
+    payload = {"action": action, "property": serialize_property(prop)}
+    broadcast_to_public("property.changed", payload)
+    recipient_ids = {prop.owner_id}
+    if prop.agent_id:
+        recipient_ids.add(prop.agent_id)
+    for recipient_id in recipient_ids:
+        broadcast_to_user(recipient_id, "property.changed", payload)
+
 def serialize_property(prop):
+    insights = property_insights(prop)
     return {
         "id": prop.id,
         "owner": serialize_user(prop.owner),
@@ -3535,10 +3593,23 @@ def serialize_property(prop):
         "latitude": str(prop.latitude) if prop.latitude is not None else "",
         "longitude": str(prop.longitude) if prop.longitude is not None else "",
         "show_exact_location": prop.show_exact_location,
+        "listing_intent": prop.listing_intent,
+        "availability_status": prop.availability_status,
         "monthly_rent": str(prop.monthly_rent),
         "deposit_required": str(prop.deposit_required),
         "property_type": prop.property_type,
         "bedrooms": prop.bedrooms,
+        "stand_reference": prop.stand_reference,
+        "stands_available": prop.stands_available,
+        "land_size": str(prop.land_size) if prop.land_size is not None else "",
+        "land_size_unit": prop.land_size_unit,
+        "title_deed_status": prop.title_deed_status,
+        "servicing_status": prop.servicing_status,
+        "zoning": prop.zoning,
+        "road_access": prop.road_access,
+        "electricity_available": prop.electricity_available,
+        "land_water_available": prop.land_water_available,
+        "payment_terms": prop.payment_terms,
         "bathrooms": str(prop.bathrooms),
         "furnished": prop.furnished,
         "water_availability": prop.water_availability,
@@ -3554,6 +3625,16 @@ def serialize_property(prop):
         "listing_views": prop.views_count,
         "saved_count": prop.saved_count or prop.saved_by.count(),
         "applications_count": getattr(prop, "application_total", prop.applications.count()),
+        "passport_id": insights["passport_id"],
+        "trust_score": insights["trust_score"],
+        "trust_breakdown": insights["trust_breakdown"],
+        "trust_penalties": insights["trust_penalties"],
+        "admin_review_required": insights["admin_review_required"],
+        "availability_label": insights["availability_label"],
+        "availability_state": insights["availability_state"],
+        "last_confirmed_at": insights["last_confirmed_at"],
+        "availability_needs_confirmation": insights["availability_needs_confirmation"],
+        "availability_temporarily_hidden": insights["availability_temporarily_hidden"],
         "comments_count": getattr(prop, "comment_total", prop.comments.count()),
     }
 
@@ -3858,3 +3939,111 @@ def serialize_date(value):
         allowed = {"issue", "category", "description", "photo"}
         if set(data.keys()) - allowed:
             return forbidden()
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def ai_property_search(request):
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
+    query = str(data.get("query") or "").strip()
+    if not query:
+        return json_error("query is required")
+    intent = parse_search_intent(query)
+    properties = public_listings(
+        Property.objects.select_related("owner", "agent").prefetch_related("photos", "videos")
+    )
+    properties = properties.filter(
+        listing_status=Property.ListingStatus.VERIFIED,
+        owner__is_verified=True,
+        availability_status=Property.AvailabilityStatus.AVAILABLE,
+    ).filter(Q(agent__isnull=True) | Q(agent__is_verified=True))
+    filters = {
+        "listing_intent": intent.get("intent"),
+        "city": intent.get("city"),
+        "property_type": intent.get("property_type"),
+        "bedrooms_min": intent.get("bedrooms_min"),
+        "rent_max": intent.get("budget_max"),
+        "verified_only": "verified_only" in intent.get("features", []),
+    }
+    properties = apply_property_filters(properties, filters)
+    land_size_min = intent.get("land_size_min")
+    if land_size_min:
+        size_value = parse_decimal(land_size_min, "land_size_min")
+        if intent.get("land_size_unit") in {"hectare", "hectares", "ha"}:
+            size_value *= 10000
+        elif intent.get("land_size_unit") == "acres":
+            size_value *= Decimal("4046.8564224")
+        properties = properties.filter(land_size__gte=size_value)
+    if intent.get("stands_min"):
+        properties = properties.filter(stands_available__gte=intent["stands_min"])
+    for feature in intent.get("features", []):
+        if feature == "furnished":
+            properties = properties.filter(furnished=True)
+        elif feature == "pet_friendly":
+            properties = properties.filter(pet_friendly=True)
+        elif feature == "solar_power":
+            properties = properties.filter(solar_power=True)
+        elif feature == "borehole":
+            properties = properties.filter(borehole=True)
+        elif feature == "has_360_tour":
+            properties = properties.filter(has_360_tour=True)
+        elif feature == "title_deed":
+            properties = properties.exclude(title_deed_status__in=["", "not_provided"])
+        elif feature == "serviced":
+            properties = properties.exclude(servicing_status__in=["", "not_serviced"])
+        elif feature == "electricity":
+            properties = properties.filter(electricity_available=True)
+        elif feature == "water":
+            properties = properties.filter(land_water_available=True)
+    candidates = list(properties.order_by("-updated_at")[:250])
+    intent, ranked = rank_property_candidates(query, candidates)
+    results = []
+    for item in ranked:
+        payload = serialize_property(item["property"])
+        payload["search_score"] = item["score"]
+        payload["match_reasons"] = item["reasons"]
+        results.append(payload)
+    explanation = search_explanation(query, intent, ranked)
+    return JsonResponse({"query": query, "intent": intent, "explanation": explanation, "results": results})
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def ai_property_insights(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
+    prop = get_object_or_404(Property.objects.select_related("owner", "agent"), pk=data.get("property_id"))
+    if not (is_publicly_contactable_listing(prop) or can_manage_property(acting_user, prop) or is_admin(acting_user)):
+        return forbidden()
+    return JsonResponse({"result": property_insights(prop)})
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def property_availability_confirmation(request, property_id):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    prop = get_object_or_404(Property.objects.select_related("owner", "agent"), pk=property_id)
+    if not can_manage_property(acting_user, prop):
+        return forbidden()
+    data = request_json(request) or {}
+    action = str(data.get("action", "available")).strip().lower()
+    allowed = {
+        "available": Property.AvailabilityStatus.AVAILABLE,
+        "confirm": Property.AvailabilityStatus.AVAILABLE,
+        "reserved": Property.AvailabilityStatus.RESERVED,
+        "rented": Property.AvailabilityStatus.RENTED,
+        "sold": Property.AvailabilityStatus.SOLD,
+    }
+    if action not in allowed:
+        return json_error("Choose available, reserved, rented, or sold", status=400)
+    prop.availability_status = allowed[action]
+    prop.availability_confirmed_at = timezone.now()
+    prop.save(update_fields=["availability_status", "availability_confirmed_at", "updated_at"])
+    broadcast_property_change(prop, "availability_updated")
+    return JsonResponse(serialize_property(prop))

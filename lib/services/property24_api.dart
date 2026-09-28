@@ -70,6 +70,17 @@ class PropertyDraft {
     this.borehole = false,
     this.petFriendly = false,
     this.has360Tour = false,
+    this.standReference = '',
+    this.standsAvailable = 1,
+    this.landSize = '',
+    this.landSizeUnit = 'sqm',
+    this.titleDeedStatus = 'not_provided',
+    this.servicingStatus = 'not_serviced',
+    this.zoning = '',
+    this.roadAccess = '',
+    this.electricityAvailable = false,
+    this.landWaterAvailable = false,
+    this.paymentTerms = '',
   });
 
   final String title;
@@ -93,6 +104,17 @@ class PropertyDraft {
   final bool borehole;
   final bool petFriendly;
   final bool has360Tour;
+  final String standReference;
+  final int standsAvailable;
+  final String landSize;
+  final String landSizeUnit;
+  final String titleDeedStatus;
+  final String servicingStatus;
+  final String zoning;
+  final String roadAccess;
+  final bool electricityAvailable;
+  final bool landWaterAvailable;
+  final String paymentTerms;
 
   Map<String, dynamic> toJson() {
     return {
@@ -119,6 +141,18 @@ class PropertyDraft {
       'borehole': borehole,
       'pet_friendly': petFriendly,
       'has_360_tour': has360Tour,
+      'stand_reference': standReference,
+      'stands_available': standsAvailable,
+      if (landSize.trim().isNotEmpty)
+        'land_size': landSize.replaceAll(RegExp(r'[^0-9.]'), ''),
+      'land_size_unit': landSizeUnit,
+      'title_deed_status': titleDeedStatus,
+      'servicing_status': servicingStatus,
+      'zoning': zoning,
+      'road_access': roadAccess,
+      'electricity_available': electricityAvailable,
+      'land_water_available': landWaterAvailable,
+      'payment_terms': paymentTerms,
     };
   }
 }
@@ -473,6 +507,18 @@ class Property24Api {
     return _results(response).map(PropertyListing.fromJson).toList();
   }
 
+  Future<AiSearchResponse> aiPropertySearch({
+    String? token,
+    required String query,
+  }) async {
+    final body = await _post(
+      'ai/property-search/',
+      token: token,
+      body: {'query': query},
+    );
+    return AiSearchResponse.fromJson(body);
+  }
+
   Future<PropertyListing> createProperty(
       String token, PropertyDraft draft) async {
     final body = await _post('properties/', token: token, body: draft.toJson());
@@ -486,6 +532,19 @@ class Property24Api {
   ) async {
     final body = await _patch('properties/$propertyId/',
         token: token, body: draft.toJson());
+    return PropertyListing.fromJson(body);
+  }
+
+  Future<PropertyListing> confirmPropertyAvailability(
+    String token,
+    String propertyId, {
+    String action = 'available',
+  }) async {
+    final body = await _post(
+      'properties/$propertyId/availability/',
+      token: token,
+      body: {'action': action},
+    );
     return PropertyListing.fromJson(body);
   }
 

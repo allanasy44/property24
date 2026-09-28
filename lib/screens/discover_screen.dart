@@ -709,11 +709,14 @@ class _ComparisonTray extends StatelessWidget {
                               color: AppTheme.textMuted,
                             )),
                         Text(
-                            '${property.bedrooms} bed · ${property.bathrooms} bath',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.textMuted,
-                            )),
+                          property.isLand
+                              ? '${property.landSizeLabel} · ${property.standSummary}'
+                              : '${property.bedrooms} bed · ${property.bathrooms} bath',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
                       ],
                     ),
                   ),
