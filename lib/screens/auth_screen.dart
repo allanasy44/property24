@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -30,6 +32,8 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _submitting = false;
   String? _registrationChallengeId;
   String? _error;
+  Timer? _resendTimer;
+  int _resendSeconds = 0;
 
   static const _heroImage =
       'https://images.pexels.com/photos/323780/pexels-photo-323780.jpeg?auto=compress&cs=tinysrgb&w=1200';
@@ -39,6 +43,7 @@ class _AuthScreenState extends State<AuthScreen> {
     _name.dispose();
     _email.dispose();
     _password.dispose();
+    _resendTimer?.cancel();
     _emailCode.dispose();
     super.dispose();
   }
@@ -318,6 +323,8 @@ class _AuthScreenState extends State<AuthScreen> {
             TextFormField(
               controller: _emailCode,
               keyboardType: TextInputType.number,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               validator: (value) => RegExp(r'^\d{6}$').hasMatch(value ?? '')
                   ? null
                   : 'Enter the 6-digit email code',
@@ -329,8 +336,12 @@ class _AuthScreenState extends State<AuthScreen> {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: _submitting ? null : _resendRegistrationEmail,
-                child: const Text('Resend code'),
+                onPressed: _submitting || _resendSeconds > 0
+                    ? null
+                    : _resendRegistrationEmail,
+                child: Text(_resendSeconds == 0
+                    ? 'Resend code'
+                    : 'Resend in ${_resendSeconds}s'),
               ),
             ),
           ],
@@ -354,7 +365,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 10),
           const Center(
             child: Text(
-              'or use email and password',
+              'or continue with your account details',
               style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
             ),
           ),
@@ -406,6 +417,24 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  void _startResendCooldown([int seconds = 60]) {
+    _resendTimer?.cancel();
+    if (!mounted) return;
+    setState(() => _resendSeconds = seconds);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendSeconds <= 1) {
+        timer.cancel();
+        setState(() => _resendSeconds = 0);
+      } else {
+        setState(() => _resendSeconds -= 1);
+      }
+    });
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
@@ -430,6 +459,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
         if (!mounted) return;
         setState(() => _showForm = true);
+        _startResendCooldown();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Check your email for the verification code.')));
       } else {
@@ -462,11 +492,18 @@ class _AuthScreenState extends State<AuthScreen> {
           .read<Property24State>()
           .resendRegistrationEmail(challengeId);
       if (!mounted) return;
-      setState(() => _registrationChallengeId = newChallengeId);
+      setState(() {
+        _registrationChallengeId = newChallengeId;
+        _emailCode.clear();
+      });
+      _startResendCooldown();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('A new verification code was sent.')),
       );
     } catch (exception) {
+      if (exception is ApiException && exception.statusCode == 429) {
+        _startResendCooldown();
+      }
       if (mounted) setState(() => _error = userFacingError(exception));
     } finally {
       if (mounted) setState(() => _submitting = false);

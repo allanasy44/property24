@@ -43,8 +43,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
     final user = state.user;
-    final notificationCount = _profileNotifications(state).length;
-    final bookingCount = _availableBookings(state).length;
 
     final name =
         user?.name.trim().isNotEmpty == true ? user!.name : 'Property24 member';
@@ -64,28 +62,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
           physics: const BouncingScrollPhysics(),
           children: [
-            // ─── Back arrow + "Profile" title ───
-            Row(
-              children: [
-                _CircleIconButton(
-                  icon: CupertinoIcons.back,
-                  onTap: () => Navigator.of(context).maybePop(),
-                ),
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      'Profile',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 40),
-              ],
+            Text(
+              'Profile',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textPrimary,
+              ),
             ),
             const SizedBox(height: 28),
 
@@ -188,24 +171,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onTap: () => _openSettings(context),
             ),
             _MenuCardTile(
-              icon: CupertinoIcons.bell,
-              label: 'Notifications',
-              subtitle: notificationCount == 0
-                  ? 'No new synced updates'
-                  : '$notificationCount synced updates',
-              badge: notificationCount,
-              onTap: () => _openNotifications(context),
-            ),
-            _MenuCardTile(
-              icon: CupertinoIcons.calendar,
-              label: 'Available Bookings',
-              subtitle: bookingCount == 0
-                  ? 'No pending or reserved bookings'
-                  : '$bookingCount pending or reserved',
-              badge: bookingCount,
-              onTap: () => _openBookings(context),
-            ),
-            _MenuCardTile(
               icon: CupertinoIcons.person_2,
               label: 'Help Center',
               onTap: () => _openHelp(context),
@@ -248,27 +213,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  List<String> _profileNotifications(Property24State state) {
-    final items = <String>[
-      for (final item in state.snapshot.conversations)
-        '${item.title}: ${item.preview}',
-      for (final item in state.snapshot.applications)
-        '${item.property}: application ${item.status.toLowerCase()}',
-      for (final item in state.snapshot.viewings)
-        '${item.property}: booking ${item.status.toLowerCase()}',
-      for (final item in state.snapshot.verifications)
-        'Verification ${item.status.toLowerCase()}: ${item.role}',
-      ...state.notifications,
-    ];
-    return items.where((item) => item.trim().isNotEmpty).toList();
-  }
-
-  List<ViewingItem> _availableBookings(Property24State state) {
-    return state.snapshot.viewings
-        .where((item) => item.isAvailableBooking)
-        .toList(growable: false);
-  }
-
   String _verificationSummary(AccountUser? user) {
     if (user == null) return 'Sign in to verify your account';
     if (user.verified) return 'Identity verification complete';
@@ -301,20 +245,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _openSidePanel<void>(
       context: context,
       child: _VerificationSheet(user: user),
-    );
-  }
-
-  void _openNotifications(BuildContext context) {
-    _openSidePanel<void>(
-      context: context,
-      child: _NotificationsPanel(notificationsBuilder: _profileNotifications),
-    );
-  }
-
-  void _openBookings(BuildContext context) {
-    _openSidePanel<void>(
-      context: context,
-      child: _BookingsPanel(bookingsBuilder: _availableBookings),
     );
   }
 }
@@ -526,8 +456,6 @@ class _SettingsSheet extends StatefulWidget {
 }
 
 class _SettingsSheetState extends State<_SettingsSheet> {
-  bool _pushEnabled = true;
-
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
@@ -585,28 +513,29 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                       const _TextInfoPanel(
                         title: 'Privacy',
                         body:
-                            'Property24 stores profile media, verification files, bookings, conversations, leases, and application activity on the backend. Identity documents are processed for verification and retained only for the configured review window.',
+                            'Your account keeps your profile, bookings, conversations, leases, and applications together in one place. Identity documents are processed for verification and retained only for the configured review window.',
                       ),
                     ),
                   ),
-                  _SettingsTile(
-                    icon: CupertinoIcons.doc_text,
-                    label: 'My Bookings',
-                    trailing: _CountBadge(
-                      count: state.snapshot.viewings
-                          .where((item) => item.isAvailableBooking)
-                          .length,
-                    ),
-                    onTap: () => _openNestedPanel(
-                      context,
-                      _BookingsPanel(
-                        bookingsBuilder: (state) => state.snapshot.viewings
+                  if (state.account.role != AccountRole.landlord)
+                    _SettingsTile(
+                      icon: CupertinoIcons.doc_text,
+                      label: 'My Bookings',
+                      trailing: _CountBadge(
+                        count: state.snapshot.viewings
                             .where((item) => item.isAvailableBooking)
-                            .toList(growable: false),
+                            .length,
                       ),
+                      onTap: () => _openNestedPanel(
+                        context,
+                        _BookingsPanel(
+                          bookingsBuilder: (state) => state.snapshot.viewings
+                              .where((item) => item.isAvailableBooking)
+                              .toList(growable: false),
+                        ),
+                      ),
+                      showDivider: false,
                     ),
-                    showDivider: false,
-                  ),
                 ],
               ),
               const SizedBox(height: 26),
@@ -625,34 +554,9 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                       context,
                       const _TextInfoPanel(
                         title: 'Language',
-                        body:
-                            'The current app language is English. This is synced with the local app profile while backend account data remains unchanged.',
+                        body: 'English is the current app language.',
                       ),
                     ),
-                  ),
-                  _SettingsTile(
-                    icon: CupertinoIcons.bell,
-                    label: 'Push Notification',
-                    trailing: _ThemedSwitch(
-                      value: _pushEnabled,
-                      onChanged: (value) {
-                        setState(() => _pushEnabled = value);
-                        context.read<Property24State>().addNotification(
-                              value
-                                  ? 'Push notifications enabled for bookings, chats, and verification updates.'
-                                  : 'Push notifications paused on this device.',
-                            );
-                      },
-                    ),
-                    onTap: () {
-                      final next = !_pushEnabled;
-                      setState(() => _pushEnabled = next);
-                      context.read<Property24State>().addNotification(
-                            next
-                                ? 'Push notifications enabled for bookings, chats, and verification updates.'
-                                : 'Push notifications paused on this device.',
-                          );
-                    },
                   ),
                   _SettingsTile(
                     icon: CupertinoIcons.moon,
@@ -726,7 +630,7 @@ class _SyncSummary extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Synced with backend',
+            'Account overview',
             style: TextStyle(
               color: AppTheme.textPrimary,
               fontWeight: FontWeight.w700,
@@ -1208,7 +1112,7 @@ class _ProfileImagePicker extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'JPEG, PNG, or WEBP uploaded to your backend profile.',
+                  'JPEG, PNG, or WEBP images are supported for your profile picture.',
                   style: TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 12,
@@ -1290,74 +1194,6 @@ class _ThemedField extends StatelessWidget {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: AppTheme.accent, width: 1.2),
-        ),
-      ),
-    );
-  }
-}
-
-class _NotificationsPanel extends StatelessWidget {
-  const _NotificationsPanel({required this.notificationsBuilder});
-  final List<String> Function(Property24State state) notificationsBuilder;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = context.watch<Property24State>();
-    final notifications = notificationsBuilder(state);
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _PanelHeader(
-              title: 'Notifications',
-              onClose: () => Navigator.of(context).pop(),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: () => context.read<Property24State>().refresh(),
-                child: notifications.isEmpty
-                    ? ListView(
-                        children: [
-                          const SizedBox(height: 80),
-                          Icon(
-                            CupertinoIcons.bell_slash,
-                            color: AppTheme.textMuted,
-                            size: 40,
-                          ),
-                          const SizedBox(height: 12),
-                          Center(
-                            child: Text(
-                              'No synced notifications yet.',
-                              style: TextStyle(color: AppTheme.textMuted),
-                            ),
-                          ),
-                        ],
-                      )
-                    : ListView.separated(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: notifications.length,
-                        separatorBuilder: (_, __) =>
-                            Divider(color: AppTheme.border, height: 1),
-                        itemBuilder: (context, index) {
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(
-                              CupertinoIcons.bell,
-                              color: AppTheme.accent,
-                            ),
-                            title: Text(
-                              notifications[index],
-                              style: TextStyle(color: AppTheme.textPrimary),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -1692,7 +1528,7 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  'Upload clear JPEG, PNG, or WEBP images. The backend validates file type, size, resolution, document readability, duplicate use, and consistency with your account before review.',
+                  'Upload clear JPEG, PNG, or WEBP images. Your documents are checked for clarity, validity, and consistency before review.',
                   style: TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 12,

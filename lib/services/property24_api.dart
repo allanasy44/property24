@@ -21,12 +21,8 @@ class ApiException implements Exception {
 String userFacingError(Object error) {
   if (error is ApiException) {
     return switch (error.statusCode) {
-      400 => 'Please check the information and try again.',
-      401 => 'Your email or password could not be verified.',
-      403 => 'This action is not available for this account.',
-      404 => 'The requested information could not be found.',
-      409 => 'These account details are already in use.',
-      429 => 'Too many attempts. Please try again later.',
+      400 || 403 || 404 || 409 || 429 => error.message,
+      401 => 'Your session has expired. Please sign in again.',
       500 ||
       502 ||
       503 =>
@@ -41,12 +37,14 @@ class AuthSession {
   const AuthSession({
     required this.token,
     required this.user,
+    this.refreshToken,
     required this.account,
   });
 
   final String token;
   final AccountUser user;
   final AccountContext account;
+  final String? refreshToken;
 }
 
 class PropertyDraft {
@@ -155,6 +153,14 @@ class Property24Api {
         'password': password,
         if (role != null) 'account_type': role.apiValue,
       },
+    );
+    return _authSessionFromBody(body);
+  }
+
+  Future<AuthSession> refresh(String refreshToken) async {
+    final body = await _post(
+      'auth/refresh/',
+      body: {'refresh': refreshToken},
     );
     return _authSessionFromBody(body);
   }
@@ -448,6 +454,7 @@ class Property24Api {
   }
 
   Future<List<PropertyListing>> searchProperties({
+    String? token,
     String? query,
     String? city,
     String? suburb,
@@ -455,6 +462,7 @@ class Property24Api {
   }) async {
     final response = await _get(
       'properties/',
+      token: token,
       query: {
         'search': query,
         'city': city,
@@ -540,6 +548,87 @@ class Property24Api {
     );
     return ConversationItem.fromJson(
         body['conversation'] as Map<String, dynamic>);
+  }
+
+  Future<PropertyListing> uploadPropertyPhoto({
+    required String token,
+    required String propertyId,
+    required Uint8List bytes,
+    required String filename,
+    String? mimeType,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      AppConfig.apiUri('properties/$propertyId/photos/'),
+    )
+      ..headers.addAll(_multipartHeaders(token))
+      ..fields['caption'] = filename
+      ..files.add(http.MultipartFile.fromBytes(
+        'image',
+        bytes,
+        filename: filename,
+        contentType: _mediaTypeFor(mimeType, filename),
+      ));
+    final response = await http.Response.fromStream(await request.send());
+    _decode(response);
+    return PropertyListing.fromJson(
+      await _get('properties/$propertyId/', token: token),
+    );
+  }
+
+  Future<PropertyListing> uploadPropertyVideo({
+    required String token,
+    required String propertyId,
+    required Uint8List bytes,
+    required String filename,
+    String? mimeType,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      AppConfig.apiUri('properties/$propertyId/videos/'),
+    )
+      ..headers.addAll(_multipartHeaders(token))
+      ..fields['caption'] = filename
+      ..files.add(http.MultipartFile.fromBytes(
+        'video',
+        bytes,
+        filename: filename,
+        contentType: _mediaTypeFor(mimeType, filename),
+      ));
+    final response = await http.Response.fromStream(await request.send());
+    _decode(response);
+    return PropertyListing.fromJson(
+      await _get('properties/$propertyId/', token: token),
+    );
+  }
+
+  Future<Map<String, dynamic>> sendMessageAttachment({
+    required String token,
+    required String conversationId,
+    required Uint8List bytes,
+    required String filename,
+    required String attachmentType,
+    String? mimeType,
+    String body = '',
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      AppConfig.apiUri('conversations/$conversationId/messages/'),
+    )
+      ..headers.addAll(_multipartHeaders(token))
+      ..fields['body'] = body
+      ..fields['attachment_type'] = attachmentType
+      ..fields['attachment_name'] = filename
+      ..fields['client_message_id'] =
+          'flutter-media-${DateTime.now().microsecondsSinceEpoch}'
+      ..files.add(http.MultipartFile.fromBytes(
+        'attachment',
+        bytes,
+        filename: filename,
+        contentType: _mediaTypeFor(mimeType, filename),
+      ));
+    final response = await http.Response.fromStream(await request.send());
+    return _decode(response);
   }
 
   Future<void> sendMessage(
@@ -636,9 +725,19 @@ class Property24Api {
 
   Map<String, dynamic> _decode(http.Response response) {
     final text = response.body.trim();
-    final body = text.isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(text) as Map<String, dynamic>;
+    late final Map<String, dynamic> body;
+    try {
+      final decoded = text.isEmpty ? <String, dynamic>{} : jsonDecode(text);
+      if (decoded is! Map) throw const FormatException();
+      body = Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      throw ApiException(
+        response.statusCode >= 200 && response.statusCode < 300
+            ? 'The server returned an invalid response. Please try again.'
+            : 'The server returned an invalid error response (${response.statusCode}).',
+        response.statusCode,
+      );
+    }
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return body;
     }
@@ -658,6 +757,9 @@ class Property24Api {
     }
     return AuthSession(
       token: token,
+      refreshToken: '${tokens?['refresh'] ?? ''}'.trim().isEmpty
+          ? null
+          : '${tokens?['refresh']}'.trim(),
       user: AccountUser.fromJson(
         body['user'] as Map<String, dynamic>,
         body['account'] as Map<String, dynamic>?,

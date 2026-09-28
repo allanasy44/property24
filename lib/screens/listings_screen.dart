@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/rental_models.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
-import '../widgets/property_card.dart';
 import 'ai_search_screen.dart';
 import 'property_detail_screen.dart';
 
@@ -22,7 +22,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
   String _query = '';
 
   static const _primary = AppTheme.accent;
-  static const _primarySoft = Color(0xfff1f1ff);
+  static const _primarySoft = AppTheme.bgSurface;
   static const _searchFill = AppTheme.bgSurface;
   static const _textDark = AppTheme.textPrimary;
   static const _textMuted = AppTheme.textMuted;
@@ -147,7 +147,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                     ),
                     const SizedBox(height: 18),
                     const Text(
-                      'Manage listings',
+                      'Listings',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -165,7 +165,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                   icon: CupertinoIcons.house,
                   title: 'No listings yet',
                   body:
-                      'Create a verified rental listing connected to the Django property API.',
+                      'Create a sale or rental listing to start receiving enquiries.',
                 ),
               )
             else if (listings.isEmpty)
@@ -183,7 +183,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                   itemCount: listings.length,
                   itemBuilder: (context, index) {
                     final property = listings[index];
-                    return PropertyCard(
+                    return _LandlordListingTile(
                       property: property,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -191,18 +191,8 @@ class _ListingsScreenState extends State<ListingsScreen> {
                               PropertyDetailScreen(property: property),
                         ),
                       ),
-                      trailing: PopupMenuButton<String>(
-                        icon: const Icon(CupertinoIcons.ellipsis,
-                            color: _textMuted),
-                        onSelected: (value) {
-                          if (value == 'edit') _openEditor(context, property);
-                          if (value == 'delete') _delete(context, property);
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'edit', child: Text('Edit')),
-                          PopupMenuItem(value: 'delete', child: Text('Delete')),
-                        ],
-                      ),
+                      onEdit: () => _openEditor(context, property),
+                      onDelete: () => _delete(context, property),
                     );
                   },
                 ),
@@ -310,6 +300,136 @@ class _Section extends StatelessWidget {
   }
 }
 
+class _LandlordListingTile extends StatelessWidget {
+  const _LandlordListingTile(
+      {required this.property,
+      required this.onTap,
+      required this.onEdit,
+      required this.onDelete});
+
+  final PropertyListing property;
+  final VoidCallback onTap;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isSale = property.listingIntent == 'sale';
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: 14),
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 168,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  property.photos.isEmpty
+                      ? ColoredBox(
+                          color: theme.colorScheme.primaryContainer,
+                          child: Icon(CupertinoIcons.house,
+                              size: 42, color: theme.colorScheme.primary))
+                      : Image.network(property.photos.first,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => ColoredBox(
+                              color: theme.colorScheme.primaryContainer,
+                              child: Icon(CupertinoIcons.house,
+                                  size: 42, color: theme.colorScheme.primary))),
+                  Positioned(
+                      left: 12,
+                      top: 12,
+                      child:
+                          Chip(label: Text(isSale ? 'For sale' : 'For rent'))),
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Listing actions',
+                      onSelected: (value) =>
+                          value == 'edit' ? onEdit() : onDelete(),
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                            value: 'edit', child: Text('Edit listing')),
+                        PopupMenuItem(
+                            value: 'delete', child: Text('Delete listing')),
+                      ],
+                      icon: const Icon(CupertinoIcons.ellipsis_circle_fill,
+                          color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                          child: Text(property.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium)),
+                      Text(property.rentLabel,
+                          style: theme.textTheme.labelLarge
+                              ?.copyWith(color: theme.colorScheme.primary)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(property.heroLocation,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 6,
+                    children: [
+                      _ListingMetric(
+                          icon: CupertinoIcons.eye,
+                          value: '${property.listingViews} views'),
+                      _ListingMetric(
+                          icon: CupertinoIcons.person_2,
+                          value: '${property.applicationsCount} applications'),
+                      _ListingMetric(
+                          icon: CupertinoIcons.circle_fill,
+                          value: property.availabilityStatus),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ListingMetric extends StatelessWidget {
+  const _ListingMetric({required this.icon, required this.value});
+
+  final IconData icon;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 14, color: AppTheme.textMuted),
+      const SizedBox(width: 4),
+      Text(value, style: Theme.of(context).textTheme.labelSmall)
+    ]);
+  }
+}
+
 class PropertyEditor extends StatefulWidget {
   const PropertyEditor({this.property, super.key});
 
@@ -321,7 +441,7 @@ class PropertyEditor extends StatefulWidget {
 
 class _PropertyEditorState extends State<PropertyEditor> {
   static const _primary = AppTheme.accent;
-  static const _primarySoft = Color(0xfff1f1ff);
+  static const _primarySoft = AppTheme.bgSurface;
   static const _searchFill = AppTheme.bgSurface;
   static const _textDark = AppTheme.textPrimary;
   static const _textMuted = AppTheme.textMuted;
@@ -351,6 +471,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
   bool _pets = false;
   bool _tour = false;
   bool _showExactLocation = false;
+  final ImagePicker _picker = ImagePicker();
+  final List<XFile> _newImages = <XFile>[];
+  XFile? _newVideo;
 
   @override
   void initState() {
@@ -414,11 +537,14 @@ class _PropertyEditorState extends State<PropertyEditor> {
       appBar: AppBar(
         title: Text(widget.property == null ? 'Add property' : 'Edit property'),
         centerTitle: true,
-        leading: IconButton(
-          tooltip: 'Back',
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(CupertinoIcons.chevron_left),
-        ),
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            tooltip: 'Close',
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(CupertinoIcons.xmark),
+          ),
+        ],
       ),
       body: Form(
         key: _formKey,
@@ -426,16 +552,49 @@ class _PropertyEditorState extends State<PropertyEditor> {
           padding: EdgeInsets.fromLTRB(16, 8, 16, inset + 96),
           children: [
             _Section(
-              title: 'Property for',
-              child: SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'Sale', label: Text('Sale')),
-                  ButtonSegment(value: 'Rent', label: Text('Rent')),
-                ],
-                selected: {_intent},
-                showSelectedIcon: false,
-                onSelectionChanged: (value) =>
-                    setState(() => _intent = value.first),
+              title: 'Listing type',
+              child: Builder(
+                builder: (context) {
+                  final colors = Theme.of(context).colorScheme;
+                  return SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'Sale',
+                        label: Text('For sale'),
+                        icon: Icon(CupertinoIcons.tag),
+                      ),
+                      ButtonSegment(
+                        value: 'Rent',
+                        label: Text('For rent'),
+                        icon: Icon(CupertinoIcons.calendar),
+                      ),
+                    ],
+                    selected: {_intent},
+                    showSelectedIcon: false,
+                    style: ButtonStyle(
+                      backgroundColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.selected)
+                            ? colors.primary
+                            : colors.surfaceContainerHighest,
+                      ),
+                      foregroundColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.selected)
+                            ? colors.onPrimary
+                            : colors.onSurface,
+                      ),
+                      side: WidgetStatePropertyAll(
+                        BorderSide(color: colors.outlineVariant),
+                      ),
+                      shape: const WidgetStatePropertyAll(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    onSelectionChanged: (value) =>
+                        setState(() => _intent = value.first),
+                  );
+                },
               ),
             ),
             _Section(
@@ -587,27 +746,117 @@ class _PropertyEditorState extends State<PropertyEditor> {
               ),
             ),
             _Section(
-              title: 'Media',
+              title: 'Media files',
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _field(
-                    _images,
-                    'Image URLs, one per line',
-                    maxLines: 3,
-                    requiredField: false,
+                  Text(
+                    'Add clear, well-lit photos and a short walkthrough for a stronger listing.',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  _field(
-                    _videos,
-                    'Video URLs, one per line',
-                    maxLines: 3,
-                    requiredField: false,
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _pickPhoto(camera: true),
+                        icon: const Icon(CupertinoIcons.camera, size: 18),
+                        label: const Text('Take photo'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _pickPhoto,
+                        icon: const Icon(CupertinoIcons.photo_on_rectangle,
+                            size: 18),
+                        label: const Text('Choose photos'),
+                      ),
+                    ],
                   ),
-                  _field(
-                    _audio,
-                    'Audio walkthrough URLs, one per line',
-                    maxLines: 2,
-                    requiredField: false,
+                  if (widget.property?.photos.isNotEmpty == true) ...[
+                    const SizedBox(height: 14),
+                    Text('Published photos',
+                        style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 86,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: widget.property!.photos.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (_, index) => ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            widget.property!.photos[index],
+                            width: 112,
+                            height: 86,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 112,
+                              height: 86,
+                              color: AppTheme.bgSurface,
+                              alignment: Alignment.center,
+                              child: const Icon(CupertinoIcons.photo),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (_newImages.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text('Ready to upload',
+                        style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(height: 6),
+                    for (final file in _newImages)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        leading: const Icon(CupertinoIcons.photo,
+                            color: AppTheme.accent),
+                        title: Text(file.name,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        trailing: IconButton(
+                          tooltip: 'Remove photo',
+                          onPressed: () =>
+                              setState(() => _newImages.remove(file)),
+                          icon: const Icon(CupertinoIcons.xmark_circle),
+                        ),
+                      ),
+                  ],
+                  const Divider(height: 28),
+                  Text('Video walkthrough',
+                      style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _pickVideo(camera: true),
+                        icon: const Icon(CupertinoIcons.videocam, size: 18),
+                        label: const Text('Record video'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _pickVideo,
+                        icon: const Icon(CupertinoIcons.film, size: 18),
+                        label: const Text('Choose video'),
+                      ),
+                    ],
                   ),
+                  if (_newVideo != null)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      leading: const Icon(CupertinoIcons.film,
+                          color: AppTheme.accent),
+                      title: Text(_newVideo!.name,
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      trailing: IconButton(
+                        tooltip: 'Remove video',
+                        onPressed: () => setState(() => _newVideo = null),
+                        icon: const Icon(CupertinoIcons.xmark_circle),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -617,7 +866,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: _primarySoft,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Column(
                   children: [
@@ -663,15 +912,15 @@ class _PropertyEditorState extends State<PropertyEditor> {
           fontWeight: FontWeight.w500,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: _primary, width: 1.4),
         ),
         contentPadding:
@@ -715,6 +964,45 @@ class _PropertyEditorState extends State<PropertyEditor> {
     );
   }
 
+  Future<void> _pickPhoto({bool camera = false}) async {
+    try {
+      if (camera) {
+        final file = await _picker.pickImage(
+          source: ImageSource.camera,
+          preferredCameraDevice: CameraDevice.rear,
+          imageQuality: 100,
+        );
+        if (file != null && mounted) setState(() => _newImages.add(file));
+        return;
+      }
+      final files = await _picker.pickMultiImage(imageQuality: 100);
+      if (mounted && files.isNotEmpty) setState(() => _newImages.addAll(files));
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickVideo({bool camera = false}) async {
+    try {
+      final file = await _picker.pickVideo(
+        source: camera ? ImageSource.camera : ImageSource.gallery,
+        preferredCameraDevice: CameraDevice.rear,
+        maxDuration: const Duration(minutes: 2),
+      );
+      if (file != null && mounted) setState(() => _newVideo = file);
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final hasLatitude = _latitude.text.trim().isNotEmpty;
@@ -750,10 +1038,18 @@ class _PropertyEditorState extends State<PropertyEditor> {
     );
 
     try {
-      await context.read<Property24State>().saveProperty(
-            draft,
-            propertyId: widget.property?.id,
-          );
+      final state = context.read<Property24State>();
+      final saved = await state.saveProperty(
+        draft,
+        propertyId: widget.property?.id,
+      );
+      for (final file in _newImages) {
+        await state.uploadPropertyPhoto(saved.id, file);
+      }
+      if (_newVideo != null) {
+        await state.uploadPropertyVideo(saved.id, _newVideo!);
+      }
+      await state.refresh();
       if (!mounted) return;
       await _showSuccessDialog();
       if (mounted) Navigator.pop(context);

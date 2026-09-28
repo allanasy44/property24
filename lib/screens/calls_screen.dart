@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
+import 'listings_screen.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 
@@ -19,6 +20,9 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
+    if (state.user?.role == AccountRole.landlord) {
+      return const ListingsScreen();
+    }
     final properties = state.snapshot.savedProperties;
     final sale = properties
         .where((property) => property.listingIntent == 'sale')

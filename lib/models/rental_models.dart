@@ -177,7 +177,7 @@ class AccountContext {
         'verification'
       ],
       capabilities: ['search_properties', 'save_properties'],
-      onboardingRequirements: ['email_verification'],
+      onboardingRequirements: ['phone_verification'],
       fullVerificationRequired: false,
     );
   }

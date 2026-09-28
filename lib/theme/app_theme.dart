@@ -17,7 +17,113 @@ class AppTheme {
   static const Color textMuted = Color(0xffa4a6a6);
   static const Color trustHigh = Color(0xff6a53fe);
 
-  static ThemeData get darkTheme => lightTheme;
+  static ThemeData get darkTheme {
+    const background = Color(0xff111318);
+    const card = Color(0xff1a1d24);
+    const surface = Color(0xff222631);
+    const darkText = Color(0xfff4f5f7);
+    const mutedText = Color(0xffb6bbc5);
+    const darkBorder = Color(0xff343a47);
+    final base = ThemeData.dark(useMaterial3: true);
+    final textTheme = GoogleFonts.poppinsTextTheme(base.textTheme).apply(
+      bodyColor: darkText,
+      displayColor: darkText,
+    );
+
+    return base.copyWith(
+      colorScheme: const ColorScheme.dark(
+        primary: accent,
+        onPrimary: Colors.white,
+        primaryContainer: Color(0xff302870),
+        onPrimaryContainer: Color(0xffeeeaff),
+        secondary: accentTeal,
+        onSecondary: Colors.white,
+        tertiary: accentGold,
+        surface: card,
+        onSurface: darkText,
+        surfaceContainerHighest: surface,
+        onSurfaceVariant: mutedText,
+        outline: Color(0xff5d6676),
+        outlineVariant: darkBorder,
+      ),
+      scaffoldBackgroundColor: background,
+      textTheme: textTheme.copyWith(
+        headlineSmall: textTheme.headlineSmall?.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0,
+        ),
+        titleLarge: textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0,
+        ),
+        titleMedium: textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0,
+        ),
+        bodyMedium: textTheme.bodyMedium?.copyWith(
+          color: mutedText,
+          letterSpacing: 0,
+        ),
+        labelLarge: textTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0,
+        ),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: background,
+        foregroundColor: darkText,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
+      cardTheme: CardThemeData(
+        color: card,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: darkBorder),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surface,
+        border: const OutlineInputBorder(
+          borderSide: BorderSide(color: darkBorder),
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+        ),
+        enabledBorder: const OutlineInputBorder(
+          borderSide: BorderSide(color: darkBorder),
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderSide: BorderSide(color: accent),
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+        ),
+      ),
+      chipTheme: const ChipThemeData(
+        backgroundColor: surface,
+        selectedColor: Color(0x4d6a53fe),
+        side: BorderSide(color: darkBorder),
+        labelStyle: TextStyle(color: darkText),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: accent,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Color(0xffc9c2ff),
+          side: const BorderSide(color: Color(0xff8075d8)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+    );
+  }
 
   static ThemeData get lightTheme {
     final base = ThemeData.light(useMaterial3: true);

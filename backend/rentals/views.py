@@ -172,9 +172,9 @@ ROLE_VISIBLE_SECTIONS = {
 }
 
 ROLE_ONBOARDING_REQUIREMENTS = {
-    User.Roles.TENANT: ["email_verification", "phone_verification"],
-    User.Roles.LANDLORD: ["email_verification", "phone_verification"],
-    User.Roles.AGENT: ["email_verification", "phone_verification"],
+    User.Roles.TENANT: ["phone_verification"],
+    User.Roles.LANDLORD: ["phone_verification"],
+    User.Roles.AGENT: ["phone_verification"],
     User.Roles.ADMIN: [],
 }
 
@@ -223,9 +223,9 @@ def require_authenticated(request):
         return None, json_error(error, status=401)
     if request.method != "OPTIONS" and user.role in {User.Roles.LANDLORD, User.Roles.AGENT} and not account_onboarding_complete(user) and not verification_access_allowed(request):
         return None, json_error(
-            "Email verification is required before using this feature",
+            "Phone verification is required before using this feature",
             status=403,
-            errors={"account_onboarding_required": True, "next_endpoint": "/api/verifications/email-otp/"},
+            errors={"account_onboarding_required": True, "next_endpoint": "/api/verifications/phone-otp/"},
         )
     return user, None
 
@@ -374,7 +374,7 @@ def auth_login(request):
     username = data.get("username") or data.get("email")
     password = data.get("password")
     if not username or not password:
-        return json_error("username/email and password are required")
+        return json_error("Login details are required")
 
     user = authenticate(request, username=username, password=password)
     if user is None:
@@ -386,7 +386,7 @@ def auth_login(request):
         if candidate and candidate.check_password(password):
             user = candidate
     if user is None or not user.is_active:
-        return json_error("Invalid credentials", status=401)
+        return json_error("Login details are incorrect", status=401)
 
     requested_role = data.get("account_type") or data.get("role")
     if requested_role:
@@ -396,7 +396,11 @@ def auth_login(request):
         if user.role != requested_role:
             return json_error("These credentials do not belong to a matching account type", status=403)
 
-    return JsonResponse({"user": serialize_user(user), "tokens": issue_token_pair(user)})
+    return JsonResponse({
+        "user": serialize_user(user),
+        "account": serialize_account_context(user),
+        "tokens": issue_token_pair(user),
+    })
 
 
 @csrf_exempt
@@ -408,7 +412,11 @@ def auth_refresh(request):
     user, error = user_from_token(data.get("refresh", ""), expected_type="refresh")
     if error:
         return json_error(error, status=401)
-    return JsonResponse({"user": serialize_user(user), "tokens": issue_token_pair(user)})
+    return JsonResponse({
+        "user": serialize_user(user),
+        "account": serialize_account_context(user),
+        "tokens": issue_token_pair(user),
+    })
 
 
 @require_http_methods(["GET", "OPTIONS"])
@@ -549,7 +557,7 @@ def auth_register_verify(request):
         return json_error("Invalid JSON body")
 
     challenge_id = data.get("challenge_id") or data.get("registration_id")
-    code = str(data.get("otp") or data.get("code") or "").strip()
+    code = re.sub(r"[\s-]+", "", str(data.get("otp") or data.get("code") or "").strip())
     if not challenge_id or not code:
         return json_error("challenge_id and otp are required")
 
@@ -593,21 +601,22 @@ def auth_register_resend(request):
     if challenge is None:
         return json_error("Registration challenge was not found or has expired", status=404)
     if (timezone.now() - challenge.updated_at).total_seconds() < 60:
-        return json_error("Please wait before requesting another code", status=429)
+        retry_after_seconds = max(1, 60 - int((timezone.now() - challenge.updated_at).total_seconds()))
+        return json_error(f"Please wait {retry_after_seconds} seconds before requesting another code", status=429)
 
     PendingRegistrationOTP.objects.filter(
         email=challenge.email,
         status=PendingRegistrationOTP.Status.PENDING,
     ).exclude(pk=challenge.pk).update(status=PendingRegistrationOTP.Status.EXPIRED)
     otp_code = get_random_string(6, allowed_chars="0123456789")
-    challenge.code_hash = hash_otp(otp_code)
-    challenge.attempts = 0
-    challenge.expires_at = timezone.now() + timedelta(minutes=settings.REGISTRATION_OTP_TTL_MINUTES)
-    challenge.save(update_fields=["code_hash", "attempts", "expires_at", "updated_at"])
     try:
         send_registration_otp(challenge.email, otp_code)
     except ValueError as exc:
         return json_error(str(exc), status=503)
+    challenge.code_hash = hash_otp(otp_code)
+    challenge.attempts = 0
+    challenge.expires_at = timezone.now() + timedelta(minutes=settings.REGISTRATION_OTP_TTL_MINUTES)
+    challenge.save(update_fields=["code_hash", "attempts", "expires_at", "updated_at"])
     return JsonResponse({
         "challenge_id": str(challenge.id),
         "email": mask_email(challenge.email),
@@ -801,7 +810,9 @@ def properties_collection(request):
         acting_user = None
         if request.headers.get("Authorization"):
             acting_user, _ = current_user(request)
-        if acting_user is None or acting_user.role == User.Roles.TENANT or to_bool(request.GET.get("public_only")):
+        if acting_user is not None and acting_user.role in {User.Roles.LANDLORD, User.Roles.AGENT} and not to_bool(request.GET.get("public_only")):
+            properties = user_properties(acting_user).select_related("owner", "agent").prefetch_related("photos", "videos")
+        else:
             properties = public_listings(properties)
         properties = apply_property_filters(properties, request.GET)
         return JsonResponse({"results": [serialize_property(item) for item in properties.order_by("-created_at")]})
@@ -1518,7 +1529,7 @@ def verification_email_otp_verify(request):
     if data is None:
         return json_error("Invalid request body")
     challenge_id = data.get("challenge_id")
-    code = str(data.get("otp") or data.get("code") or "").strip()
+    code = re.sub(r"[\s-]+", "", str(data.get("otp") or data.get("code") or "").strip())
     if not challenge_id or not code:
         return json_error("challenge_id and otp are required")
     challenge = EmailVerificationOTP.objects.filter(pk=challenge_id, user=acting_user, status=EmailVerificationOTP.Status.PENDING).first()
@@ -1615,7 +1626,7 @@ def verification_phone_otp_verify(request):
     if data is None:
         return json_error("Invalid request body")
     challenge_id = data.get("challenge_id")
-    code = str(data.get("otp") or data.get("code") or "").strip()
+    code = re.sub(r"[\s-]+", "", str(data.get("otp") or data.get("code") or "").strip())
     if not challenge_id or not code:
         return json_error("challenge_id and otp are required")
     challenge = PhoneVerificationOTP.objects.filter(pk=challenge_id, user=acting_user, status=PhoneVerificationOTP.Status.PENDING).first()
@@ -2604,8 +2615,6 @@ def validate_verification_submission(request, data, role, user):
         errors.append("confirmed document number must match extracted document number")
     if not to_bool(data.get("identity_confirmed")):
         errors.append("identity_confirmed must be true after confirming the document information")
-    if not (getattr(user, "email_verified", False) or email_otp_verified(user)):
-        errors.append("account email must be verified before identity verification")
 
     if role == User.Roles.LANDLORD and not (files.get("ownership_or_authorization_document") or data.get("ownership_or_authorization_uploaded")):
         errors.append("ownership_or_authorization_document is required for landlord verification")
@@ -3351,7 +3360,7 @@ def account_onboarding_complete(user):
         return True
     if user.is_verified:
         return True
-    return bool(user.email_verified and user.phone_verified)
+    return bool(user.phone_verified)
 
 
 def full_verification_required(user):
@@ -3409,7 +3418,7 @@ def serialize_account_context(user):
         "onboarding": {
             "required": user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user),
             "requirements": [] if account_onboarding_complete(user) else ROLE_ONBOARDING_REQUIREMENTS.get(user.role, []),
-            "next_endpoint": "/api/verifications/email-otp/" if user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user) else "",
+            "next_endpoint": "/api/verifications/phone-otp/" if user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user) else "",
             "full_verification_required": full_verification_required(user),
             "full_verification_endpoint": "/api/verifications/" if full_verification_required(user) else "",
         },

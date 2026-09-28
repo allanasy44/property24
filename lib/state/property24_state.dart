@@ -1,19 +1,30 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/rental_models.dart';
 import '../services/property24_api.dart';
 
 class Property24State extends ChangeNotifier {
-  Property24State({Property24Api? api}) : _api = api ?? Property24Api();
+  Property24State({Property24Api? api}) : _api = api ?? Property24Api() {
+    _syncTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (signedIn && !_refreshing) refresh(silent: true);
+    });
+  }
 
   static const _tokenKey = 'property24.flutter.accessToken';
+  static const _refreshTokenKey = 'property24.flutter.refreshToken';
+  static const _darkModeKey = 'property24.flutter.darkMode';
 
   final Property24Api _api;
+  Timer? _syncTimer;
+  bool _refreshing = false;
 
   PlatformSnapshot snapshot = PlatformSnapshot.empty();
   AccountUser? user;
   AccountContext account = AccountContext.guest();
+  String? _refreshToken;
   String? _token;
   bool loading = true;
   String? error;
@@ -51,21 +62,32 @@ class Property24State extends ChangeNotifier {
     try {
       final preferences = await SharedPreferences.getInstance();
       _token = preferences.getString(_tokenKey);
+      darkMode = preferences.getBool(_darkModeKey) ?? false;
+      _refreshToken = preferences.getString(_refreshTokenKey);
       if (_token != null && _token!.isNotEmpty) {
-        final session = await _api.me(_token!);
-        user = session.user;
-        account = session.account;
-        publicUsername = session.user.name
-            .toLowerCase()
-            .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-            .replaceAll(RegExp(r'_+'), '_')
-            .replaceAll(RegExp(r'^_|_$'), '');
-        profileImageUrl = session.user.profilePicture;
-        usernameVerified = session.user.verified;
+        AuthSession session;
+        try {
+          session = await _api.me(_token!);
+        } catch (exception) {
+          if (!_isUnauthorized(exception)) rethrow;
+          final restored = await _restoreSession();
+          if (restored == null) rethrow;
+          session = restored;
+        }
+        _applySession(session);
+        try {
+          snapshot = await _api.snapshot(token: _token);
+        } catch (exception) {
+          if (!_isVerificationGate(exception)) rethrow;
+          await _loadVerificationSnapshot();
+        }
+      } else {
+        snapshot = await _api.snapshot();
       }
-      snapshot = await _api.snapshot(token: _token);
     } catch (exception) {
       await _clearToken();
+      user = null;
+      account = AccountContext.guest();
       snapshot = await _api.snapshot();
       error = userFacingError(exception);
     } finally {
@@ -74,16 +96,44 @@ class Property24State extends ChangeNotifier {
     }
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh({bool silent = false}) async {
+    if (_refreshing) return;
+    _refreshing = true;
     error = null;
-    notifyListeners();
+    if (!silent) notifyListeners();
     try {
-      snapshot = await _api.snapshot(token: _token);
+      try {
+        if (_token == null || _token!.isEmpty) {
+          snapshot = await _api.snapshot();
+        } else {
+          final session = await _api.me(_token!);
+          _applySession(session);
+          snapshot = await _api.snapshot(token: _token);
+        }
+      } catch (exception) {
+        if (_isUnauthorized(exception)) {
+          final restored = await _restoreSession();
+          if (restored == null) rethrow;
+          _applySession(restored);
+          snapshot = await _api.snapshot(token: _token);
+        } else if (!_isVerificationGate(exception)) {
+          rethrow;
+        } else {
+          await _loadVerificationSnapshot();
+        }
+      }
     } catch (exception) {
       error = userFacingError(exception);
     } finally {
+      _refreshing = false;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> signIn(
@@ -134,12 +184,17 @@ class Property24State extends ChangeNotifier {
       challengeId: challengeId,
       code: code,
     );
-    _token = session.token;
-    user = session.user;
-    account = session.account;
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(_tokenKey, session.token);
-    snapshot = await _api.snapshot(token: session.token);
+    await _storeSession(session);
+    _applySession(session);
+    try {
+      snapshot = await _api.snapshot(token: session.token);
+    } catch (_) {
+      try {
+        await _loadVerificationSnapshot();
+      } catch (_) {
+        snapshot = PlatformSnapshot.empty();
+      }
+    }
     notifyListeners();
   }
 
@@ -182,6 +237,7 @@ class Property24State extends ChangeNotifier {
             phone: phone,
           );
     user = session.user;
+
     account = session.account;
     publicUsername = session.user.name
         .toLowerCase()
@@ -209,6 +265,7 @@ class Property24State extends ChangeNotifier {
       code: code,
     );
     user = session.user;
+
     account = session.account;
     notifyListeners();
   }
@@ -255,6 +312,7 @@ class Property24State extends ChangeNotifier {
     );
     final session = await _api.me(activeToken);
     user = session.user;
+
     account = session.account;
     snapshot = await _api.snapshot(token: activeToken);
     notifyListeners();
@@ -266,12 +324,14 @@ class Property24State extends ChangeNotifier {
     notifyListeners();
     try {
       final session = await request();
-      _token = session.token;
-      user = session.user;
-      account = session.account;
-      final preferences = await SharedPreferences.getInstance();
-      await preferences.setString(_tokenKey, session.token);
-      snapshot = await _api.snapshot(token: session.token);
+      await _storeSession(session);
+      _applySession(session);
+      try {
+        snapshot = await _api.snapshot(token: session.token);
+      } catch (exception) {
+        if (!_isVerificationGate(exception)) rethrow;
+        await _loadVerificationSnapshot();
+      }
     } catch (exception) {
       error = userFacingError(exception);
       rethrow;
@@ -289,18 +349,18 @@ class Property24State extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveProperty(PropertyDraft draft, {String? propertyId}) async {
+  Future<PropertyListing> saveProperty(PropertyDraft draft,
+      {String? propertyId}) async {
     final activeToken = _requireToken();
     loading = true;
     error = null;
     notifyListeners();
     try {
-      if (propertyId == null) {
-        await _api.createProperty(activeToken, draft);
-      } else {
-        await _api.updateProperty(activeToken, propertyId, draft);
-      }
+      final saved = propertyId == null
+          ? await _api.createProperty(activeToken, draft)
+          : await _api.updateProperty(activeToken, propertyId, draft);
       snapshot = await _api.snapshot(token: activeToken);
+      return saved;
     } catch (exception) {
       error = userFacingError(exception);
       rethrow;
@@ -335,6 +395,58 @@ class Property24State extends ChangeNotifier {
     snapshot = await _api.snapshot(token: activeToken);
     notifyListeners();
     return conversation;
+  }
+
+  Future<void> uploadPropertyPhoto(String propertyId, XFile file) async {
+    final activeToken = _requireToken();
+    final bytes = await file.readAsBytes();
+    await _api.uploadPropertyPhoto(
+      token: activeToken,
+      propertyId: propertyId,
+      bytes: bytes,
+      filename: file.name,
+      mimeType: file.mimeType,
+    );
+  }
+
+  Future<void> uploadPropertyVideo(String propertyId, XFile file) async {
+    final activeToken = _requireToken();
+    final bytes = await file.readAsBytes();
+    await _api.uploadPropertyVideo(
+      token: activeToken,
+      propertyId: propertyId,
+      bytes: bytes,
+      filename: file.name,
+      mimeType: file.mimeType,
+    );
+  }
+
+  Future<void> sendMessageAttachment(
+    String conversationId,
+    XFile file,
+    String attachmentType,
+  ) async {
+    final activeToken = _requireToken();
+    final bytes = await file.readAsBytes();
+    await _api.sendMessageAttachment(
+      token: activeToken,
+      conversationId: conversationId,
+      bytes: bytes,
+      filename: file.name,
+      attachmentType: attachmentType,
+      mimeType: file.mimeType,
+    );
+    addLocalChatMessage(file.name, _attachmentTypeFrom(attachmentType));
+    await refresh();
+  }
+
+  AttachmentType _attachmentTypeFrom(String value) {
+    return switch (value) {
+      'image' => AttachmentType.image,
+      'video' => AttachmentType.video,
+      'audio' => AttachmentType.audio,
+      _ => AttachmentType.none,
+    };
   }
 
   Future<void> sendMessage(String conversationId, String body) async {
@@ -376,6 +488,9 @@ class Property24State extends ChangeNotifier {
 
   void toggleThemeMode(bool value) {
     darkMode = value;
+    SharedPreferences.getInstance().then(
+      (preferences) => preferences.setBool(_darkModeKey, value),
+    );
     notifyListeners();
   }
 
@@ -468,8 +583,70 @@ class Property24State extends ChangeNotifier {
 
   Future<void> _clearToken() async {
     _token = null;
+    _refreshToken = null;
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_tokenKey);
+    await preferences.remove(_refreshTokenKey);
+  }
+
+  Future<void> _storeSession(AuthSession session) async {
+    _token = session.token;
+    if (session.refreshToken != null && session.refreshToken!.isNotEmpty) {
+      _refreshToken = session.refreshToken;
+    }
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_tokenKey, session.token);
+    if (_refreshToken != null && _refreshToken!.isNotEmpty) {
+      await preferences.setString(_refreshTokenKey, _refreshToken!);
+    }
+  }
+
+  Future<AuthSession?> _restoreSession() async {
+    final refreshToken = _refreshToken;
+    if (refreshToken == null || refreshToken.isEmpty) return null;
+    final session = await _api.refresh(refreshToken);
+    await _storeSession(session);
+    return session;
+  }
+
+  bool _isUnauthorized(Object exception) {
+    return exception is ApiException && exception.statusCode == 401;
+  }
+
+  void _applySession(AuthSession session) {
+    user = session.user;
+    account = session.account;
+    publicUsername = session.user.name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r"^_|_$"), '');
+    profileImageUrl = session.user.profilePicture;
+    usernameVerified = session.user.verified;
+  }
+
+  Future<void> _loadVerificationSnapshot() async {
+    final publicSnapshot = await _api.snapshot();
+    final properties = await _api.searchProperties(token: _token);
+    snapshot = PlatformSnapshot(
+      properties: properties,
+      payments: publicSnapshot.payments,
+      maintenance: publicSnapshot.maintenance,
+      leases: publicSnapshot.leases,
+      applications: publicSnapshot.applications,
+      verifications: publicSnapshot.verifications,
+      conversations: publicSnapshot.conversations,
+      viewings: publicSnapshot.viewings,
+      calls: publicSnapshot.calls,
+      savedProperties: publicSnapshot.savedProperties,
+    );
+  }
+
+  bool _isVerificationGate(Object exception) {
+    return exception is ApiException &&
+        exception.statusCode == 403 &&
+        user != null &&
+        !user!.accountOnboardingComplete;
   }
 }
 

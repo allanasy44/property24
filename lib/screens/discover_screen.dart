@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
+import 'activity_screen.dart';
+
 import '../models/rental_models.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
@@ -33,6 +35,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
+    if (state.user?.role == AccountRole.landlord) {
+      return const ActivityScreen();
+    }
     final displayName = state.user?.name.trim() ?? '';
     final properties = state.snapshot.properties.where((property) {
       final haystack = [

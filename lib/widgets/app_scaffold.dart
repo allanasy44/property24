@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+
+import '../models/rental_models.dart';
+import '../state/property24_state.dart';
 
 import '../theme/app_theme.dart';
 
@@ -27,6 +31,8 @@ class AppScaffold extends StatelessWidget {
             initialLocation: index == navigationShell.currentIndex,
           );
         },
+        isLandlord:
+            context.watch<Property24State>().user?.role == AccountRole.landlord,
       ),
     );
   }
@@ -36,10 +42,12 @@ class _BottomNav extends StatelessWidget {
   const _BottomNav({
     required this.currentIndex,
     required this.onTap,
+    required this.isLandlord,
   });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final bool isLandlord;
 
   @override
   Widget build(BuildContext context) {
@@ -47,23 +55,19 @@ class _BottomNav extends StatelessWidget {
 
     // Navigation icons based on the reference design:
     // Home • Saved • Messages • Profile
-    const items = [
-      _NavItem(
-        icon: CupertinoIcons.house,
-        label: 'Home',
-      ),
-      _NavItem(
-        icon: CupertinoIcons.heart,
-        label: 'Saved',
-      ),
-      _NavItem(
-        icon: CupertinoIcons.chat_bubble,
-        label: 'Messages',
-      ),
-      _NavItem(
-        icon: CupertinoIcons.person_circle,
-        label: 'Profile',
-      ),
+    final items = isLandlord
+        ? const [
+            _NavItem(icon: CupertinoIcons.house, label: 'Dashboard'),
+            _NavItem(icon: CupertinoIcons.building_2_fill, label: 'Listings'),
+          ]
+        : const [
+            _NavItem(icon: CupertinoIcons.house, label: 'Home'),
+            _NavItem(icon: CupertinoIcons.heart, label: 'Saved'),
+          ];
+    final allItems = [
+      ...items,
+      _NavItem(icon: CupertinoIcons.chat_bubble, label: 'Messages'),
+      _NavItem(icon: CupertinoIcons.person_circle, label: 'Profile'),
     ];
 
     return SafeArea(
@@ -97,9 +101,9 @@ class _BottomNav extends StatelessWidget {
           ),
           child: Row(
             children: List.generate(
-              items.length,
+              allItems.length,
               (index) {
-                final item = items[index];
+                final item = allItems[index];
                 final selected = index == currentIndex;
 
                 return Expanded(
