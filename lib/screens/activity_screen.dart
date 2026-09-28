@@ -16,9 +16,53 @@ class ActivityScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
     final isLandlord = state.user?.role == AccountRole.landlord;
-    final firstName = (state.user?.name.trim().split(' ').first ?? '').trim();
+    final greeting = state.user?.greeting.trim().isNotEmpty == true
+        ? state.user!.greeting
+        : 'Good morning';
     final properties = state.snapshot.properties;
+    final savedProperties = state.snapshot.savedProperties;
+    final bookings = state.snapshot.viewings
+        .where((item) => item.isAvailableBooking)
+        .take(5)
+        .toList(growable: false);
     final theme = Theme.of(context);
+    final metrics = isLandlord
+        ? <Widget>[
+            MetricTile(
+                icon: CupertinoIcons.house,
+                label: 'Total listings',
+                value: '${properties.length}'),
+            MetricTile(
+                icon: CupertinoIcons.checkmark_seal,
+                label: 'Verified',
+                value: '${state.verifiedProperties}'),
+            MetricTile(
+                icon: CupertinoIcons.person_2,
+                label: 'Applications',
+                value: '${state.snapshot.applications.length}'),
+            MetricTile(
+                icon: CupertinoIcons.wrench,
+                label: 'Open maintenance',
+                value: '${state.openMaintenance}'),
+          ]
+        : <Widget>[
+            MetricTile(
+                icon: CupertinoIcons.heart,
+                label: 'Saved homes',
+                value: '${savedProperties.length}'),
+            MetricTile(
+                icon: CupertinoIcons.doc_text,
+                label: 'Applications',
+                value: '${state.snapshot.applications.length}'),
+            MetricTile(
+                icon: CupertinoIcons.calendar,
+                label: 'Bookings',
+                value: '${bookings.length}'),
+            MetricTile(
+                icon: CupertinoIcons.wrench,
+                label: 'Open requests',
+                value: '${state.openMaintenance}'),
+          ];
 
     return LoadingOverlay(
       child: RefreshIndicator(
@@ -33,21 +77,18 @@ class ActivityScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(isLandlord ? 'Dashboard' : 'Activity',
+                      Text(isLandlord ? 'Dashboard' : 'Home',
                           style: theme.textTheme.labelLarge
                               ?.copyWith(color: theme.colorScheme.primary)),
                       const SizedBox(height: 4),
-                      Text(
-                          isLandlord
-                              ? 'Good morning${firstName.isEmpty ? '' : ', $firstName'}'
-                              : 'Your rental activity',
-                          style: theme.textTheme.headlineSmall),
+                      Text(greeting, style: theme.textTheme.headlineSmall),
                       const SizedBox(height: 4),
                       Text(
-                          isLandlord
-                              ? 'A live view of your portfolio and enquiries.'
-                              : 'Stay up to date with your applications and home care.',
-                          style: theme.textTheme.bodyMedium),
+                        isLandlord
+                            ? 'Live portfolio, client activity, and enquiries.'
+                            : 'Live updates from your applications, bookings, and home care.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
                     ],
                   ),
                 ),
@@ -62,24 +103,7 @@ class ActivityScreen extends StatelessWidget {
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
               childAspectRatio: 1.45,
-              children: [
-                MetricTile(
-                    icon: CupertinoIcons.house,
-                    label: 'Total listings',
-                    value: '${properties.length}'),
-                MetricTile(
-                    icon: CupertinoIcons.checkmark_seal,
-                    label: 'Verified',
-                    value: '${state.verifiedProperties}'),
-                MetricTile(
-                    icon: CupertinoIcons.person_2,
-                    label: 'Applications',
-                    value: '${state.snapshot.applications.length}'),
-                MetricTile(
-                    icon: CupertinoIcons.wrench,
-                    label: 'Open maintenance',
-                    value: '${state.openMaintenance}'),
-              ],
+              children: metrics,
             ),
             const SizedBox(height: 18),
             const ErrorBanner(),
@@ -97,64 +121,124 @@ class ActivityScreen extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(isLandlord ? 'Portfolio' : 'Recent activity',
-                    style: theme.textTheme.titleLarge),
-                if (isLandlord)
+            if (isLandlord) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Portfolio', style: theme.textTheme.titleLarge),
                   TextButton.icon(
                       onPressed: () =>
                           GoRouter.of(context).go(AppRoutes.listingsScreen),
                       icon: const Icon(CupertinoIcons.arrow_right, size: 16),
                       label: const Text('View all')),
-              ],
-            ),
-            if (properties.isEmpty)
-              const Card(
-                  child: ListTile(
-                      leading: Icon(CupertinoIcons.house),
-                      title: Text('No listings yet'),
-                      subtitle: Text(
-                          'Add your first sale or rental property to start receiving enquiries.')))
-            else
-              for (final property in properties.take(3))
-                _PortfolioRow(property: property),
-            if (isLandlord)
+                ],
+              ),
+              if (properties.isEmpty)
+                const Card(
+                    child: ListTile(
+                        leading: Icon(CupertinoIcons.house),
+                        title: Text('No listings yet'),
+                        subtitle: Text(
+                            'Add your first sale or rental property to start receiving enquiries.')))
+              else
+                for (final property in properties.take(3))
+                  _PortfolioRow(property: property),
               _Section(
                 title: 'Client reservations',
                 empty: 'No pending or reserved reservations.',
                 children: [
-                  for (final booking in state.snapshot.viewings
-                      .where((item) => item.isAvailableBooking)
-                      .take(5))
-                    _BookingRow(booking: booking),
+                  for (final booking in bookings)
+                    _BookingRow(booking: booking, isLandlord: true),
+                ],
+              ),
+            ] else ...[
+              _Section(
+                title: 'Saved homes',
+                empty: 'Save a property to see it here.',
+                children: [
+                  for (final property in savedProperties.take(5))
+                    _SavedPropertyRow(property: property),
+                ],
+              ),
+              _Section(
+                title: 'Bookings',
+                empty: 'No pending or reserved bookings.',
+                children: [
+                  for (final booking in bookings)
+                    _BookingRow(booking: booking, isLandlord: false),
+                ],
+              ),
+            ],
+            _Section(
+              title: 'Applications',
+              empty: 'No applications yet.',
+              children: [
+                for (final item in state.snapshot.applications.take(5))
+                  ListTile(
+                    leading: const Icon(CupertinoIcons.doc_text),
+                    title: Text(item.property),
+                    subtitle: Text(
+                        '${isLandlord ? item.applicant : item.createdAt} / score ${item.score}'),
+                    trailing: Text(item.status),
+                  ),
+              ],
+            ),
+            if (!isLandlord)
+              _Section(
+                title: 'Payments',
+                empty: 'No payments recorded.',
+                children: [
+                  for (final item in state.snapshot.payments.take(5))
+                    ListTile(
+                      leading: const Icon(CupertinoIcons.money_dollar),
+                      title: Text('${item.amount} / ${item.property}'),
+                      subtitle: Text('${item.method} / ${item.paidAt}'),
+                      trailing: Text(item.status),
+                    ),
+                ],
+              ),
+            if (!isLandlord)
+              _Section(
+                title: 'Leases',
+                empty: 'No leases generated.',
+                children: [
+                  for (final item in state.snapshot.leases.take(5))
+                    ListTile(
+                      leading: const Icon(CupertinoIcons.doc),
+                      title: Text(item.property),
+                      subtitle: Text(item.monthlyRent),
+                      trailing: Text(item.status),
+                    ),
                 ],
               ),
             _Section(
-                title: 'Applications',
-                empty: 'No applications yet.',
-                children: [
-                  for (final item in state.snapshot.applications.take(5))
-                    ListTile(
-                        leading: const Icon(CupertinoIcons.doc_text),
-                        title: Text(item.property),
-                        subtitle: Text(
-                            '${item.applicant} / score ${item.score} / ${item.createdAt}'),
-                        trailing: Text(item.status)),
-                ]),
+              title: isLandlord ? 'Maintenance requests' : 'Maintenance',
+              empty: 'No maintenance requests.',
+              children: [
+                for (final item in state.snapshot.maintenance.take(5))
+                  ListTile(
+                    leading: const Icon(CupertinoIcons.wrench),
+                    title: Text(item.issue),
+                    subtitle: Text(
+                        '${item.property} / ${item.category} / ${item.updatedAt}'),
+                    trailing: Text(item.priority),
+                  ),
+              ],
+            ),
             _Section(
-                title: 'Maintenance',
-                empty: 'No maintenance requests.',
-                children: [
-                  for (final item in state.snapshot.maintenance.take(5))
-                    ListTile(
-                        leading: const Icon(CupertinoIcons.wrench),
-                        title: Text(item.issue),
-                        subtitle: Text(
-                            '${item.property} / ${item.category} / ${item.updatedAt}'),
-                        trailing: Text(item.priority)),
-                ]),
+              title: 'Messages',
+              empty: 'No conversations yet.',
+              children: [
+                for (final item in state.snapshot.conversations.take(5))
+                  ListTile(
+                    leading: const Icon(CupertinoIcons.chat_bubble),
+                    title: Text(item.title),
+                    subtitle: Text(item.preview,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    trailing: Text(item.updatedAt),
+                  ),
+              ],
+            ),
           ],
         ),
       ),
@@ -163,9 +247,10 @@ class ActivityScreen extends StatelessWidget {
 }
 
 class _BookingRow extends StatelessWidget {
-  const _BookingRow({required this.booking});
+  const _BookingRow({required this.booking, required this.isLandlord});
 
   final ViewingItem booking;
+  final bool isLandlord;
 
   @override
   Widget build(BuildContext context) {
@@ -173,13 +258,45 @@ class _BookingRow extends StatelessWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: theme.colorScheme.primaryContainer,
-        child: Icon(CupertinoIcons.person, color: theme.colorScheme.primary),
+        child: Icon(
+          isLandlord ? CupertinoIcons.person : CupertinoIcons.calendar,
+          color: theme.colorScheme.primary,
+        ),
       ),
-      title:
-          Text(booking.tenant.isEmpty ? 'Client reservation' : booking.tenant),
-      subtitle: Text('${booking.property} / ${booking.scheduledFor}'),
+      title: Text(isLandlord
+          ? (booking.tenant.isEmpty ? 'Client reservation' : booking.tenant)
+          : booking.property),
+      subtitle: Text(isLandlord
+          ? '${booking.property} / ${booking.scheduledFor}'
+          : '${booking.scheduledFor} / ${booking.status}'),
       trailing: Text(
         booking.status,
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _SavedPropertyRow extends StatelessWidget {
+  const _SavedPropertyRow({required this.property});
+
+  final PropertyListing property;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: theme.colorScheme.primaryContainer,
+        child: Icon(CupertinoIcons.house, color: theme.colorScheme.primary),
+      ),
+      title: Text(property.title),
+      subtitle: Text(property.heroLocation),
+      trailing: Text(
+        property.rentLabel,
         style: theme.textTheme.labelMedium?.copyWith(
           color: theme.colorScheme.primary,
           fontWeight: FontWeight.w700,

@@ -3367,11 +3367,20 @@ def full_verification_required(user):
     return user.role in PUBLIC_ACCOUNT_ROLES and not user.is_verified
 
 
+def user_greeting():
+    hour = timezone.localtime().hour
+    if hour < 12:
+        return "Good morning"
+    if hour < 17:
+        return "Good afternoon"
+    return "Good evening"
 def serialize_user(user):
     return {
         "id": user.id,
         "username": user.username,
         "name": str(user),
+        "greeting": user_greeting(),
+        "server_time": timezone.localtime().isoformat(),
         "email": user.email,
         "phone": user.phone,
         "role": user.role,

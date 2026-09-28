@@ -80,6 +80,7 @@ class AccountUser {
     required this.id,
     required this.username,
     required this.name,
+    required this.greeting,
     required this.email,
     required this.phone,
     required this.role,
@@ -99,6 +100,7 @@ class AccountUser {
       username: textValue(json, 'username', textValue(json, 'email')),
       name:
           textValue(json, 'name', textValue(json, 'email', 'Property24 user')),
+      greeting: textValue(json, 'greeting', 'Good morning'),
       email: textValue(json, 'email'),
       phone: textValue(json, 'phone'),
       role: accountRoleFromJson(account?['account_type'] ?? json['role']),
@@ -116,6 +118,7 @@ class AccountUser {
   }
 
   final String id;
+  final String greeting;
   final String username;
   final String name;
   final String email;
