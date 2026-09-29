@@ -204,6 +204,41 @@ def health_check(request):
     )
 
 
+def health_live(request):
+    return JsonResponse({"status": "ok", "service": "property24-rentals-api"})
+
+
+def health_ready(request):
+    checks = {}
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        checks["database"] = {"status": "ok"}
+    except Exception as exc:
+        checks["database"] = {"status": "error", "detail": str(exc)[:300]}
+    checks["object_storage"] = object_storage_status()
+    if getattr(settings, "REDIS_URL", ""):
+        try:
+            import redis
+            redis.Redis.from_url(settings.REDIS_URL, socket_connect_timeout=2, socket_timeout=2).ping()
+            checks["realtime"] = {"status": "ok", "provider": "redis"}
+        except Exception as exc:
+            checks["realtime"] = {"status": "error", "detail": str(exc)[:300]}
+    else:
+        checks["realtime"] = {"status": "degraded", "provider": "in-memory"}
+    ready = all(
+        item.get("status") == "ok" or (
+            not getattr(settings, "IS_PRODUCTION", False) and item.get("status") == "degraded"
+        )
+        for item in checks.values()
+    )
+    return JsonResponse(
+        {"status": "ok" if ready else "error", "service": "property24-rentals-api", "checks": checks},
+        status=200 if ready else 503,
+    )
+
+
 def current_user(request):
     user, error = user_from_authorization_header(request.headers.get("Authorization", ""))
     if user and not error:
@@ -1047,6 +1082,7 @@ def property_photos_collection(request, property_id):
     payload = serialize_property_photo(photo)
     if asset:
         payload["media_asset"] = serialize_media_asset(asset, include_private_url=True)
+    broadcast_property_change(prop, "media_updated")
     return JsonResponse(payload, status=201)
 
 
@@ -1075,6 +1111,7 @@ def property_videos_collection(request, property_id):
     payload = serialize_property_video(video)
     if asset:
         payload["media_asset"] = serialize_media_asset(asset, include_private_url=True)
+    broadcast_property_change(prop, "media_updated")
     return JsonResponse(payload, status=201)
 
 
@@ -1083,15 +1120,23 @@ def property_videos_collection(request, property_id):
 def saved_properties_collection(request, property_id):
     prop = get_object_or_404(Property, pk=property_id)
     acting_user, auth_response = require_roles(request, {User.Roles.TENANT})
-    data = request_json(request)
-    if data is None:
-        return json_error("Invalid JSON body")
-    tenant = acting_user
-    saved, _ = SavedProperty.objects.get_or_create(property=prop, tenant=tenant)
+    if auth_response:
+        return auth_response
+    saved = SavedProperty.objects.filter(property=prop, tenant=acting_user).first()
+    if request.method == "GET":
+        return JsonResponse({"saved": saved is not None, "property_id": prop.id, "saved_count": prop.saved_by.count()})
+    if request.method == "DELETE":
+        if saved:
+            saved.delete()
+        prop.saved_count = prop.saved_by.count()
+        prop.save(update_fields=["saved_count"])
+        broadcast_property_change(prop, "saved_updated")
+        return JsonResponse({"saved": False, "property_id": prop.id, "saved_count": prop.saved_count})
+    saved, _ = SavedProperty.objects.get_or_create(property=prop, tenant=acting_user)
     prop.saved_count = prop.saved_by.count()
     prop.save(update_fields=["saved_count"])
-    return JsonResponse({"id": saved.id, "property_id": prop.id, "tenant_id": tenant.id, "saved_count": prop.saved_count}, status=201)
-
+    broadcast_property_change(prop, "saved_updated")
+    return JsonResponse({"id": saved.id, "property_id": prop.id, "tenant_id": acting_user.id, "saved_count": prop.saved_count}, status=201)
 
 @csrf_exempt
 @require_http_methods(["GET", "OPTIONS"])
@@ -1215,6 +1260,9 @@ def application_detail(request, application_id):
     if data.get("message") is not None:
         application.message = data["message"]
     application.save()
+    for recipient_id in [application.tenant_id, application.property.owner_id, application.property.agent_id]:
+        if recipient_id:
+            broadcast_to_user(recipient_id, "notification.created", {"kind": "application.updated", "application_id": application.id, "property_id": application.property_id})
     return JsonResponse(serialize_application(application))
 
 
@@ -1264,6 +1312,9 @@ def payments_collection(request):
         due_date=data.get("due_date") or None,
         paid_at=now if is_admin(acting_user) and data.get("status", Payment.Status.RECEIVED) == Payment.Status.RECEIVED else None,
     )
+    for recipient_id in [payment.tenant_id, payment.property.owner_id]:
+        if recipient_id:
+            broadcast_to_user(recipient_id, "notification.created", {"kind": "payment.created", "payment_id": payment.id, "property_id": payment.property_id})
     return JsonResponse(serialize_payment(payment), status=201)
 
 
@@ -1283,9 +1334,10 @@ def payment_reminder(request, payment_id):
 
     payment.reminder_status = data.get("reminder_status") or f"Reminder sent on {timezone.localdate().isoformat()}"
     payment.save(update_fields=["reminder_status"])
+    for recipient_id in [payment.tenant_id, payment.property.owner_id]:
+        if recipient_id:
+            broadcast_to_user(recipient_id, "notification.created", {"kind": "payment.updated", "payment_id": payment.id, "property_id": payment.property_id})
     return JsonResponse(serialize_payment(payment))
-
-
 @csrf_exempt
 @require_http_methods(["GET", "POST", "OPTIONS"])
 def leases_collection(request):
@@ -1327,6 +1379,10 @@ def leases_collection(request):
         term=data.get("term", "12 Months"),
         status=data.get("status", LeaseAgreement.Status.AWAITING_SIGNATURES),
     )
+    for recipient_id in [lease.tenant_id, lease.landlord_id]:
+        if recipient_id:
+            broadcast_to_user(recipient_id, "notification.created", {"kind": "lease.created", "lease_id": lease.id, "property_id": lease.property_id})
+
     return JsonResponse(serialize_lease(lease), status=201)
 
 
@@ -1337,14 +1393,6 @@ def lease_sign(request, lease_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if request.method == "GET":
-        saved = SavedProperty.objects.filter(property=prop, tenant=acting_user).first()
-        return JsonResponse({"saved": saved is not None, "property_id": prop.id})
-    if request.method == "DELETE":
-        SavedProperty.objects.filter(property=prop, tenant=acting_user).delete()
-        prop.saved_count = prop.saved_by.count()
-        prop.save(update_fields=["saved_count"])
-        return JsonResponse({"saved": False, "property_id": prop.id})
     data = request_json(request)
     if data is None:
         return json_error("Invalid JSON body")
@@ -1363,6 +1411,9 @@ def lease_sign(request, lease_id):
     else:
         return json_error("signed_by must be tenant or landlord")
     lease.save()
+    for recipient_id in [lease.tenant_id, lease.landlord_id]:
+        if recipient_id:
+            broadcast_to_user(recipient_id, "notification.created", {"kind": "lease.updated", "lease_id": lease.id, "property_id": lease.property_id})
     return JsonResponse(serialize_lease(lease))
 
 
@@ -1497,6 +1548,9 @@ def maintenance_detail(request, maintenance_id):
             delete_file(ticket.photo)
         ticket.photo = photo_file
     ticket.save()
+    for recipient_id in [ticket.tenant_id, ticket.property.owner_id, ticket.property.agent_id]:
+        if recipient_id:
+            broadcast_to_user(recipient_id, "notification.created", {"kind": "maintenance.updated", "maintenance_id": ticket.id, "property_id": ticket.property_id})
     if ticket.photo and hasattr(request, "FILES") and request.FILES.get("photo"):
         register_media_asset(acting_user, ticket.photo, scope=MediaAsset.Scope.MAINTENANCE, source_model="maintenance_request", source_id=ticket.id, original_name="maintenance_photo", mime_type="image/jpeg")
     return JsonResponse(serialize_maintenance(ticket))
@@ -1924,6 +1978,9 @@ def viewing_detail(request, viewing_id):
     if data.get("agent_id") is not None:
         viewing.agent_id = data.get("agent_id") or None
     viewing.save()
+    for recipient_id in [viewing.tenant_id, viewing.property.owner_id, viewing.agent_id]:
+        if recipient_id:
+            broadcast_to_user(recipient_id, "notification.created", {"kind": "viewing.updated", "viewing_id": viewing.id, "property_id": viewing.property_id})
     return JsonResponse(serialize_viewing(viewing))
 
 
@@ -1951,6 +2008,9 @@ def conversations_collection(request):
         return forbidden()
 
     conversation, created = open_listing_conversation(acting_user, prop, participant_ids, data.get("title") or "")
+    if created:
+        for participant_id in conversation.participants.values_list("id", flat=True):
+            broadcast_to_user(participant_id, "notification.created", {"kind": "conversation.created", "conversation_id": conversation.id, "property_id": prop.id})
     return JsonResponse(serialize_conversation(conversation), status=201 if created else 200)
 
 
@@ -1995,17 +2055,17 @@ def property_hold(request, property_id):
             acting_user,
             prop,
             participant_ids,
-            f"{prop.title} · 30-minute hold",
+            f"{prop.title} - 30-minute hold",
         )
 
+    for participant_id in conversation.participants.values_list("id", flat=True):
+        broadcast_to_user(participant_id, "notification.created", {"kind": "property.hold", "conversation_id": conversation.id, "property_id": prop.id, "hold_id": hold.id})
     return JsonResponse({
         "property_id": prop.id,
         "hold_id": hold.id,
         "held_until": hold.expires_at.isoformat(),
         "conversation": serialize_conversation(conversation),
     }, status=201)
-
-
 @csrf_exempt
 @require_http_methods(["GET", "PATCH", "OPTIONS"])
 def conversation_detail(request, conversation_id):
@@ -2027,7 +2087,9 @@ def conversation_detail(request, conversation_id):
     if data.get("phone_numbers_revealed") is not None:
         conversation.phone_numbers_revealed = to_bool(data["phone_numbers_revealed"])
     conversation.save()
-    return JsonResponse(serialize_conversation(conversation))
+    payload = serialize_conversation(conversation)
+    broadcast_to_conversation(conversation.id, "conversation.updated", payload)
+    return JsonResponse(payload)
 
 
 @csrf_exempt
@@ -2081,7 +2143,6 @@ def conversation_messages(request, conversation_id):
     broadcast_to_conversation(conversation.id, "message.created", payload)
     send_chat_message_push(message)
     return JsonResponse(payload, status=201)
-
 
 @csrf_exempt
 @require_http_methods(["PATCH", "DELETE", "OPTIONS"])

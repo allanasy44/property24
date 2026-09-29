@@ -25,6 +25,7 @@ class Property24State extends ChangeNotifier {
   StreamSubscription<dynamic>? _liveSubscription;
   Timer? _liveReconnectTimer;
   Timer? _syncTimer;
+  final Map<String, int> _conversationRevisions = <String, int>{};
   bool _refreshing = false;
 
   PlatformSnapshot snapshot = PlatformSnapshot.empty();
@@ -42,7 +43,9 @@ class Property24State extends ChangeNotifier {
   final Set<String> comparisonPropertyIds = <String>{};
   final List<String> smartAlerts = <String>[];
   final List<String> notifications = <String>[];
-  final List<ChatMessageDraft> localChatMessages = <ChatMessageDraft>[];
+
+  int conversationRevision(String conversationId) =>
+      _conversationRevisions[conversationId] ?? 0;
   List<CallLogItem> get callHistory => snapshot.calls;
 
   String? get token => _token;
@@ -179,9 +182,24 @@ class Property24State extends ChangeNotifier {
       final event = jsonDecode(raw);
       if (event is! Map<String, dynamic>) return;
       final type = '${event['type'] ?? ''}';
+      final payload = event['payload'];
+      final conversationId =
+          payload is Map ? '${payload['conversation_id'] ?? ''}' : '';
+      if (conversationId.isNotEmpty &&
+          (type.startsWith('message.') ||
+              type.startsWith('messages.') ||
+              type.startsWith('call.'))) {
+        _conversationRevisions[conversationId] =
+            conversationRevision(conversationId) + 1;
+        notifyListeners();
+      }
       if (type == 'property.changed' ||
           type == 'notification.created' ||
-          type == 'account.changed') {
+          type == 'account.changed' ||
+          type.startsWith('message.') ||
+          type.startsWith('messages.') ||
+          type.startsWith('conversation.') ||
+          type.startsWith('call.')) {
         unawaited(refresh(silent: true));
       }
     } catch (_) {
@@ -189,7 +207,6 @@ class Property24State extends ChangeNotifier {
     }
   }
 
-  @override
   @override
   void dispose() {
     _syncTimer?.cancel();
@@ -517,17 +534,57 @@ class Property24State extends ChangeNotifier {
       attachmentType: attachmentType,
       mimeType: file.mimeType,
     );
-    addLocalChatMessage(file.name, _attachmentTypeFrom(attachmentType));
     await refresh();
   }
 
-  AttachmentType _attachmentTypeFrom(String value) {
-    return switch (value) {
-      'image' => AttachmentType.image,
-      'video' => AttachmentType.video,
-      'audio' => AttachmentType.audio,
-      _ => AttachmentType.none,
-    };
+  Future<List<ChatMessageItem>> loadConversationMessages(
+    String conversationId,
+  ) async {
+    final activeToken = _requireToken();
+    return _api.conversationMessages(activeToken, conversationId);
+  }
+
+  Future<void> shareLocation(
+    String conversationId, {
+    required PropertyListing property,
+    bool liveLocation = true,
+  }) async {
+    if (!property.hasCoordinates) return;
+    final label = liveLocation ? 'Live location' : 'Location';
+    await sendMessage(
+      conversationId,
+      '$label: ${property.address.isNotEmpty ? property.address : property.heroLocation} (${property.latitude}, ${property.longitude})',
+    );
+  }
+
+  Future<CallLogItem> startCall(
+    String conversationId, {
+    required CallMode mode,
+  }) async {
+    final activeToken = _requireToken();
+    final call = await _api.startCall(
+      activeToken,
+      conversationId,
+      mode: mode,
+    );
+    await refresh();
+    return call;
+  }
+
+  Future<CallLogItem> endCall(
+    String conversationId,
+    String callId, {
+    String status = 'ended',
+  }) async {
+    final activeToken = _requireToken();
+    final call = await _api.endCall(
+      activeToken,
+      conversationId,
+      callId,
+      status: status,
+    );
+    await refresh();
+    return call;
   }
 
   Future<void> sendMessage(String conversationId, String body) async {
@@ -588,69 +645,6 @@ class Property24State extends ChangeNotifier {
 
   void addNotification(String notification) {
     notifications.insert(0, notification);
-    notifyListeners();
-  }
-
-  void addLocalChatMessage(String body, AttachmentType attachmentType) {
-    localChatMessages.add(
-      ChatMessageDraft(
-        id: 'local-${DateTime.now().microsecondsSinceEpoch}',
-        body: body,
-        mine: true,
-        attachmentType: attachmentType,
-      ),
-    );
-    notifyListeners();
-  }
-
-  void addLocalLocationMessage({
-    required PropertyListing property,
-    bool liveLocation = true,
-  }) {
-    if (!property.hasCoordinates) return;
-    localChatMessages.add(
-      ChatMessageDraft(
-        id: 'location-${DateTime.now().microsecondsSinceEpoch}',
-        body: liveLocation ? 'Live location' : property.heroLocation,
-        mine: true,
-        attachmentType: AttachmentType.location,
-        latitude: property.latitude,
-        longitude: property.longitude,
-        locationLabel: property.address.isNotEmpty
-            ? property.address
-            : property.heroLocation,
-        liveLocation: liveLocation,
-      ),
-    );
-    notifyListeners();
-  }
-
-  void updateLocalChatMessage(String id, String body) {
-    final index = localChatMessages.indexWhere((message) => message.id == id);
-    if (index == -1) return;
-    localChatMessages[index] = localChatMessages[index].copyWith(body: body);
-    notifyListeners();
-  }
-
-  void deleteLocalChatMessage(String id) {
-    localChatMessages.removeWhere((message) => message.id == id);
-    notifyListeners();
-  }
-
-  void recordCall({
-    required PropertyListing property,
-    required CallMode mode,
-  }) {
-    callHistory.insert(
-      0,
-      CallLogItem(
-        name: property.supplier?.name ?? 'Listing contact',
-        property: property.title,
-        mode: mode,
-        direction: 'Outgoing',
-        when: 'Just now',
-      ),
-    );
     notifyListeners();
   }
 
@@ -728,42 +722,5 @@ class Property24State extends ChangeNotifier {
         exception.statusCode == 403 &&
         user != null &&
         !user!.accountOnboardingComplete;
-  }
-}
-
-enum AttachmentType { none, image, video, audio, location }
-
-class ChatMessageDraft {
-  const ChatMessageDraft({
-    required this.id,
-    required this.body,
-    required this.mine,
-    required this.attachmentType,
-    this.latitude,
-    this.longitude,
-    this.locationLabel = '',
-    this.liveLocation = false,
-  });
-
-  final String id;
-  final String body;
-  final bool mine;
-  final AttachmentType attachmentType;
-  final num? latitude;
-  final num? longitude;
-  final String locationLabel;
-  final bool liveLocation;
-
-  ChatMessageDraft copyWith({String? body}) {
-    return ChatMessageDraft(
-      id: id,
-      body: body ?? this.body,
-      mine: mine,
-      attachmentType: attachmentType,
-      latitude: latitude,
-      longitude: longitude,
-      locationLabel: locationLabel,
-      liveLocation: liveLocation,
-    );
   }
 }

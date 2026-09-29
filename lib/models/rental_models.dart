@@ -809,6 +809,50 @@ class ViewingItem {
   }
 }
 
+class ChatMessageItem {
+  const ChatMessageItem({
+    required this.id,
+    required this.conversationId,
+    required this.senderId,
+    required this.sender,
+    required this.body,
+    required this.createdAt,
+    required this.attachmentUrl,
+    required this.attachmentType,
+    required this.attachmentName,
+    required this.deleted,
+    required this.deliveryStatus,
+  });
+
+  factory ChatMessageItem.fromJson(Map<String, dynamic> json) {
+    return ChatMessageItem(
+      id: textValue(json, 'id'),
+      conversationId: textValue(json, 'conversation_id'),
+      senderId: textValue(json, 'sender_id'),
+      sender: textValue(json, 'sender', 'Property24 user'),
+      body: textValue(json, 'body'),
+      createdAt: localDate(json['created_at'], 'Just now'),
+      attachmentUrl: textValue(json, 'attachment_url'),
+      attachmentType: textValue(json, 'attachment_type'),
+      attachmentName: textValue(json, 'attachment_name'),
+      deleted: json['deleted'] == true,
+      deliveryStatus: textValue(json, 'delivery_status', 'sent'),
+    );
+  }
+
+  final String id;
+  final String conversationId;
+  final String senderId;
+  final String sender;
+  final String body;
+  final String createdAt;
+  final String attachmentUrl;
+  final String attachmentType;
+  final String attachmentName;
+  final bool deleted;
+  final String deliveryStatus;
+}
+
 class ConversationItem {
   const ConversationItem({
     required this.id,

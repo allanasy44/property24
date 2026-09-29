@@ -1,15 +1,26 @@
 from pathlib import Path
 
 from .env import env_bool, env_int, env_list, env_str
+from django.core.exceptions import ImproperlyConfigured
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+DJANGO_ENV = env_str("DJANGO_ENV", "development").lower()
+IS_PRODUCTION = DJANGO_ENV == "production"
 SECRET_KEY = env_list("DJANGO_SECRET_KEYS", ["unsafe-local-development-key"])[0]
-DEBUG = env_bool("DJANGO_DEBUG", True)
+if IS_PRODUCTION and SECRET_KEY == "unsafe-local-development-key":
+    raise ImproperlyConfigured("DJANGO_SECRET_KEYS must be configured in production")
+DEBUG = env_bool("DJANGO_DEBUG", not IS_PRODUCTION)
+if IS_PRODUCTION and DEBUG:
+    raise ImproperlyConfigured("DJANGO_DEBUG must be false in production")
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", ["127.0.0.1", "localhost"])
 if DEBUG and "*" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append("*")
+if IS_PRODUCTION and "*" in ALLOWED_HOSTS:
+    raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS cannot contain * in production")
+if IS_PRODUCTION and not env_str("DJANGO_ALLOWED_HOSTS", ""):
+    raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must be configured in production")
 CORS_ALLOWED_ORIGINS = env_list(
     "DJANGO_CORS_ALLOWED_ORIGINS",
     [
@@ -26,8 +37,9 @@ CORS_ALLOWED_ORIGINS = env_list(
         "http://localhost:8093",
         "http://localhost:19006",
         "http://127.0.0.1:19006",
-    ],
+    ] if DEBUG else [],
 )
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", [])
 
 INSTALLED_APPS = [
     "daphne",
@@ -88,14 +100,14 @@ if REDIS_URL:
             },
         }
     }
+elif IS_PRODUCTION:
+    raise ImproperlyConfigured("REDIS_URL is required in production for realtime events")
 else:
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels.layers.InMemoryChannelLayer",
         }
     }
-
-
 DATABASE_ENGINE = env_str("DATABASE_ENGINE", "sqlite").lower()
 if DATABASE_ENGINE == "postgresql":
     DATABASES = {
@@ -107,6 +119,8 @@ if DATABASE_ENGINE == "postgresql":
             "HOST": env_str("POSTGRES_HOST", "127.0.0.1"),
             "PORT": env_str("POSTGRES_PORT", "5432"),
             "CONN_MAX_AGE": env_int("POSTGRES_CONN_MAX_AGE", 60),
+            "CONN_HEALTH_CHECKS": True,
+            "ATOMIC_REQUESTS": True,
         }
     }
 else:
@@ -114,6 +128,7 @@ else:
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": Path(env_list("SQLITE_DATABASE_PATH", [str(BASE_DIR / "db.sqlite3")])[0]),
+            "CONN_HEALTH_CHECKS": True,
         }
     }
 
@@ -215,3 +230,28 @@ AI_PROVIDER = env_str("AI_PROVIDER", "local").lower()
 AI_MODEL = env_str("AI_MODEL", "property24-rules-v1")
 AI_ASSISTED_REVIEW_ENABLED = env_bool("AI_ASSISTED_REVIEW_ENABLED", True)
 OPENAI_API_KEY = env_str("OPENAI_API_KEY", "")
+
+STATIC_ROOT = BASE_DIR / "staticfiles"
+DATA_UPLOAD_MAX_MEMORY_SIZE = env_int("DATA_UPLOAD_MAX_MEMORY_SIZE", 30 * 1024 * 1024)
+FILE_UPLOAD_MAX_MEMORY_SIZE = env_int("FILE_UPLOAD_MAX_MEMORY_SIZE", 30 * 1024 * 1024)
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", IS_PRODUCTION)
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", IS_PRODUCTION)
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", IS_PRODUCTION)
+SECURE_HSTS_SECONDS = env_int("SECURE_HSTS_SECONDS", 31536000 if IS_PRODUCTION else 0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = IS_PRODUCTION
+SECURE_HSTS_PRELOAD = IS_PRODUCTION
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
+
+if IS_PRODUCTION:
+    if not env_str("JWT_SECRET", "") or JWT_SECRET == SECRET_KEY:
+        raise ImproperlyConfigured("JWT_SECRET must be configured separately in production")
+    if OBJECT_STORAGE_PROVIDER == "local":
+        raise ImproperlyConfigured("OBJECT_STORAGE_PROVIDER must be minio, s3, or r2 in production")
+    if EMAIL_BACKEND.endswith("console.EmailBackend"):
+        raise ImproperlyConfigured("A real EMAIL_BACKEND is required in production")
+    if not CORS_ALLOWED_ORIGINS:
+        raise ImproperlyConfigured("DJANGO_CORS_ALLOWED_ORIGINS must be configured in production")

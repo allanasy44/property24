@@ -71,6 +71,12 @@ docker compose up --build backend
 The Docker API will be available at `http://localhost:8010/api/`, PostgreSQL on `localhost:5433`, MinIO on `localhost:9010`, and the MinIO console on `http://localhost:9011`.
 To customize secrets or service addresses, copy `backend/.env.example` to `backend/.env` and pass it to your deployment/runtime environment.
 
+## Production deployment
+
+Set `DJANGO_ENV=production` and provide unique values for `DJANGO_SECRET_KEYS` and `JWT_SECRET`. Production also requires explicit `DJANGO_ALLOWED_HOSTS`, `DJANGO_CORS_ALLOWED_ORIGINS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, PostgreSQL, Redis, SMTP, and S3-compatible object storage settings. The backend refuses to start when these realtime, security, or storage requirements are missing.
+
+Run migrations and static collection as a release step, then serve `property24_backend.asgi:application` with Daphne or another ASGI server. Expose `/api/health/live/` for liveness and `/api/health/ready/` for database, object-storage, and Redis readiness. Do not commit `backend/.env`; rotate any credentials that have previously appeared in repository history.
+
 ## Identity verification runtime
 
 Verification performs upload validation, image quality checks, optional OCR, ID-number reuse detection, document-image reuse detection, and manual-review routing. Install the Python dependencies and the Tesseract binary for OCR extraction:

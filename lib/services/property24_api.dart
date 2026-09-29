@@ -599,6 +599,33 @@ class Property24Api {
     return ConversationItem.fromJson(body);
   }
 
+  Future<CallLogItem> startCall(
+    String token,
+    String conversationId, {
+    required CallMode mode,
+  }) async {
+    final body = await _post(
+      'conversations/$conversationId/calls/',
+      token: token,
+      body: {'mode': mode.name},
+    );
+    return CallLogItem.fromJson(body);
+  }
+
+  Future<CallLogItem> endCall(
+    String token,
+    String conversationId,
+    String callId, {
+    String status = 'ended',
+  }) async {
+    final body = await _patch(
+      'conversations/$conversationId/calls/$callId/',
+      token: token,
+      body: {'status': status},
+    );
+    return CallLogItem.fromJson(body);
+  }
+
   Future<ConversationItem> holdProperty(String token, String propertyId) async {
     final body = await _post(
       'properties/$propertyId/hold/',
@@ -710,6 +737,17 @@ class Property24Api {
     final response = await _client.get(AppConfig.apiUri(path, query),
         headers: _headers(token));
     return _decode(response);
+  }
+
+  Future<List<ChatMessageItem>> conversationMessages(
+    String token,
+    String conversationId,
+  ) async {
+    final body = await _get(
+      'conversations/$conversationId/messages/',
+      token: token,
+    );
+    return _results(body).map(ChatMessageItem.fromJson).toList();
   }
 
   Future<Map<String, dynamic>> _post(

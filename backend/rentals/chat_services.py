@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import logging
 from ipaddress import ip_address
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
 
 from .models import CallSession, ChatBlock, ChatReport, Conversation, Message, MessageReceipt, PushDevice, SecurityAuditEvent
+
+logger = logging.getLogger(__name__)
 
 MAX_CHAT_BODY_LENGTH = 2000
 MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
@@ -314,43 +317,54 @@ def touch_user_presence(user):
     return user.last_seen_at
 
 
+def _dispatch_realtime(callback):
+    if connection.settings_dict.get("ATOMIC_REQUESTS") and connection.in_atomic_block:
+        transaction.on_commit(callback)
+    else:
+        callback()
+
+
+def _broadcast_group(group_name, event_type, payload, *, context):
+    def dispatch():
+        channel_layer = get_channel_layer()
+        if not channel_layer:
+            return
+        try:
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {"type": "chat.event", "event": event_type, "payload": payload},
+            )
+        except Exception:
+            logger.exception("Realtime broadcast failed", extra={"event_type": event_type, **context})
+
+    _dispatch_realtime(dispatch)
+
+
 def broadcast_to_conversation(conversation_id, event_type, payload):
-    channel_layer = get_channel_layer()
-    if not channel_layer:
-        return
-    try:
-        async_to_sync(channel_layer.group_send)(
-            conversation_group_name(conversation_id),
-            {"type": "chat.event", "event": event_type, "payload": payload},
-        )
-    except Exception:
-        return
+    _broadcast_group(
+        conversation_group_name(conversation_id),
+        event_type,
+        payload,
+        context={"conversation_id": conversation_id},
+    )
 
 
 def broadcast_to_user(user_id, event_type, payload):
-    channel_layer = get_channel_layer()
-    if not channel_layer:
-        return
-    try:
-        async_to_sync(channel_layer.group_send)(
-            user_group_name(user_id),
-            {"type": "chat.event", "event": event_type, "payload": payload},
-        )
-    except Exception:
-        return
+    _broadcast_group(
+        user_group_name(user_id),
+        event_type,
+        payload,
+        context={"user_id": user_id},
+    )
 
 
 def broadcast_to_public(event_type, payload):
-    channel_layer = get_channel_layer()
-    if not channel_layer:
-        return
-    try:
-        async_to_sync(channel_layer.group_send)(
-            public_group_name(),
-            {"type": "chat.event", "event": event_type, "payload": payload},
-        )
-    except Exception:
-        return
+    _broadcast_group(
+        public_group_name(),
+        event_type,
+        payload,
+        context={},
+    )
 
 def broadcast_presence(user, online, conversation_ids: Iterable[int] | None = None):
     payload = {

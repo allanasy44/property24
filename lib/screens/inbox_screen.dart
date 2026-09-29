@@ -264,8 +264,29 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final _message = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final AudioRecorder _audioRecorder = AudioRecorder();
+  List<ChatMessageItem> _messages = <ChatMessageItem>[];
+  bool _loading = false;
   bool _recording = false;
   bool _uploading = false;
+  int _revision = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMessages());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = context
+        .read<Property24State>()
+        .conversationRevision(widget.conversation.id);
+    if (next != _revision) {
+      _revision = next;
+      _loadMessages();
+    }
+  }
 
   @override
   void dispose() {
@@ -274,22 +295,28 @@ class _ConversationScreenState extends State<ConversationScreen> {
     super.dispose();
   }
 
+  Future<void> _loadMessages() async {
+    final state = context.read<Property24State>();
+    if (!state.signedIn || _loading) return;
+    if (mounted) setState(() => _loading = true);
+    try {
+      final messages =
+          await state.loadConversationMessages(widget.conversation.id);
+      if (mounted) setState(() => _messages = messages);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
     final property = widget.property;
-    final canShareExact =
+    final canShareLocation =
         property?.hasCoordinates == true && property?.showExactLocation == true;
-
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      appBar: AppBar(
-        title: Text(
-          property?.title ?? widget.conversation.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
+      appBar: AppBar(title: Text(property?.title ?? widget.conversation.title)),
       body: Column(
         children: [
           if (property != null)
@@ -306,96 +333,65 @@ class _ConversationScreenState extends State<ConversationScreen> {
             ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              padding: const EdgeInsets.all(16),
               children: [
-                if (widget.conversation.preview.trim().isNotEmpty)
-                  _TextBubble(text: widget.conversation.preview, mine: false),
-                for (final item in state.localChatMessages)
-                  item.attachmentType == AttachmentType.location
-                      ? _LocationBubble(item: item)
-                      : item.attachmentType == AttachmentType.none
-                          ? _TextBubble(text: item.body, mine: item.mine)
-                          : _AttachmentBubble(item: item),
+                if (_loading && _messages.isEmpty)
+                  const Center(child: CircularProgressIndicator()),
+                for (final item in _messages)
+                  _PersistedMessageBubble(
+                      item: item, mine: item.senderId == state.user?.id),
               ],
             ),
           ),
           SafeArea(
             top: false,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
               decoration: const BoxDecoration(
                 color: Colors.white,
                 border: Border(top: BorderSide(color: AppTheme.border)),
               ),
-              child: Column(
+              child: Row(
                 children: [
-                  if (_recording || _uploading)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 6, left: 4),
-                        child: Text(
-                          _recording
-                              ? 'Recording walkthrough...'
-                              : 'Sending attachment...',
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: _recording
-                                        ? Colors.redAccent
-                                        : AppTheme.accent,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                        ),
-                      ),
+                  IconButton(
+                    tooltip: 'Add photo or video',
+                    onPressed: _uploading ? null : _showAttachmentSheet,
+                    icon: const Icon(CupertinoIcons.paperclip),
+                  ),
+                  IconButton(
+                    tooltip: _recording ? 'Stop recording' : 'Record audio',
+                    onPressed: _uploading ? null : _toggleRecording,
+                    icon: Icon(_recording
+                        ? CupertinoIcons.stop_fill
+                        : CupertinoIcons.mic),
+                  ),
+                  IconButton(
+                    tooltip: canShareLocation
+                        ? 'Share location'
+                        : 'Location unavailable',
+                    onPressed: canShareLocation
+                        ? () async {
+                            await state.shareLocation(widget.conversation.id,
+                                property: property!);
+                            await _loadMessages();
+                          }
+                        : null,
+                    icon: const Icon(CupertinoIcons.location),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _message,
+                      minLines: 1,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                          hintText: 'Write a message',
+                          border: InputBorder.none),
                     ),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      IconButton(
-                        tooltip: 'Add photo or video',
-                        onPressed: _uploading ? null : _showAttachmentSheet,
-                        icon: const Icon(CupertinoIcons.paperclip),
-                      ),
-                      IconButton(
-                        tooltip: _recording ? 'Stop recording' : 'Record audio',
-                        onPressed: _uploading ? null : _toggleRecording,
-                        color: _recording ? Colors.redAccent : null,
-                        icon: Icon(_recording
-                            ? CupertinoIcons.stop_fill
-                            : CupertinoIcons.mic),
-                      ),
-                      IconButton(
-                        tooltip: canShareExact
-                            ? 'Share live location'
-                            : 'Exact location is private',
-                        onPressed: canShareExact
-                            ? () => context
-                                .read<Property24State>()
-                                .addLocalLocationMessage(property: property!)
-                            : null,
-                        icon: const Icon(CupertinoIcons.location),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _message,
-                          minLines: 1,
-                          maxLines: 4,
-                          textInputAction: TextInputAction.newline,
-                          decoration: const InputDecoration(
-                            hintText: 'Write a message',
-                            border: InputBorder.none,
-                            filled: false,
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 12),
-                          ),
-                        ),
-                      ),
-                      IconButton.filled(
-                        tooltip: 'Send',
-                        onPressed: _uploading ? null : _send,
-                        icon: const Icon(CupertinoIcons.arrow_up),
-                      ),
-                    ],
+                  ),
+                  IconButton.filled(
+                    tooltip: 'Send',
+                    onPressed: _send,
+                    icon: const Icon(CupertinoIcons.arrow_up),
                   ),
                 ],
               ),
@@ -458,20 +454,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
           ? await _picker.pickVideo(
               source: source,
               preferredCameraDevice: CameraDevice.rear,
-              maxDuration: const Duration(minutes: 2),
-            )
+              maxDuration: const Duration(minutes: 2))
           : await _picker.pickImage(
               source: source,
               preferredCameraDevice: CameraDevice.rear,
-              imageQuality: 100,
-            );
+              imageQuality: 100);
       if (file != null) await _sendAttachment(file, video ? 'video' : 'image');
     } catch (exception) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
-      }
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
     }
   }
 
@@ -483,18 +475,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
         await _sendAttachment(XFile(path, mimeType: 'audio/mp4'), 'audio');
       return;
     }
-    final hasPermission = await _audioRecorder.hasPermission();
-    if (!hasPermission) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content:
-                Text('Microphone permission is required to record audio.')));
-      return;
-    }
+    if (!await _audioRecorder.hasPermission()) return;
     final directory = await getTemporaryDirectory();
-    final path =
-        '${directory.path}/property24-${DateTime.now().millisecondsSinceEpoch}.m4a';
-    await _audioRecorder.start(const RecordConfig(), path: path);
+    await _audioRecorder.start(const RecordConfig(),
+        path:
+            '${directory.path}/property24-${DateTime.now().millisecondsSinceEpoch}.m4a');
     if (mounted) setState(() => _recording = true);
   }
 
@@ -504,6 +489,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
       await context
           .read<Property24State>()
           .sendMessageAttachment(widget.conversation.id, file, type);
+      await _loadMessages();
     } catch (exception) {
       if (mounted)
         ScaffoldMessenger.of(context)
@@ -521,13 +507,27 @@ class _ConversationScreenState extends State<ConversationScreen> {
       await context
           .read<Property24State>()
           .sendMessage(widget.conversation.id, body);
-    } catch (_) {
-      if (!mounted) return;
-      context.read<Property24State>().addLocalChatMessage(
-            body,
-            AttachmentType.none,
-          );
+      await _loadMessages();
+    } catch (exception) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
     }
+  }
+}
+
+class _PersistedMessageBubble extends StatelessWidget {
+  const _PersistedMessageBubble({required this.item, required this.mine});
+
+  final ChatMessageItem item;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = item.attachmentType.isEmpty
+        ? item.body
+        : '${item.body.isEmpty ? 'Shared attachment' : item.body} · ${item.attachmentType}';
+    return _TextBubble(text: body, mine: mine);
   }
 }
 
@@ -557,118 +557,6 @@ class _TextBubble extends StatelessWidget {
             color: mine ? Colors.white : AppTheme.textPrimary,
             fontSize: 13,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AttachmentBubble extends StatelessWidget {
-  const _AttachmentBubble({required this.item});
-
-  final ChatMessageDraft item;
-
-  @override
-  Widget build(BuildContext context) {
-    final icon = switch (item.attachmentType) {
-      AttachmentType.image => CupertinoIcons.photo,
-      AttachmentType.video => CupertinoIcons.film,
-      AttachmentType.audio => CupertinoIcons.waveform,
-      _ => CupertinoIcons.paperclip,
-    };
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Container(
-        constraints:
-            BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.74),
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.accent.withOpacity(0.10),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.accent.withOpacity(0.24)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircleAvatar(
-              radius: 18,
-              backgroundColor: AppTheme.accent,
-              child:
-                  Icon(CupertinoIcons.arrow_up, color: Colors.white, size: 16),
-            ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                item.body,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(icon, size: 18, color: AppTheme.accent),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LocationBubble extends StatelessWidget {
-  const _LocationBubble({required this.item});
-
-  final ChatMessageDraft item;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Container(
-        width: MediaQuery.sizeOf(context).width * 0.74,
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            OsmMapPreview(
-              label: item.locationLabel,
-              latitude: item.latitude,
-              longitude: item.longitude,
-              height: 130,
-              approximate: false,
-              zoom: 16,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(
-                  CupertinoIcons.location_north,
-                  color: AppTheme.accent,
-                  size: 16,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    item.liveLocation ? 'Live location' : item.locationLabel,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
         ),
       ),
     );
