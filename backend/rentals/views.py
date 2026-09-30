@@ -99,7 +99,7 @@ from .media_services import (
     soft_delete_media_asset,
     validate_upload,
 )
-from .notification_services import send_call_push, send_chat_message_push
+from .notification_services import send_call_push, send_chat_message_push, send_push_to_users
 from .object_storage import object_storage_status
 
 
@@ -174,9 +174,9 @@ ROLE_VISIBLE_SECTIONS = {
 }
 
 ROLE_ONBOARDING_REQUIREMENTS = {
-    User.Roles.TENANT: ["phone_verification"],
-    User.Roles.LANDLORD: ["phone_verification"],
-    User.Roles.AGENT: ["phone_verification"],
+    User.Roles.TENANT: ["identity_verification"],
+    User.Roles.LANDLORD: ["identity_verification"],
+    User.Roles.AGENT: ["identity_verification"],
     User.Roles.ADMIN: [],
 }
 
@@ -260,9 +260,9 @@ def require_authenticated(request):
         return None, json_error(error, status=401)
     if request.method != "OPTIONS" and user.role in {User.Roles.LANDLORD, User.Roles.AGENT} and not account_onboarding_complete(user) and not verification_access_allowed(request):
         return None, json_error(
-            "Phone verification is required before using this feature",
+            "Identity verification is required before using this feature",
             status=403,
-            errors={"account_onboarding_required": True, "next_endpoint": "/api/verifications/phone-otp/"},
+            errors={"account_onboarding_required": True, "next_endpoint": "/api/verifications/"},
         )
     return user, None
 
@@ -511,7 +511,8 @@ def auth_profile(request):
             return json_error("An account with this phone number already exists")
         if user.phone != phone:
             user.phone = phone
-            changed_fields.append("phone")
+            user.phone_verified = False
+            changed_fields.extend(["phone", "phone_verified"])
     for field, value in text_updates.items():
         if value is not None and getattr(user, field) != value:
             setattr(user, field, value)
@@ -1806,7 +1807,8 @@ def verifications_collection(request):
         if User.objects.exclude(pk=user.pk).filter(phone_identity_query(phone)).exists():
             return json_error("An account with this phone number already exists")
         user.phone = phone
-        profile_updates.append("phone")
+        user.phone_verified = False
+        profile_updates.extend(["phone", "phone_verified"])
     if profile_updates:
         user.save(update_fields=profile_updates)
     files = request.FILES if hasattr(request, "FILES") else {}
@@ -1826,12 +1828,14 @@ def verifications_collection(request):
     checks = list(provider_result.checks or [])
     registered_tokens = set(normalize_person_name(user.full_name).split())
     extracted_tokens = set(normalize_person_name(extracted_fields.get("raw_name_hint", "")).split())
+    registered_name_match = False
     if registered_tokens and extracted_tokens:
         overlap = len(registered_tokens & extracted_tokens) / len(registered_tokens)
+        registered_name_match = overlap >= 0.5
         checks.append({
             "type": "registered_name_match",
-            "result": "pass" if overlap >= 0.5 else "review",
-            "details": "OCR text is consistent with the registered name" if overlap >= 0.5 else "Registered name requires manual comparison",
+            "result": "pass" if registered_name_match else "review",
+            "details": "OCR text is consistent with the registered name" if registered_name_match else "Registered name requires manual comparison",
         })
     else:
         checks.append({"type": "registered_name_match", "result": "review", "details": "Name comparison requires manual review"})
@@ -1841,6 +1845,8 @@ def verifications_collection(request):
         "details": "The same document image was submitted by another account" if duplicate_document else "No matching document image found",
     })
     if duplicate_document:
+        verification_status = VerificationRequest.Status.MANUAL_REVIEW
+    if verification_status == VerificationRequest.Status.VERIFIED and not registered_name_match:
         verification_status = VerificationRequest.Status.MANUAL_REVIEW
     verification = VerificationRequest.objects.create(
         user=user,
@@ -1854,8 +1860,8 @@ def verifications_collection(request):
         verification_score=provider_result.score,
         failure_reason=provider_result.failure_reason,
         document_retention_until=timezone.now() + timedelta(days=int(getattr(settings, "IDENTITY_DOCUMENT_RETENTION_DAYS", 30))),
-        phone_verified=to_bool(data.get("phone_verified")),
-        email_verified=to_bool(data.get("email_verified")),
+        phone_verified=user.phone_verified,
+        email_verified=email_otp_verified(user),
         country_of_residence="",
         privacy_notice_accepted=to_bool(data.get("privacy_notice_accepted")),
         document_issue_country="",
@@ -1890,6 +1896,7 @@ def verifications_collection(request):
         audit_identity_event("identity_verification_failed", user, verification=verification, metadata={"reason": provider_result.failure_reason})
     else:
         audit_identity_event("identity_verification_manual_review", user, verification=verification, metadata={"provider": provider_result.provider})
+    notify_identity_status(user, verification)
     return JsonResponse(serialize_verification(verification, acting_user=acting_user), status=201)
 
 
@@ -1914,6 +1921,7 @@ def verification_review(request, verification_id):
         verification.notes = data.get("notes", verification.notes)
         verification.reviewed_at = timezone.now()
         verification.save()
+    notify_identity_status(verification.user, verification, actor=reviewer)
     return JsonResponse(serialize_verification(verification, acting_user=acting_user))
 
 
@@ -2686,7 +2694,7 @@ def validate_verification_submission(request, data, role, user):
     phone = normalize_phone(data.get("phone"))
     for error in (
         validate_text_field(full_name, "Full name", NAME_MAX_LENGTH, required=True),
-        validate_phone_field(phone, required=False),
+        validate_phone_field(phone, required=True),
     ):
         if error:
             errors.append(error)
@@ -2713,17 +2721,6 @@ def validate_verification_submission(request, data, role, user):
         errors.append("confirmed document number must match extracted document number")
     if not to_bool(data.get("identity_confirmed")):
         errors.append("identity_confirmed must be true after confirming the document information")
-
-    if role == User.Roles.LANDLORD and not (files.get("ownership_or_authorization_document") or data.get("ownership_or_authorization_uploaded")):
-        errors.append("ownership_or_authorization_document is required for landlord verification")
-
-    if role == User.Roles.AGENT:
-        if not data.get("estate_agency_registration"):
-            errors.append("estate_agency_registration is required for agent verification")
-        if not data.get("agency_name"):
-            errors.append("agency_name is required for agent verification")
-        if not data.get("contact_details"):
-            errors.append("contact_details is required for agent verification")
 
     return errors
 
@@ -2829,12 +2826,37 @@ def make_receipt_number():
 
 
 def default_checks_for_role(role):
-    base_checks = ["Phone verification", "Identity document", "Document number confirmation"]
-    if role == User.Roles.LANDLORD:
-        return base_checks + ["Estate setup"]
-    if role == User.Roles.AGENT:
-        return base_checks + ["Estate agency registration", "Agency information", "Contact details"]
-    return base_checks
+    return ["Phone OTP verification", "ID front and back", "Document number and name match"]
+
+
+def notify_identity_status(user, verification, actor=None):
+    status = verification.status
+    if status == VerificationRequest.Status.VERIFIED:
+        title = "Identity verified"
+        message = "Your phone number and identity document have been verified."
+    elif status == VerificationRequest.Status.REJECTED:
+        title = "Identity check needs attention"
+        message = "The ID information did not match. Check the number and images, then submit again."
+    else:
+        title = "Identity check in progress"
+        message = "Your documents need manual review. We will notify you when the review is complete."
+
+    payload = {
+        "kind": "identity_verification",
+        "verification_id": str(verification.pk),
+        "status": status,
+        "message": message,
+    }
+    broadcast_to_user(user.pk, "notification.created", payload)
+    if status in {VerificationRequest.Status.VERIFIED, VerificationRequest.Status.REJECTED}:
+        send_push_to_users(
+            [user.pk],
+            title=title,
+            body=message,
+            data=payload,
+            actor=actor or user,
+            event_type="push_identity_verification",
+        )
 
 
 
@@ -3467,9 +3489,7 @@ def serialize_ai_analysis(analysis):
 def account_onboarding_complete(user):
     if not user or user.role not in VERIFICATION_REQUIRED_ROLES:
         return True
-    if user.is_verified:
-        return True
-    return bool(user.phone_verified)
+    return bool(user.is_verified)
 
 
 def full_verification_required(user):
@@ -3536,7 +3556,7 @@ def serialize_account_context(user):
         "onboarding": {
             "required": user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user),
             "requirements": [] if account_onboarding_complete(user) else ROLE_ONBOARDING_REQUIREMENTS.get(user.role, []),
-            "next_endpoint": "/api/verifications/phone-otp/" if user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user) else "",
+            "next_endpoint": "/api/verifications/" if user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user) else "",
             "full_verification_required": full_verification_required(user),
             "full_verification_endpoint": "/api/verifications/" if full_verification_required(user) else "",
         },

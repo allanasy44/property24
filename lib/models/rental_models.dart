@@ -180,7 +180,7 @@ class AccountContext {
         'verification'
       ],
       capabilities: ['search_properties', 'save_properties'],
-      onboardingRequirements: ['phone_verification'],
+      onboardingRequirements: ['identity_verification'],
       fullVerificationRequired: false,
     );
   }

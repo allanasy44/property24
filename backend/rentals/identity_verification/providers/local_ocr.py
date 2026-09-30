@@ -9,6 +9,7 @@ from PIL import Image, ImageFilter, ImageStat
 from .base import IdentityExtractionResult, IdentityVerificationProvider, IdentityVerificationResult
 
 GENERIC_DOCUMENT_NUMBER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 /-]{4,63}$")
+ZIMBABWE_NATIONAL_ID_RE = re.compile(r"^\d{2}\d{5,7}[A-Z]\d{1,3}$")
 
 
 def normalize_identity_number(value):
@@ -19,19 +20,24 @@ def is_valid_generic_document_number(value):
     return bool(GENERIC_DOCUMENT_NUMBER_RE.fullmatch(str(value or "").strip()))
 
 
+def is_valid_zimbabwe_national_id(value):
+    return bool(ZIMBABWE_NATIONAL_ID_RE.fullmatch(normalize_identity_number(value)))
+
+
 class LocalOCRIdentityVerificationProvider(IdentityVerificationProvider):
     provider_name = "manual_capture"
 
     def extract_document_data(self, *, files, data):
         extracted_fields, checks, warnings = self._inspect_documents(files)
-        if extracted_fields.get("document_number"):
+        front_document_number = extracted_fields.get("front_document_number")
+        if front_document_number:
             confidence = "extracted"
         elif shutil.which("tesseract"):
             confidence = "ocr_uncertain"
         else:
             confidence = "manual_entry_required"
         return IdentityExtractionResult(
-            document_number=extracted_fields.get("document_number", ""),
+            document_number=front_document_number or "",
             confidence=confidence,
             extracted_fields=extracted_fields,
             warnings=warnings,
@@ -49,16 +55,44 @@ class LocalOCRIdentityVerificationProvider(IdentityVerificationProvider):
                 warnings=["manual_document_number_invalid"],
             )
         extracted_fields, checks, warnings = self._inspect_documents(files)
-        extracted_number = normalize_identity_number(extracted_fields.get("document_number", ""))
+        extracted_number = normalize_identity_number(extracted_fields.get("front_document_number", ""))
         confirmed_number = normalize_identity_number(confirmed_document_number)
         if extracted_number:
+            matches = extracted_number == confirmed_number
             checks.append({
                 "type": "document_number_match",
-                "result": "pass" if extracted_number == confirmed_number else "review",
-                "details": "OCR document number matches the submitted number" if extracted_number == confirmed_number else "OCR document number differs from the submitted number",
+                "result": "pass" if matches else "fail",
+                "details": "Front ID number matches the submitted number" if matches else "Front ID number differs from the submitted number",
             })
+            if not matches:
+                return IdentityVerificationResult(
+                    status="rejected",
+                    extracted_document_number=extracted_fields.get("document_number", ""),
+                    provider=self.provider_name,
+                    provider_reference=reference,
+                    score=0.0,
+                    failure_reason="document_number_mismatch",
+                    warnings=warnings,
+                    extracted_fields=extracted_fields,
+                    checks=checks,
+                )
         else:
             checks.append({"type": "document_number_match", "result": "review", "details": "Document number requires manual confirmation"})
+        checks_passed = all(check.get("result") == "pass" for check in checks)
+        if (
+            extracted_number
+            and is_valid_zimbabwe_national_id(confirmed_document_number)
+            and checks_passed
+        ):
+            return IdentityVerificationResult(
+                status="verified",
+                extracted_document_number=extracted_fields.get("document_number", ""),
+                provider=self.provider_name,
+                provider_reference=reference,
+                score=100.0,
+                extracted_fields=extracted_fields,
+                checks=checks,
+            )
         return IdentityVerificationResult(
             status="manual_review",
             extracted_document_number=extracted_fields.get("document_number", ""),
@@ -76,6 +110,7 @@ class LocalOCRIdentityVerificationProvider(IdentityVerificationProvider):
         warnings = []
         extracted_fields = {}
         texts = []
+        document_texts = {}
         for field_name in ("id_front_document", "id_back_document"):
             upload = files.get(field_name)
             if not upload:
@@ -84,9 +119,12 @@ class LocalOCRIdentityVerificationProvider(IdentityVerificationProvider):
             checks.extend({"type": f"{field_name}_{key}", "result": value[0], "details": value[1]} for key, value in quality.items())
             if text:
                 texts.append(text)
+                document_texts[field_name] = text
         raw_text = "\n".join(texts)
         if raw_text:
             extracted_fields.update(self._extract_fields(raw_text))
+            front_fields = self._extract_fields(document_texts.get("id_front_document", ""))
+            extracted_fields["front_document_number"] = front_fields.get("document_number", "")
             checks.append({"type": "ocr", "result": "pass", "details": "Document text was extracted"})
         else:
             warnings.append("ocr_engine_not_configured" if not shutil.which("tesseract") else "ocr_text_not_detected")

@@ -147,7 +147,7 @@ class RentalApiTests(TestCase):
         self.assertEqual(payload["user"]["role"], "landlord")
         self.assertIn("add_properties", payload["account"]["capabilities"])
         self.assertNotIn("proof_of_ownership_or_authorization", payload["account"]["onboarding"]["requirements"])
-        self.assertEqual(payload["account"]["onboarding"]["requirements"], ["email_verification", "phone_verification"])
+        self.assertEqual(payload["account"]["onboarding"]["requirements"], ["email_verification", "identity_verification"])
         self.assertTrue(payload["requires_sign_in"])
         self.assertNotIn("tokens", payload)
         self.assertTrue(get_user_model().objects.filter(username="new-landlord").exists())
@@ -384,6 +384,7 @@ class RentalApiTests(TestCase):
 
         other = User.objects.create_user(username="identity-duplicate", email="identity-duplicate@example.com", password="secret12345", full_name="Identity Duplicate", role=User.Roles.TENANT, is_verified=False)
         self.mark_email_otp_verified(other)
+        self.mark_phone_otp_verified(other, "+263779000005")
         duplicate = self.client.post(
             "/api/verifications/",
             data={
@@ -404,6 +405,108 @@ class RentalApiTests(TestCase):
         )
         self.assertEqual(duplicate.status_code, 400)
         self.assertTrue(any("identity document" in error for error in duplicate.json()["errors"]))
+
+    @override_settings(IDENTITY_LOCAL_AUTO_VERIFY=True)
+    def test_identity_is_verified_and_notified_when_ocr_matches_id_and_account(self):
+        User = get_user_model()
+        phone = "+263779000006"
+        user = User.objects.create_user(
+            username="identity-match",
+            email="identity-match@example.com",
+            password="secret12345",
+            full_name="Identity Match",
+            role=User.Roles.TENANT,
+            is_verified=False,
+        )
+        self.mark_phone_otp_verified(user, phone)
+        extracted_fields = {
+            "document_number": "63-000000L64",
+            "front_document_number": "63-000000L64",
+            "raw_name_hint": "Identity Match 63-000000L64",
+        }
+        quality_checks = [
+            {"type": "front_quality", "result": "pass", "details": "clear"},
+            {"type": "back_quality", "result": "pass", "details": "clear"},
+            {"type": "ocr", "result": "pass", "details": "text extracted"},
+        ]
+        with (
+            patch(
+                "rentals.identity_verification.providers.local_ocr.LocalOCRIdentityVerificationProvider._inspect_documents",
+                return_value=(extracted_fields, quality_checks, []),
+            ),
+            patch("rentals.views.broadcast_to_user") as broadcast,
+            patch("rentals.views.send_push_to_users") as push,
+        ):
+            response = self.client.post(
+                "/api/verifications/",
+                data={
+                    "role": "tenant",
+                    "name": "Identity Match",
+                    "phone": phone,
+                    "phone_verified": "false",
+                    "national_id_number": "63-000000L64",
+                    "document_type": "identity_document",
+                    "id_front_document": self.identity_image_upload("match-front.jpg"),
+                    "id_back_document": self.identity_image_upload("match-back.jpg"),
+                    "identity_confirmed": "true",
+                },
+                **self.auth_header(user),
+            )
+
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertEqual(response.json()["status"], VerificationRequest.Status.VERIFIED)
+        user.refresh_from_db()
+        self.assertTrue(user.is_verified)
+        broadcast.assert_called_once()
+        push.assert_called_once()
+
+    @override_settings(IDENTITY_LOCAL_AUTO_VERIFY=True)
+    def test_identity_number_mismatch_is_rejected_without_verifying_user(self):
+        User = get_user_model()
+        phone = "+263779000007"
+        user = User.objects.create_user(
+            username="identity-mismatch",
+            email="identity-mismatch@example.com",
+            password="secret12345",
+            full_name="Identity Mismatch",
+            role=User.Roles.TENANT,
+            is_verified=False,
+        )
+        self.mark_phone_otp_verified(user, phone)
+        extracted_fields = {
+            "document_number": "63-000000L65",
+            "front_document_number": "63-000000L65",
+            "raw_name_hint": "Identity Mismatch 63-000000L65",
+        }
+        quality_checks = [
+            {"type": "front_quality", "result": "pass", "details": "clear"},
+            {"type": "back_quality", "result": "pass", "details": "clear"},
+            {"type": "ocr", "result": "pass", "details": "text extracted"},
+        ]
+        with patch(
+            "rentals.identity_verification.providers.local_ocr.LocalOCRIdentityVerificationProvider._inspect_documents",
+            return_value=(extracted_fields, quality_checks, []),
+        ):
+            response = self.client.post(
+                "/api/verifications/",
+                data={
+                    "role": "tenant",
+                    "name": "Identity Mismatch",
+                    "phone": phone,
+                    "phone_verified": "true",
+                    "national_id_number": "63-000000L64",
+                    "document_type": "identity_document",
+                    "id_front_document": self.identity_image_upload("mismatch-front.jpg"),
+                    "id_back_document": self.identity_image_upload("mismatch-back.jpg"),
+                    "identity_confirmed": "true",
+                },
+                **self.auth_header(user),
+            )
+
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertEqual(response.json()["status"], VerificationRequest.Status.REJECTED)
+        user.refresh_from_db()
+        self.assertFalse(user.is_verified)
 
     def test_normalize_phone_accepts_zimbabwe_local_and_e164_forms(self):
         self.assertEqual(normalize_phone("0775845535"), "+263775845535")
@@ -559,6 +662,25 @@ class RentalApiTests(TestCase):
         self.assertFalse(payload["user"]["verified"])
         self.assertTrue(payload["account"]["onboarding"]["required"])
 
+    def test_phone_otp_does_not_complete_identity_onboarding(self):
+        User = get_user_model()
+        landlord = User.objects.create_user(
+            username="otp-only-landlord",
+            password="secret12345",
+            role=User.Roles.LANDLORD,
+            is_verified=False,
+        )
+        self.mark_phone_otp_verified(landlord, "+263779000008")
+
+        response = self.client.get("/api/auth/me/", **self.auth_header(landlord))
+
+        self.assertEqual(response.status_code, 200)
+        account = response.json()["account"]
+        self.assertTrue(account["phone_verified"])
+        self.assertFalse(account["account_onboarding_complete"])
+        self.assertEqual(account["onboarding"]["requirements"], ["identity_verification"])
+        self.assertEqual(account["onboarding"]["next_endpoint"], "/api/verifications/")
+
     @override_settings(GOOGLE_SIGN_IN_ENABLED=True, GOOGLE_CLIENT_IDS=["web-client-id.apps.googleusercontent.com"])
     @patch("rentals.views.verify_google_id_token")
     def test_google_auth_new_account_rejects_duplicate_phone(self, verify_google_id_token):
@@ -691,7 +813,7 @@ class RentalApiTests(TestCase):
         self.assertIn("verification", blocked.json()["error"].lower())
         self.assertEqual(allowed.status_code, 201, allowed.json())
 
-    def test_verification_submission_requires_id_otp_and_document_evidence(self):
+    def test_verification_submission_requires_id_evidence_without_phone_otp(self):
         phone = "+263779000001"
         incomplete = self.post_json(
             "/api/verifications/",
@@ -701,7 +823,6 @@ class RentalApiTests(TestCase):
         self.landlord.email = "landlord@example.com"
         self.landlord.save(update_fields=["email"])
         self.mark_email_otp_verified(self.landlord)
-        self.mark_phone_otp_verified(self.landlord, phone)
         complete = self.client.post(
             "/api/verifications/",
             data={
@@ -720,7 +841,6 @@ class RentalApiTests(TestCase):
                 "declaration_accepted": "true",
                 "id_front_document": self.identity_image_upload("landlord-front.jpg"),
                 "id_back_document": self.identity_image_upload("landlord-back.jpg"),
-                "ownership_or_authorization_document": self.identity_image_upload("landlord-ownership.jpg"),
                 "identity_confirmed": "true",
             },
             **self.auth_header(self.landlord),
@@ -728,11 +848,16 @@ class RentalApiTests(TestCase):
 
         self.assertEqual(incomplete.status_code, 400)
         self.assertTrue(any("id_front_document" in error for error in incomplete.json()["errors"]))
-        self.assertTrue(any("email_verified" in error for error in incomplete.json()["errors"]))
+        self.assertFalse(any("phone number must be verified" in error for error in incomplete.json()["errors"]))
         self.assertFalse(any("proof_of_ownership_or_authorization" in error for error in incomplete.json()["errors"]))
         self.assertEqual(complete.status_code, 201, complete.json())
         self.assertEqual(complete.json()["status"], VerificationRequest.Status.MANUAL_REVIEW)
         self.assertTrue(complete.json()["identity_confirmed"])
+        verification = VerificationRequest.objects.get(user=self.landlord)
+        self.assertFalse(verification.phone_verified)
+        self.landlord.refresh_from_db()
+        self.assertEqual(self.landlord.phone, phone)
+        self.assertFalse(self.landlord.phone_verified)
 
     def test_identity_document_number_must_have_valid_format(self):
         phone = "+263779000003"
@@ -1168,6 +1293,22 @@ class RentalApiTests(TestCase):
         self.assertEqual(remove.status_code, 200, remove.json())
         self.assertEqual(asset.status, MediaAsset.Status.DELETED)
         self.assertFalse(bool(self.tenant.profile_picture))
+
+    def test_profile_phone_change_requires_new_phone_verification(self):
+        self.tenant.phone = "+263779123456"
+        self.tenant.phone_verified = True
+        self.tenant.save(update_fields=["phone", "phone_verified"])
+
+        response = self.client.post(
+            "/api/auth/profile/",
+            {"phone": "+263779123457"},
+            **self.auth_header(self.tenant),
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.phone, "+263779123457")
+        self.assertFalse(self.tenant.phone_verified)
 
     def test_property_media_gallery_and_delete_cleanup(self):
         upload = self.client.post(

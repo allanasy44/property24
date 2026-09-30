@@ -16,9 +16,10 @@ class ActivityScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
     final isLandlord = state.user?.role == AccountRole.landlord;
-    final greeting = state.user?.greeting.trim().isNotEmpty == true
+    final greetingPrefix = state.user?.greeting.trim().isNotEmpty == true
         ? state.user!.greeting
         : 'Good morning';
+    final userName = state.user?.name.trim() ?? '';
     final properties = state.snapshot.properties;
     final savedProperties = state.snapshot.savedProperties;
     final bookings = state.snapshot.viewings
@@ -77,18 +78,34 @@ class ActivityScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(isLandlord ? 'Dashboard' : 'Home',
-                          style: theme.textTheme.labelLarge
-                              ?.copyWith(color: theme.colorScheme.primary)),
-                      const SizedBox(height: 4),
-                      Text(greeting, style: theme.textTheme.headlineSmall),
-                      const SizedBox(height: 4),
+                      if (!isLandlord)
+                        Text('Home',
+                            style: theme.textTheme.labelLarge
+                                ?.copyWith(color: theme.colorScheme.primary)),
                       Text(
-                        isLandlord
-                            ? 'Live portfolio, client activity, and enquiries.'
-                            : 'Live updates from your applications, bookings, and home care.',
-                        style: theme.textTheme.bodyMedium,
+                        greetingPrefix,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
+                      if (userName.isNotEmpty)
+                        Text(
+                          userName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 22,
+                            color: theme.colorScheme.onSurface,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      if (!isLandlord) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Live updates from your applications, bookings, and home care.',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -115,7 +132,7 @@ class ActivityScreen extends StatelessWidget {
                       color: theme.colorScheme.primary),
                   title: const Text('Finish account verification'),
                   subtitle: const Text(
-                      'Verify your phone and identity before publishing a listing.'),
+                      'Complete identity verification before publishing a listing.'),
                   trailing: const Icon(CupertinoIcons.chevron_forward),
                   onTap: () => GoRouter.of(context).go(AppRoutes.profileScreen),
                 ),
@@ -211,20 +228,21 @@ class ActivityScreen extends StatelessWidget {
                     ),
                 ],
               ),
-            _Section(
-              title: isLandlord ? 'Maintenance requests' : 'Maintenance',
-              empty: 'No maintenance requests.',
-              children: [
-                for (final item in state.snapshot.maintenance.take(5))
-                  ListTile(
-                    leading: const Icon(CupertinoIcons.wrench),
-                    title: Text(item.issue),
-                    subtitle: Text(
-                        '${item.property} / ${item.category} / ${item.updatedAt}'),
-                    trailing: Text(item.priority),
-                  ),
-              ],
-            ),
+            if (!isLandlord)
+              _Section(
+                title: 'Maintenance',
+                empty: 'No maintenance requests.',
+                children: [
+                  for (final item in state.snapshot.maintenance.take(5))
+                    ListTile(
+                      leading: const Icon(CupertinoIcons.wrench),
+                      title: Text(item.issue),
+                      subtitle: Text(
+                          '${item.property} / ${item.category} / ${item.updatedAt}'),
+                      trailing: Text(item.priority),
+                    ),
+                ],
+              ),
             _Section(
               title: 'Messages',
               empty: 'No conversations yet.',
@@ -311,28 +329,22 @@ class _LandlordNotificationButton extends StatelessWidget {
 
   final Property24State state;
 
-  List<String> get _notifications => [
-        for (final item in state.snapshot.conversations)
-          '${item.title}: ${item.preview}',
-        for (final item in state.snapshot.applications)
-          '${item.property}: application ${item.status.toLowerCase()}',
-        for (final item in state.snapshot.viewings)
-          '${item.property}: booking ${item.status.toLowerCase()}',
-        for (final item in state.snapshot.verifications)
-          'Verification ${item.status.toLowerCase()}: ${item.role}',
-        ...state.notifications,
-      ].where((item) => item.trim().isNotEmpty).toList(growable: false);
-
   @override
   Widget build(BuildContext context) {
-    final items = _notifications;
+    final items = state.allNotifications;
     return Container(
-      height: 44,
-      width: 44,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+      height: 48,
+      width: 48,
+      decoration: const BoxDecoration(
+        color: Colors.white,
         shape: BoxShape.circle,
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: IconButton(
         tooltip: 'Notifications',
@@ -343,8 +355,11 @@ class _LandlordNotificationButton extends StatelessWidget {
           backgroundColor: Theme.of(context).colorScheme.primary,
           textColor: Theme.of(context).colorScheme.onPrimary,
           label: Text('${items.length}', style: const TextStyle(fontSize: 10)),
-          child: Icon(CupertinoIcons.bell,
-              color: Theme.of(context).colorScheme.onSurface, size: 24),
+          child: const Icon(
+            CupertinoIcons.bell,
+            color: Color(0xff202124),
+            size: 28,
+          ),
         ),
       ),
     );

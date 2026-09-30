@@ -59,34 +59,38 @@ class _ListingsScreenState extends State<ListingsScreen> {
                   children: [
                     Row(
                       children: [
-                        Container(
-                          height: 44,
-                          width: 44,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _primarySoft,
+                        if (state.snapshot.properties.isEmpty)
+                          const Spacer()
+                        else ...[
+                          Container(
+                            height: 44,
+                            width: 44,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _primarySoft,
+                            ),
+                            child: const Icon(CupertinoIcons.house,
+                                color: _primary, size: 22),
                           ),
-                          child: const Icon(CupertinoIcons.house,
-                              color: _primary, size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                displayName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  color: _textDark,
-                                  fontWeight: FontWeight.w700,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: _textDark,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
+                        ],
                         InkWell(
                           borderRadius: BorderRadius.circular(28),
                           onTap: () => _openEditor(context),
@@ -104,6 +108,15 @@ class _ListingsScreenState extends State<ListingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 18),
+                    const Text(
+                      'Listings',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: _textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     InkWell(
                       onTap: _openAiSearch,
                       borderRadius: BorderRadius.circular(28),
@@ -146,14 +159,6 @@ class _ListingsScreenState extends State<ListingsScreen> {
                       ),
                     ),
                     const SizedBox(height: 18),
-                    const Text(
-                      'Listings',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: _textDark,
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -245,27 +250,6 @@ class _ListingsScreenState extends State<ListingsScreen> {
   }
 }
 
-class _ChecklistTile extends StatelessWidget {
-  const _ChecklistTile({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      leading:
-          const Icon(CupertinoIcons.checkmark_seal, color: AppTheme.accent),
-      title: Text(label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w500,
-            color: AppTheme.textPrimary,
-          )),
-    );
-  }
-}
-
 class _Section extends StatelessWidget {
   const _Section({
     required this.title,
@@ -288,8 +272,8 @@ class _Section extends StatelessWidget {
               title,
               style: const TextStyle(
                 color: AppTheme.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -441,7 +425,6 @@ class PropertyEditor extends StatefulWidget {
 
 class _PropertyEditorState extends State<PropertyEditor> {
   static const _primary = AppTheme.accent;
-  static const _primarySoft = AppTheme.bgSurface;
   static const _searchFill = AppTheme.bgSurface;
   static const _textDark = AppTheme.textPrimary;
   static const _textMuted = AppTheme.textMuted;
@@ -561,10 +544,19 @@ class _PropertyEditorState extends State<PropertyEditor> {
   @override
   Widget build(BuildContext context) {
     final inset = MediaQuery.viewInsetsOf(context).bottom;
+    final isLand = _type == 'land';
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: Text(widget.property == null ? 'Add property' : 'Edit property'),
+        title: Text(
+          isLand
+              ? widget.property == null
+                  ? 'Add land listing'
+                  : 'Edit land listing'
+              : widget.property == null
+                  ? 'Add property'
+                  : 'Edit property',
+        ),
         centerTitle: true,
         automaticallyImplyLeading: false,
         actions: [
@@ -585,18 +577,44 @@ class _PropertyEditorState extends State<PropertyEditor> {
               child: Builder(
                 builder: (context) {
                   final colors = Theme.of(context).colorScheme;
+                  if (isLand) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: colors.outlineVariant),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(CupertinoIcons.tag_fill,
+                              color: colors.primary, size: 20),
+                          const SizedBox(width: 12),
+                          Text('For sale',
+                              style: Theme.of(context).textTheme.titleMedium),
+                          const Spacer(),
+                          Icon(CupertinoIcons.checkmark_circle_fill,
+                              color: colors.primary, size: 20),
+                        ],
+                      ),
+                    );
+                  }
                   return SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
+                    segments: [
+                      const ButtonSegment(
                         value: 'Sale',
                         label: Text('For sale'),
                         icon: Icon(CupertinoIcons.tag),
                       ),
-                      ButtonSegment(
-                        value: 'Rent',
-                        label: Text('For rent'),
-                        icon: Icon(CupertinoIcons.calendar),
-                      ),
+                      if (_type != 'land')
+                        const ButtonSegment(
+                          value: 'Rent',
+                          label: Text('For rent'),
+                          icon: Icon(CupertinoIcons.calendar),
+                        ),
                     ],
                     selected: {_intent},
                     showSelectedIcon: false,
@@ -651,7 +669,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
                             value: 'commercial_property',
                             child: Text('Commercial property')),
                         DropdownMenuItem(
-                            value: 'land', child: Text('Land / Stand')),
+                            value: 'land',
+                            child: Text('Land / Stand for sale')),
                       ],
                       onChanged: (value) {
                         final next = value ?? 'house';
@@ -676,7 +695,10 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       Expanded(child: _field(_suburb, 'Suburb')),
                     ],
                   ),
-                  _field(_address, 'House address'),
+                  _field(
+                    _address,
+                    isLand ? 'Stand location / address' : 'House address',
+                  ),
                   Row(
                     children: [
                       Expanded(
@@ -713,7 +735,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
               ),
             ),
             _Section(
-              title: 'Pricing and rooms',
+              title: isLand ? 'Asking price' : 'Pricing and rooms',
               child: Column(
                 children: [
                   Row(
@@ -721,43 +743,50 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       Expanded(
                         child: _field(
                           _rent,
-                          _intent == 'Sale' ? 'Price' : 'Monthly rent',
+                          isLand
+                              ? 'Asking price'
+                              : _intent == 'Sale'
+                                  ? 'Price'
+                                  : 'Monthly rent',
                           keyboardType: TextInputType.number,
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _field(
-                          _deposit,
-                          'Deposit',
-                          keyboardType: TextInputType.number,
+                      if (!isLand) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _field(
+                            _deposit,
+                            'Deposit',
+                            keyboardType: TextInputType.number,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _field(
-                          _beds,
-                          'Bedrooms',
-                          keyboardType: TextInputType.number,
+                  if (!isLand)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _field(
+                            _beds,
+                            'Bedrooms',
+                            keyboardType: TextInputType.number,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _field(
-                          _baths,
-                          'Bathrooms',
-                          keyboardType: TextInputType.number,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _field(
+                            _baths,
+                            'Bathrooms',
+                            keyboardType: TextInputType.number,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                 ],
               ),
             ),
-            if (_type == 'land')
+            if (isLand)
               _Section(
                 title: 'Land / stand details',
                 child: Column(
@@ -799,60 +828,51 @@ class _PropertyEditorState extends State<PropertyEditor> {
                                 requiredField: false)),
                       ],
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: _titleDeedStatus,
-                            decoration: _inputDeco('Title / deed status'),
-                            items: const [
-                              DropdownMenuItem(
-                                  value: 'title_deed',
-                                  child: Text('Title deed')),
-                              DropdownMenuItem(
-                                  value: 'cession', child: Text('Cession')),
-                              DropdownMenuItem(
-                                  value: 'council_approved',
-                                  child: Text('Council approved')),
-                              DropdownMenuItem(
-                                  value: 'not_provided',
-                                  child: Text('Not provided')),
-                            ],
-                            onChanged: (value) => setState(() =>
-                                _titleDeedStatus = value ?? 'not_provided'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: _servicingStatus,
-                            decoration: _inputDeco('Servicing'),
-                            items: const [
-                              DropdownMenuItem(
-                                  value: 'serviced', child: Text('Serviced')),
-                              DropdownMenuItem(
-                                  value: 'partially_serviced',
-                                  child: Text('Partly serviced')),
-                              DropdownMenuItem(
-                                  value: 'not_serviced',
-                                  child: Text('Not serviced')),
-                            ],
-                            onChanged: (value) => setState(() =>
-                                _servicingStatus = value ?? 'not_serviced'),
-                          ),
-                        ),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: DropdownButtonFormField<String>(
+                        value: _titleDeedStatus,
+                        decoration: _inputDeco('Ownership document status'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'title_deed', child: Text('Title deed')),
+                          DropdownMenuItem(
+                              value: 'cession', child: Text('Cession')),
+                          DropdownMenuItem(
+                              value: 'offer_allocation_letter',
+                              child: Text('Offer / allocation letter')),
+                          DropdownMenuItem(
+                              value: 'council_approved',
+                              child: Text('Council approved')),
+                          DropdownMenuItem(
+                              value: 'not_provided',
+                              child: Text('Not provided')),
+                        ],
+                        onChanged: (value) => setState(
+                            () => _titleDeedStatus = value ?? 'not_provided'),
+                      ),
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                            child: _field(_zoning, 'Zoning / permitted use')),
-                        const SizedBox(width: 10),
-                        Expanded(
-                            child: _field(_roadAccess, 'Road access',
-                                requiredField: false)),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: DropdownButtonFormField<String>(
+                        value: _servicingStatus,
+                        decoration: _inputDeco('Servicing status'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'serviced', child: Text('Serviced')),
+                          DropdownMenuItem(
+                              value: 'partially_serviced',
+                              child: Text('Partly serviced')),
+                          DropdownMenuItem(
+                              value: 'not_serviced',
+                              child: Text('Not serviced')),
+                        ],
+                        onChanged: (value) => setState(
+                            () => _servicingStatus = value ?? 'not_serviced'),
+                      ),
                     ),
+                    _field(_zoning, 'Zoning / permitted use'),
+                    _field(_roadAccess, 'Road access', requiredField: false),
                     _switch(
                         'Electricity available',
                         _electricityAvailable,
@@ -860,42 +880,47 @@ class _PropertyEditorState extends State<PropertyEditor> {
                             setState(() => _electricityAvailable = value)),
                     _switch('Water available', _landWaterAvailable,
                         (value) => setState(() => _landWaterAvailable = value)),
+                    _switch('Borehole on site', _borehole,
+                        (value) => setState(() => _borehole = value)),
                     _field(_paymentTerms, 'Payment terms',
                         maxLines: 2, requiredField: false),
                   ],
                 ),
               ),
-            _Section(
-              title: 'Features',
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: _field(_water, 'Water availability')),
-                      const SizedBox(width: 10),
-                      Expanded(child: _field(_parking, 'Parking')),
-                    ],
-                  ),
-                  _switch('Furnished', _furnished,
-                      (v) => setState(() => _furnished = v)),
-                  _switch(
-                      'Solar power', _solar, (v) => setState(() => _solar = v)),
-                  _switch('Borehole', _borehole,
-                      (v) => setState(() => _borehole = v)),
-                  _switch(
-                      'Pet friendly', _pets, (v) => setState(() => _pets = v)),
-                  _switch('360 tour / video walkthrough ready', _tour,
-                      (v) => setState(() => _tour = v)),
-                ],
+            if (!isLand)
+              _Section(
+                title: 'Features',
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: _field(_water, 'Water availability')),
+                        const SizedBox(width: 10),
+                        Expanded(child: _field(_parking, 'Parking')),
+                      ],
+                    ),
+                    _switch('Furnished', _furnished,
+                        (v) => setState(() => _furnished = v)),
+                    _switch('Solar power', _solar,
+                        (v) => setState(() => _solar = v)),
+                    _switch('Borehole', _borehole,
+                        (v) => setState(() => _borehole = v)),
+                    _switch('Pet friendly', _pets,
+                        (v) => setState(() => _pets = v)),
+                    _switch('360 tour / video walkthrough ready', _tour,
+                        (v) => setState(() => _tour = v)),
+                  ],
+                ),
               ),
-            ),
             _Section(
               title: 'Media files',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Add clear, well-lit photos and a short walkthrough for a stronger listing.',
+                    isLand
+                        ? 'Add clear photos of the stand, boundaries, road access, and surrounding area.'
+                        : 'Add clear, well-lit photos and a short walkthrough for a stronger listing.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -968,7 +993,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       ),
                   ],
                   const Divider(height: 28),
-                  Text('Video walkthrough',
+                  Text(isLand ? 'Site video' : 'Video walkthrough',
                       style: Theme.of(context).textTheme.labelLarge),
                   const SizedBox(height: 8),
                   Wrap(
@@ -978,12 +1003,14 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       OutlinedButton.icon(
                         onPressed: () => _pickVideo(camera: true),
                         icon: const Icon(CupertinoIcons.videocam, size: 18),
-                        label: const Text('Record video'),
+                        label:
+                            Text(isLand ? 'Record site video' : 'Record video'),
                       ),
                       OutlinedButton.icon(
                         onPressed: _pickVideo,
                         icon: const Icon(CupertinoIcons.film, size: 18),
-                        label: const Text('Choose video'),
+                        label:
+                            Text(isLand ? 'Choose site video' : 'Choose video'),
                       ),
                     ],
                   ),
@@ -1002,26 +1029,6 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       ),
                     ),
                 ],
-              ),
-            ),
-            _Section(
-              title: 'Readiness',
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: _primarySoft,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Column(
-                  children: [
-                    _ChecklistTile(label: 'Identity document uploaded'),
-                    _ChecklistTile(label: 'Phone number verified'),
-                    _ChecklistTile(
-                        label: 'Ownership or agent authority document ready'),
-                    _ChecklistTile(
-                        label: 'Property address and availability confirmed'),
-                  ],
-                ),
               ),
             ),
           ],
@@ -1057,11 +1064,11 @@ class _PropertyEditorState extends State<PropertyEditor> {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: AppTheme.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: AppTheme.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -1149,6 +1156,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final isLandListing = _type == 'land';
     final hasLatitude = _latitude.text.trim().isNotEmpty;
     final hasLongitude = _longitude.text.trim().isNotEmpty;
     if (hasLatitude != hasLongitude) {
@@ -1167,29 +1175,29 @@ class _PropertyEditorState extends State<PropertyEditor> {
       showExactLocation: _showExactLocation,
       listingIntent: _intent.toLowerCase(),
       monthlyRent: _rent.text.trim(),
-      depositRequired: _deposit.text.trim(),
+      depositRequired: isLandListing ? '' : _deposit.text.trim(),
       propertyType: _type,
-      bedrooms: int.tryParse(_beds.text) ?? 0,
-      bathrooms: num.tryParse(_baths.text) ?? 1,
+      bedrooms: isLandListing ? 0 : int.tryParse(_beds.text) ?? 0,
+      bathrooms: isLandListing ? 0 : num.tryParse(_baths.text) ?? 1,
       description: _description.text.trim(),
-      waterAvailability: _water.text.trim(),
-      parking: _parking.text.trim(),
-      furnished: _furnished,
-      solarPower: _solar,
+      waterAvailability: isLandListing ? '' : _water.text.trim(),
+      parking: isLandListing ? '' : _parking.text.trim(),
+      furnished: !isLandListing && _furnished,
+      solarPower: !isLandListing && _solar,
       borehole: _borehole,
-      petFriendly: _pets,
-      has360Tour: _tour,
-      standReference: _standReference.text.trim(),
-      standsAvailable: int.tryParse(_stands.text) ?? 1,
-      landSize: _landSize.text.trim(),
-      landSizeUnit: _landSizeUnit,
-      titleDeedStatus: _titleDeedStatus,
-      servicingStatus: _servicingStatus,
-      zoning: _zoning.text.trim(),
-      roadAccess: _roadAccess.text.trim(),
-      electricityAvailable: _electricityAvailable,
-      landWaterAvailable: _landWaterAvailable,
-      paymentTerms: _paymentTerms.text.trim(),
+      petFriendly: !isLandListing && _pets,
+      has360Tour: !isLandListing && _tour,
+      standReference: isLandListing ? _standReference.text.trim() : '',
+      standsAvailable: isLandListing ? int.tryParse(_stands.text) ?? 1 : 1,
+      landSize: isLandListing ? _landSize.text.trim() : '',
+      landSizeUnit: isLandListing ? _landSizeUnit : 'sqm',
+      titleDeedStatus: isLandListing ? _titleDeedStatus : 'not_provided',
+      servicingStatus: isLandListing ? _servicingStatus : 'not_serviced',
+      zoning: isLandListing ? _zoning.text.trim() : '',
+      roadAccess: isLandListing ? _roadAccess.text.trim() : '',
+      electricityAvailable: isLandListing && _electricityAvailable,
+      landWaterAvailable: isLandListing && _landWaterAvailable,
+      paymentTerms: isLandListing ? _paymentTerms.text.trim() : '',
     );
 
     try {

@@ -60,6 +60,37 @@ class Property24State extends ChangeNotifier {
       snapshot.maintenance.where((item) => item.status != 'Resolved').length;
   int get receivedPayments =>
       snapshot.payments.where((item) => item.status == 'Received').length;
+  List<String> get allNotifications {
+    final items = <String>[
+      ...notifications,
+      for (final item in snapshot.conversations)
+        'Message in ${item.title}: ${item.preview}',
+      for (final item in snapshot.applications)
+        user?.role == AccountRole.landlord
+            ? '${item.applicant} applied for ${item.property}: ${item.status}'
+            : 'Application for ${item.property}: ${item.status}',
+      for (final item in snapshot.viewings)
+        user?.role == AccountRole.landlord
+            ? '${item.tenant} viewing for ${item.property}: ${item.status}'
+            : 'Viewing for ${item.property}: ${item.status}',
+      for (final item in snapshot.payments)
+        'Payment for ${item.property}: ${item.amount} (${item.status})',
+      for (final item in snapshot.leases)
+        'Lease for ${item.property}: ${item.status}',
+      for (final item in snapshot.maintenance)
+        'Maintenance on ${item.property}: ${item.issue} (${item.status})',
+      for (final item in snapshot.verifications)
+        'Identity verification ${item.status.toLowerCase()}: ${item.role}',
+      for (final item in snapshot.calls)
+        '${item.direction} ${item.mode.name} call with ${item.name} about ${item.property}',
+    ];
+    final seen = <String>{};
+    return items
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty && seen.add(item))
+        .toList(growable: false);
+  }
+
   List<PropertyListing> get comparedProperties => snapshot.properties
       .where((property) => comparisonPropertyIds.contains(property.id))
       .toList(growable: false);
@@ -183,6 +214,27 @@ class Property24State extends ChangeNotifier {
       if (event is! Map<String, dynamic>) return;
       final type = '${event['type'] ?? ''}';
       final payload = event['payload'];
+      if (type == 'notification.created' && payload is Map) {
+        final message = '${payload['message'] ?? ''}'.trim();
+        final kind = '${payload['kind'] ?? ''}';
+        final fallback = switch (kind) {
+          'application' => 'New application received',
+          'application.updated' => 'Application status updated',
+          'payment.created' => 'Payment received',
+          'payment.updated' => 'Payment status updated',
+          'lease.created' => 'New lease created',
+          'lease.updated' => 'Lease status updated',
+          'maintenance' => 'New maintenance request',
+          'maintenance.updated' => 'Maintenance request updated',
+          'viewing' => 'New viewing request',
+          'viewing.updated' => 'Viewing status updated',
+          'conversation.created' => 'New conversation',
+          'property.hold' => 'Property hold updated',
+          'identity_verification' => 'Identity verification updated',
+          _ => kind.isEmpty ? 'New notification' : titleize(kind),
+        };
+        addNotification(message.isNotEmpty ? message : fallback);
+      }
       final conversationId =
           payload is Map ? '${payload['conversation_id'] ?? ''}' : '';
       if (conversationId.isNotEmpty &&
@@ -328,11 +380,11 @@ class Property24State extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String> requestPhoneVerification() async {
+  Future<String> requestPhoneVerification({required String phone}) async {
     final activeToken = _requireToken();
     return _api.requestPhoneVerification(
       token: activeToken,
-      phone: user?.phone ?? '',
+      phone: phone,
     );
   }
 
@@ -349,7 +401,8 @@ class Property24State extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> submitIdentityVerification({
+  Future<VerificationItem> submitIdentityVerification({
+    required String phone,
     required String nationalIdNumber,
     required Uint8List idFrontBytes,
     required String idFrontName,
@@ -369,12 +422,11 @@ class Property24State extends ChangeNotifier {
     if (activeUser == null) {
       throw const ApiException('Sign in to verify your account.');
     }
-    await _api.submitIdentityVerification(
+    final verification = await _api.submitIdentityVerification(
       token: activeToken,
       role: activeUser.role.apiValue,
       name: activeUser.name,
-      phone: activeUser.phone,
-      phoneVerified: activeUser.phoneVerified,
+      phone: phone,
       nationalIdNumber: nationalIdNumber,
       idFrontBytes: idFrontBytes,
       idFrontName: idFrontName,
@@ -395,6 +447,7 @@ class Property24State extends ChangeNotifier {
     account = session.account;
     snapshot = await _api.snapshot(token: activeToken);
     notifyListeners();
+    return verification;
   }
 
   Future<void> _authenticate(Future<AuthSession> Function() request) async {
@@ -644,7 +697,10 @@ class Property24State extends ChangeNotifier {
   }
 
   void addNotification(String notification) {
-    notifications.insert(0, notification);
+    final value = notification.trim();
+    if (value.isEmpty || notifications.contains(value)) return;
+    notifications.insert(0, value);
+    if (notifications.length > 100) notifications.removeLast();
     notifyListeners();
   }
 

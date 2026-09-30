@@ -339,21 +339,9 @@ class _NotificationButton extends StatelessWidget {
 
   final Property24State state;
 
-  List<String> get notifications => [
-        for (final item in state.snapshot.conversations)
-          '${item.title}: ${item.preview}',
-        for (final item in state.snapshot.applications)
-          '${item.property}: application ${item.status.toLowerCase()}',
-        for (final item in state.snapshot.viewings)
-          '${item.property}: booking ${item.status.toLowerCase()}',
-        for (final item in state.snapshot.verifications)
-          'Verification ${item.status.toLowerCase()}: ${item.role}',
-        ...state.notifications,
-      ].where((item) => item.trim().isNotEmpty).toList(growable: false);
-
   @override
   Widget build(BuildContext context) {
-    final syncedNotifications = notifications;
+    final syncedNotifications = state.allNotifications;
     return Container(
       height: 44,
       width: 44,

@@ -216,8 +216,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _verificationSummary(AccountUser? user) {
     if (user == null) return 'Sign in to verify your account';
     if (user.verified) return 'Identity verification complete';
-    if (user.phoneVerified) return 'Phone verified';
-    return 'Phone and identity verification pending';
+    return 'Identity verification pending';
   }
 
   void _openProfileEditor(BuildContext context, AccountUser user) {
@@ -1404,27 +1403,34 @@ class _VerificationSheet extends StatefulWidget {
 }
 
 class _VerificationSheetState extends State<_VerificationSheet> {
-  final _code = TextEditingController();
+  late final TextEditingController _phone;
   final _nationalId = TextEditingController();
   final _picker = ImagePicker();
   XFile? _frontDocument;
   XFile? _backDocument;
   Uint8List? _frontBytes;
   Uint8List? _backBytes;
-  String? _challengeId;
   String? _error;
+  String? _submissionMessage;
   bool _busy = false;
 
   @override
+  void initState() {
+    super.initState();
+    _phone = TextEditingController(text: widget.user?.phone ?? '');
+  }
+
+  @override
   void dispose() {
-    _code.dispose();
+    _phone.dispose();
     _nationalId.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<Property24State>().user ?? widget.user;
+    final state = context.watch<Property24State>();
+    final user = state.user ?? widget.user;
     if (user == null) {
       return Padding(
         padding: const EdgeInsets.all(24),
@@ -1434,6 +1440,20 @@ class _VerificationSheetState extends State<_VerificationSheet> {
         ),
       );
     }
+    final latestVerification = state.snapshot.verifications.isEmpty
+        ? null
+        : state.snapshot.verifications.first;
+    final latestStatus =
+        latestVerification?.status.toLowerCase().replaceAll('_', ' ');
+    final verificationUnderReview = {
+      'pending',
+      'processing',
+      'ocr complete',
+      'validation',
+      'manual review',
+      'submitted',
+      'reviewing',
+    }.contains(latestStatus);
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -1447,65 +1467,77 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                 onClose: () => Navigator.of(context).pop(),
               ),
               const SizedBox(height: 14),
-              _VerificationRow(
-                label: 'Zimbabwe phone',
-                value: user.phone,
-                verified: user.phoneVerified,
-              ),
-              if (!user.phoneVerified) ...[
-                const SizedBox(height: 10),
-                if (_challengeId == null)
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppTheme.accent,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: _busy ? null : _sendCode,
-                      icon: const Icon(CupertinoIcons.paperplane),
-                      label: const Text('Send phone code'),
-                    ),
-                  )
-                else ...[
-                  TextField(
-                    controller: _code,
-                    keyboardType: TextInputType.number,
-                    style: TextStyle(color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: '6-digit code',
-                      labelStyle: TextStyle(color: AppTheme.textMuted),
-                      filled: true,
-                      fillColor: AppTheme.bgSurface,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
+              if (user.verified)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(CupertinoIcons.phone,
+                      color: AppTheme.textMuted),
+                  title: const Text('Phone number'),
+                  subtitle: Text(
+                    user.phone.isEmpty ? 'Not provided' : user.phone,
+                    style: const TextStyle(color: AppTheme.textMuted),
                   ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppTheme.accent,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: _busy ? null : _verifyCode,
-                      child: const Text('Verify phone'),
-                    ),
-                  ),
-                ],
-              ],
+                )
+              else
+                _ThemedField(
+                  controller: _phone,
+                  label: 'Zimbabwe phone number',
+                  hint: '077 123 4567 or +263 77 123 4567',
+                  keyboardType: TextInputType.phone,
+                ),
               const SizedBox(height: 18),
               _VerificationRow(
                 label: 'Identity',
                 value: user.verified
-                    ? 'Document information verified'
-                    : 'National ID review required',
+                    ? 'National ID verified'
+                    : verificationUnderReview
+                        ? 'Submitted for review'
+                        : latestStatus == 'rejected'
+                            ? 'ID details need correction'
+                            : 'National ID required',
                 verified: user.verified,
               ),
+              if (_submissionMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _submissionMessage!,
+                  style: TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+              if (verificationUnderReview && !user.verified) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Your documents are being checked. We will notify you when the review is complete.',
+                  style: TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+              if (latestStatus == 'rejected' && !user.verified) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'The number read from the ID did not match. Check your entry and upload clear images of both sides.',
+                  style: TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+              ],
               if (!user.verified) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Used as contact information.',
+                  style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+                ),
+              ],
+              if (!user.verified && !verificationUnderReview) ...[
                 const SizedBox(height: 12),
                 _ThemedField(
                   controller: _nationalId,
@@ -1528,7 +1560,7 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  'Upload clear JPEG, PNG, or WEBP images. Your documents are checked for clarity, validity, and consistency before review.',
+                  'Upload clear JPEG, PNG, or WEBP images of both sides. Automated checks compare the printed ID number with your entry; unreadable images need manual review. This does not check a government ID registry.',
                   style: TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 12,
@@ -1579,47 +1611,17 @@ class _VerificationSheetState extends State<_VerificationSheet> {
         _backBytes = bytes;
       }
       _error = null;
+      _submissionMessage = null;
     });
-  }
-
-  Future<void> _sendCode() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      _challengeId =
-          await context.read<Property24State>().requestPhoneVerification();
-      if (mounted) setState(() {});
-    } catch (exception) {
-      if (mounted) setState(() => _error = userFacingError(exception));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _verifyCode() async {
-    final code = _code.text.trim();
-    if (_challengeId == null || !RegExp(r'^\d{6}$').hasMatch(code)) {
-      setState(() => _error = 'Enter the 6-digit code');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await context.read<Property24State>().verifyPhone(_challengeId!, code);
-      if (mounted) setState(() => _challengeId = null);
-    } catch (exception) {
-      if (mounted) setState(() => _error = userFacingError(exception));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _submitIdentity() async {
+    final phone = _phone.text.trim();
     final idNumber = _nationalId.text.trim();
+    if (phone.isEmpty) {
+      setState(() => _error = 'Enter your Zimbabwe phone number');
+      return;
+    }
     if (idNumber.isEmpty) {
       setState(() => _error = 'Enter your national ID number');
       return;
@@ -1637,17 +1639,25 @@ class _VerificationSheetState extends State<_VerificationSheet> {
       _error = null;
     });
     try {
-      await context.read<Property24State>().submitIdentityVerification(
-            nationalIdNumber: idNumber,
-            idFrontBytes: _frontBytes!,
-            idFrontName: _frontDocument!.name,
-            idFrontMimeType: _frontDocument!.mimeType ?? '',
-            idBackBytes: _backBytes!,
-            idBackName: _backDocument!.name,
-            idBackMimeType: _backDocument!.mimeType ?? '',
-          );
+      final state = context.read<Property24State>();
+      final result = await state.submitIdentityVerification(
+        phone: phone,
+        nationalIdNumber: idNumber,
+        idFrontBytes: _frontBytes!,
+        idFrontName: _frontDocument!.name,
+        idFrontMimeType: _frontDocument!.mimeType ?? '',
+        idBackBytes: _backBytes!,
+        idBackName: _backDocument!.name,
+        idBackMimeType: _backDocument!.mimeType ?? '',
+      );
+      final status = result.status.toLowerCase().replaceAll('_', ' ');
       if (mounted) {
         setState(() {
+          _submissionMessage = status == 'verified'
+              ? 'Your identity has been verified.'
+              : status == 'rejected'
+                  ? 'The ID number did not match the document. Check your details and try again.'
+                  : 'Your documents were submitted for manual review. We will notify you when it is complete.';
           _frontDocument = null;
           _backDocument = null;
           _frontBytes = null;

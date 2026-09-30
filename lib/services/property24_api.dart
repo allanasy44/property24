@@ -374,7 +374,6 @@ class Property24Api {
     required Uint8List idBackBytes,
     required String idBackName,
     required String idBackMimeType,
-    required bool phoneVerified,
     Uint8List? ownershipBytes,
     String? ownershipName,
     String? ownershipMimeType,
@@ -396,7 +395,6 @@ class Property24Api {
       'identity_confirmed': 'true',
       'privacy_notice_accepted': 'true',
       'declaration_accepted': 'true',
-      'phone_verified': phoneVerified ? 'true' : 'false',
       if (estateAgencyRegistration?.trim().isNotEmpty == true)
         'estate_agency_registration': estateAgencyRegistration!.trim(),
       if (agencyName?.trim().isNotEmpty == true)

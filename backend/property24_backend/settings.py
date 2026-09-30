@@ -230,6 +230,7 @@ AI_PROVIDER = env_str("AI_PROVIDER", "local").lower()
 AI_MODEL = env_str("AI_MODEL", "property24-rules-v1")
 AI_ASSISTED_REVIEW_ENABLED = env_bool("AI_ASSISTED_REVIEW_ENABLED", True)
 OPENAI_API_KEY = env_str("OPENAI_API_KEY", "")
+IDENTITY_LOCAL_AUTO_VERIFY = env_bool("IDENTITY_LOCAL_AUTO_VERIFY", not IS_PRODUCTION)
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DATA_UPLOAD_MAX_MEMORY_SIZE = env_int("DATA_UPLOAD_MAX_MEMORY_SIZE", 30 * 1024 * 1024)
@@ -247,6 +248,8 @@ SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
 
 if IS_PRODUCTION:
+    if IDENTITY_LOCAL_AUTO_VERIFY:
+        raise ImproperlyConfigured("Local OCR auto-verification is not permitted in production")
     if not env_str("JWT_SECRET", "") or JWT_SECRET == SECRET_KEY:
         raise ImproperlyConfigured("JWT_SECRET must be configured separately in production")
     if OBJECT_STORAGE_PROVIDER == "local":
