@@ -80,7 +80,6 @@ class PropertyDraft {
     this.roadAccess = '',
     this.electricityAvailable = false,
     this.landWaterAvailable = false,
-    this.paymentTerms = '',
   });
 
   final String title;
@@ -114,7 +113,6 @@ class PropertyDraft {
   final String roadAccess;
   final bool electricityAvailable;
   final bool landWaterAvailable;
-  final String paymentTerms;
 
   Map<String, dynamic> toJson() {
     return {
@@ -152,7 +150,6 @@ class PropertyDraft {
       'road_access': roadAccess,
       'electricity_available': electricityAvailable,
       'land_water_available': landWaterAvailable,
-      'payment_terms': paymentTerms,
     };
   }
 }
@@ -455,9 +452,6 @@ class Property24Api {
     }
 
     final responses = await Future.wait([
-      _get('payments/', token: token),
-      _get('maintenance/', token: token),
-      _get('leases/', token: token),
       _get('applications/', token: token),
       _get('verifications/', token: token),
       _get('conversations/', token: token),
@@ -468,20 +462,16 @@ class Property24Api {
 
     return PlatformSnapshot(
       properties: properties,
-      payments: _results(responses[0]).map(PaymentItem.fromJson).toList(),
-      maintenance:
-          _results(responses[1]).map(MaintenanceItem.fromJson).toList(),
-      leases: _results(responses[2]).map(LeaseItem.fromJson).toList(),
       applications:
-          _results(responses[3]).map(ApplicationItem.fromJson).toList(),
+          _results(responses[0]).map(ApplicationItem.fromJson).toList(),
       verifications:
-          _results(responses[4]).map(VerificationItem.fromJson).toList(),
+          _results(responses[1]).map(VerificationItem.fromJson).toList(),
       conversations:
-          _results(responses[5]).map(ConversationItem.fromJson).toList(),
-      calls: _results(responses[6]).map(CallLogItem.fromJson).toList(),
-      viewings: _results(responses[7]).map(ViewingItem.fromJson).toList(),
+          _results(responses[2]).map(ConversationItem.fromJson).toList(),
+      calls: _results(responses[3]).map(CallLogItem.fromJson).toList(),
+      viewings: _results(responses[4]).map(ViewingItem.fromJson).toList(),
       savedProperties:
-          _results(responses[8]).map(PropertyListing.fromJson).toList(),
+          _results(responses[5]).map(PropertyListing.fromJson).toList(),
     );
   }
 
@@ -875,9 +865,6 @@ class Property24Api {
 extension on PlatformSnapshot {
   PlatformSnapshot copyWith({
     List<PropertyListing>? properties,
-    List<PaymentItem>? payments,
-    List<MaintenanceItem>? maintenance,
-    List<LeaseItem>? leases,
     List<ApplicationItem>? applications,
     List<VerificationItem>? verifications,
     List<ConversationItem>? conversations,
@@ -887,9 +874,6 @@ extension on PlatformSnapshot {
   }) {
     return PlatformSnapshot(
       properties: properties ?? this.properties,
-      payments: payments ?? this.payments,
-      maintenance: maintenance ?? this.maintenance,
-      leases: leases ?? this.leases,
       applications: applications ?? this.applications,
       verifications: verifications ?? this.verifications,
       conversations: conversations ?? this.conversations,

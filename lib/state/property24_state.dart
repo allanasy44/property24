@@ -56,10 +56,6 @@ class Property24State extends ChangeNotifier {
 
   int get verifiedProperties =>
       snapshot.properties.where((item) => item.verified).length;
-  int get openMaintenance =>
-      snapshot.maintenance.where((item) => item.status != 'Resolved').length;
-  int get receivedPayments =>
-      snapshot.payments.where((item) => item.status == 'Received').length;
   List<String> get allNotifications {
     final items = <String>[
       ...notifications,
@@ -73,12 +69,6 @@ class Property24State extends ChangeNotifier {
         user?.role == AccountRole.landlord
             ? '${item.tenant} viewing for ${item.property}: ${item.status}'
             : 'Viewing for ${item.property}: ${item.status}',
-      for (final item in snapshot.payments)
-        'Payment for ${item.property}: ${item.amount} (${item.status})',
-      for (final item in snapshot.leases)
-        'Lease for ${item.property}: ${item.status}',
-      for (final item in snapshot.maintenance)
-        'Maintenance on ${item.property}: ${item.issue} (${item.status})',
       for (final item in snapshot.verifications)
         'Identity verification ${item.status.toLowerCase()}: ${item.role}',
       for (final item in snapshot.calls)
@@ -220,12 +210,6 @@ class Property24State extends ChangeNotifier {
         final fallback = switch (kind) {
           'application' => 'New application received',
           'application.updated' => 'Application status updated',
-          'payment.created' => 'Payment received',
-          'payment.updated' => 'Payment status updated',
-          'lease.created' => 'New lease created',
-          'lease.updated' => 'Lease status updated',
-          'maintenance' => 'New maintenance request',
-          'maintenance.updated' => 'Maintenance request updated',
           'viewing' => 'New viewing request',
           'viewing.updated' => 'Viewing status updated',
           'conversation.created' => 'New conversation',
@@ -761,9 +745,6 @@ class Property24State extends ChangeNotifier {
     final properties = await _api.searchProperties(token: _token);
     snapshot = PlatformSnapshot(
       properties: properties,
-      payments: publicSnapshot.payments,
-      maintenance: publicSnapshot.maintenance,
-      leases: publicSnapshot.leases,
       applications: publicSnapshot.applications,
       verifications: publicSnapshot.verifications,
       conversations: publicSnapshot.conversations,

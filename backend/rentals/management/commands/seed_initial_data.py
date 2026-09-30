@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from rentals.models import Application, LeaseAgreement, MaintenanceRequest, Payment, Property, VerificationRequest, Viewing
+from rentals.models import Application, Property, VerificationRequest, Viewing
 
 
 class Command(BaseCommand):
@@ -57,9 +57,6 @@ class Command(BaseCommand):
             reviewed_at=timezone.now(),
         )
         Application.objects.get_or_create(property=prop, tenant=tenant, defaults={"status": Application.Status.APPROVED, "score": 92})
-        Payment.objects.get_or_create(property=prop, tenant=tenant, receipt_number="RCT-2026-0001", defaults={"amount": "450.00", "method": Payment.Method.ECOCASH, "status": Payment.Status.RECEIVED, "reminder_status": "Next reminder scheduled", "paid_at": timezone.now()})
-        LeaseAgreement.objects.get_or_create(property=prop, tenant=tenant, landlord=landlord, defaults={"start_date": "2026-07-01", "end_date": "2027-06-30", "monthly_rent": "450.00", "deposit": "450.00", "term": "12 Months", "signed_by_tenant": True, "signed_by_landlord": True})
-        MaintenanceRequest.objects.get_or_create(property=prop, tenant=tenant, issue="Leaking kitchen sink", defaults={"category": MaintenanceRequest.Category.PLUMBING, "description": "Tenant uploaded photos and requested plumber assignment.", "status": MaintenanceRequest.Status.IN_PROGRESS, "priority": "high"})
         Viewing.objects.get_or_create(property=prop, tenant=tenant, agent=agent, scheduled_for="2026-07-24T10:00:00+02:00", defaults={"status": Viewing.Status.CONFIRMED})
 
         self.stdout.write(self.style.SUCCESS("Seeded Property24 initial data."))

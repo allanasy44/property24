@@ -41,10 +41,6 @@ class ActivityScreen extends StatelessWidget {
                 icon: CupertinoIcons.person_2,
                 label: 'Applications',
                 value: '${state.snapshot.applications.length}'),
-            MetricTile(
-                icon: CupertinoIcons.wrench,
-                label: 'Open maintenance',
-                value: '${state.openMaintenance}'),
           ]
         : <Widget>[
             MetricTile(
@@ -59,10 +55,6 @@ class ActivityScreen extends StatelessWidget {
                 icon: CupertinoIcons.calendar,
                 label: 'Bookings',
                 value: '${bookings.length}'),
-            MetricTile(
-                icon: CupertinoIcons.wrench,
-                label: 'Open requests',
-                value: '${state.openMaintenance}'),
           ];
 
     return LoadingOverlay(
@@ -200,49 +192,6 @@ class ActivityScreen extends StatelessWidget {
                   ),
               ],
             ),
-            if (!isLandlord)
-              _Section(
-                title: 'Payments',
-                empty: 'No payments recorded.',
-                children: [
-                  for (final item in state.snapshot.payments.take(5))
-                    ListTile(
-                      leading: const Icon(CupertinoIcons.money_dollar),
-                      title: Text('${item.amount} / ${item.property}'),
-                      subtitle: Text('${item.method} / ${item.paidAt}'),
-                      trailing: Text(item.status),
-                    ),
-                ],
-              ),
-            if (!isLandlord)
-              _Section(
-                title: 'Leases',
-                empty: 'No leases generated.',
-                children: [
-                  for (final item in state.snapshot.leases.take(5))
-                    ListTile(
-                      leading: const Icon(CupertinoIcons.doc),
-                      title: Text(item.property),
-                      subtitle: Text(item.monthlyRent),
-                      trailing: Text(item.status),
-                    ),
-                ],
-              ),
-            if (!isLandlord)
-              _Section(
-                title: 'Maintenance',
-                empty: 'No maintenance requests.',
-                children: [
-                  for (final item in state.snapshot.maintenance.take(5))
-                    ListTile(
-                      leading: const Icon(CupertinoIcons.wrench),
-                      title: Text(item.issue),
-                      subtitle: Text(
-                          '${item.property} / ${item.category} / ${item.updatedAt}'),
-                      trailing: Text(item.priority),
-                    ),
-                ],
-              ),
             _Section(
               title: 'Messages',
               empty: 'No conversations yet.',

@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Application, Conversation, DisputeReport, LeaseAgreement, MaintenanceRequest, Message, Payment, Property, Review, VerificationRequest, Viewing
+from .models import Application, Conversation, DisputeReport, Message, Property, Review, VerificationRequest, Viewing
 
 
 @transaction.atomic
@@ -57,60 +57,6 @@ def submit_application(cleaned_data):
         },
     )
     return application
-
-
-def record_payment(cleaned_data):
-    status = cleaned_data.get("status") or Payment.Status.RECEIVED
-    return Payment.objects.create(
-        tenant=cleaned_data["tenant_id"],
-        property=cleaned_data["property_id"],
-        amount=cleaned_data["amount"],
-        method=cleaned_data["method"],
-        status=status,
-        provider_reference=cleaned_data.get("provider_reference", ""),
-        receipt_number=cleaned_data.get("receipt_number") or make_receipt_number(),
-        reminder_status=cleaned_data.get("reminder_status", "Next reminder scheduled"),
-        due_date=cleaned_data.get("due_date"),
-        paid_at=timezone.now() if status == Payment.Status.RECEIVED else None,
-    )
-
-
-def create_lease(cleaned_data):
-    prop = cleaned_data["property_id"]
-    return LeaseAgreement.objects.create(
-        property=prop,
-        tenant=cleaned_data["tenant_id"],
-        landlord=cleaned_data.get("landlord_id") or prop.owner,
-        start_date=cleaned_data["start_date"],
-        end_date=cleaned_data["end_date"],
-        monthly_rent=cleaned_data.get("monthly_rent") or prop.monthly_rent,
-        deposit=cleaned_data.get("deposit") or prop.deposit_required,
-        term=cleaned_data.get("term") or "12 Months",
-        status=cleaned_data.get("status") or LeaseAgreement.Status.AWAITING_SIGNATURES,
-    )
-
-
-def sign_lease(lease, signed_by):
-    if signed_by == "tenant":
-        lease.signed_by_tenant = True
-        lease.tenant_signed_at = timezone.now()
-    else:
-        lease.signed_by_landlord = True
-        lease.landlord_signed_at = timezone.now()
-    lease.save()
-    return lease
-
-
-def create_maintenance_request(cleaned_data):
-    return MaintenanceRequest.objects.create(
-        property=cleaned_data["property_id"],
-        tenant=cleaned_data["tenant_id"],
-        issue=cleaned_data["issue"],
-        category=cleaned_data["category"],
-        description=cleaned_data.get("description", ""),
-        status=cleaned_data.get("status") or MaintenanceRequest.Status.OPEN,
-        priority=cleaned_data.get("priority") or "normal",
-    )
 
 
 def submit_verification(cleaned_data):
@@ -186,10 +132,6 @@ def create_report(cleaned_data):
         description=cleaned_data["description"],
         status=cleaned_data.get("status") or DisputeReport.Status.OPEN,
     )
-
-
-def make_receipt_number():
-    return f"RCT-{timezone.now().strftime('%Y%m%d%H%M%S%f')}"
 
 
 def default_checks_for_role(role):

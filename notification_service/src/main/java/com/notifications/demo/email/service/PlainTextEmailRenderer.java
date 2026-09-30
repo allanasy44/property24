@@ -33,8 +33,6 @@ final class PlainTextEmailRenderer {
             case VIEWING_REQUEST_CONFIRMATION -> base(firstName, "Your viewing request for " + variables.get("propertyTitle") + " has been received.", properties);
             case RENTAL_APPLICATION_SUBMITTED -> base(firstName, "Your rental application for " + variables.get("propertyTitle") + " has been submitted.", properties);
             case RENTAL_APPLICATION_STATUS_UPDATE -> base(firstName, "Your application status is now " + variables.get("applicationStatus") + ".", properties);
-            case RENT_PAYMENT_REMINDER -> base(firstName, "A rent payment of " + variables.get("amountDue") + " is due on " + variables.get("dueDate") + ".", properties);
-            case PAYMENT_CONFIRMATION -> base(firstName, "We received your payment of " + variables.get("amountPaid") + " on " + variables.get("paymentDate") + ".", properties);
             case GENERAL_NOTIFICATION -> base(firstName, String.valueOf(variables.get("message")), properties);
         };
     }

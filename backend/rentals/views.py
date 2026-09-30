@@ -23,8 +23,7 @@ from django.core.validators import URLValidator
 from django.core.validators import validate_email as validate_email_value
 from django.db import IntegrityError, transaction
 from django.db import connection
-from django.db.models import Count, Q, Sum
-from django.db.models.functions import Coalesce
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -40,11 +39,8 @@ from .models import (
     Conversation,
     DisputeReport,
     EmailVerificationOTP,
-    LeaseAgreement,
-    MaintenanceRequest,
     MediaAsset,
     Message,
-    Payment,
     PendingRegistrationOTP,
     PropertyHold,
     PhoneVerificationOTP,
@@ -59,7 +55,7 @@ from .models import (
     VerificationRequest,
     Viewing,
 )
-from .ai import parse_search_intent, property_insights, rank_property_candidates, review_listing_payload, score_application_payload, search_explanation, triage_maintenance_payload
+from .ai import parse_search_intent, property_insights, rank_property_candidates, review_listing_payload, score_application_payload, search_explanation
 from .auth import issue_token_pair, user_from_authorization_header, user_from_token
 from .chat_services import (
     audit_event,
@@ -131,10 +127,6 @@ ROLE_CAPABILITIES = {
         "save_properties",
         "submit_tenant_verification",
         "apply_for_rentals",
-        "pay_rent",
-        "view_rental_history",
-        "report_maintenance",
-        "sign_leases",
         "message_landlord_or_agent",
     ],
     User.Roles.LANDLORD: [
@@ -142,8 +134,6 @@ ROLE_CAPABILITIES = {
         "upload_property_media",
         "submit_landlord_verification",
         "approve_tenants",
-        "receive_rent",
-        "manage_maintenance",
         "view_landlord_reports",
         "message_tenants",
     ],
@@ -160,17 +150,16 @@ ROLE_CAPABILITIES = {
         "verify_users",
         "remove_fake_listings",
         "resolve_disputes",
-        "manage_payments",
         "review_reports",
         "manage_all_accounts",
     ],
 }
 
 ROLE_VISIBLE_SECTIONS = {
-    User.Roles.TENANT: ["search", "applications", "payments", "leases", "maintenance", "inbox", "profile", "verification"],
-    User.Roles.LANDLORD: ["properties", "applications", "payments", "leases", "maintenance", "analytics", "inbox", "verification"],
+    User.Roles.TENANT: ["search", "applications", "inbox", "profile", "verification"],
+    User.Roles.LANDLORD: ["properties", "applications", "analytics", "inbox", "profile", "verification"],
     User.Roles.AGENT: ["properties", "viewings", "applications", "commissions", "inbox", "verification"],
-    User.Roles.ADMIN: ["verifications", "reports", "payments", "users", "properties", "analytics"],
+    User.Roles.ADMIN: ["verifications", "reports", "users", "properties", "analytics"],
 }
 
 ROLE_ONBOARDING_REQUIREMENTS = {
@@ -361,40 +350,10 @@ def has_approved_application(tenant, prop):
     return Application.objects.filter(tenant=tenant, property=prop, status=Application.Status.APPROVED).exists()
 
 
-def active_lease_for(tenant, prop):
-    return LeaseAgreement.objects.filter(tenant=tenant, property=prop, status=LeaseAgreement.Status.ACTIVE).first()
-
-
-def payment_lifecycle_errors(tenant, prop):
-    errors = []
-    if not has_completed_viewing(tenant, prop):
-        errors.append("Physical viewing must be completed in-app before deposit or rent payment")
-    if not has_approved_application(tenant, prop):
-        errors.append("Tenant application must be approved before payment")
-    if not active_lease_for(tenant, prop):
-        errors.append("Both parties must sign an active lease before payment")
-    return errors
-
-
-def maintenance_lifecycle_errors(tenant, prop):
-    if active_lease_for(tenant, prop):
-        return []
-    return ["Maintenance is available only after the tenant has an active lease for this property"]
-
-
 def application_lifecycle_errors(tenant, prop):
     if has_completed_viewing(tenant, prop):
         return []
     return ["Physical viewing must be completed before a tenant can apply for this property"]
-
-
-def lease_lifecycle_errors(tenant, prop):
-    errors = []
-    if not has_completed_viewing(tenant, prop):
-        errors.append("Physical viewing must be completed before lease generation")
-    if not has_approved_application(tenant, prop):
-        errors.append("Tenant application must be approved before lease generation")
-    return errors
 
 
 def forbidden():
@@ -818,28 +777,6 @@ def users_collection(request):
     return JsonResponse(serialize_user(user), status=201)
 
 
-def user_rental_history(request, user_id):
-    acting_user, auth_response = require_authenticated(request)
-    if auth_response:
-        return auth_response
-    if not (is_admin(acting_user) or acting_user.id == user_id):
-        return forbidden()
-
-    user = get_object_or_404(User, pk=user_id)
-    payments = Payment.objects.filter(tenant=user).select_related("property").order_by("-created_at")
-    leases = LeaseAgreement.objects.filter(tenant=user).select_related("property", "landlord").order_by("-created_at")
-    reviews = Review.objects.filter(tenant=user).select_related("landlord").order_by("-created_at")
-
-    return JsonResponse(
-        {
-            "user": serialize_user(user),
-            "payments": [serialize_payment(payment) for payment in payments],
-            "leases": [serialize_lease(lease) for lease in leases],
-            "reviews": [serialize_review(review) for review in reviews],
-        }
-    )
-
-
 @csrf_exempt
 @require_http_methods(["GET", "POST", "OPTIONS"])
 def properties_collection(request):
@@ -922,7 +859,6 @@ def properties_collection(request):
         road_access=data.get("road_access", ""),
         electricity_available=to_bool(data.get("electricity_available")),
         land_water_available=to_bool(data.get("land_water_available")),
-        payment_terms=data.get("payment_terms", ""),
         bathrooms=parse_decimal(data.get("bathrooms", 1), "bathrooms"),
         furnished=to_bool(data.get("furnished")),
         water_availability=data.get("water_availability") or data.get("water", ""),
@@ -1268,213 +1204,6 @@ def application_detail(request, application_id):
 
 
 @csrf_exempt
-@require_http_methods(["GET", "POST", "OPTIONS"])
-def payments_collection(request):
-    acting_user, auth_response = require_authenticated(request)
-    if auth_response:
-        return auth_response
-
-    if request.method == "GET":
-        payments = Payment.objects.select_related("tenant", "property").order_by("-created_at")
-        if acting_user.role == User.Roles.TENANT:
-            payments = payments.filter(tenant=acting_user)
-        elif acting_user.role in {User.Roles.LANDLORD, User.Roles.AGENT}:
-            payments = payments.filter(property__in=user_properties(acting_user))
-        elif not is_admin(acting_user):
-            return forbidden()
-        return JsonResponse({"results": [serialize_payment(item) for item in payments]})
-
-    if acting_user.role not in {User.Roles.TENANT, User.Roles.ADMIN}:
-        return forbidden()
-
-    data = request_json(request)
-    if data is None:
-        return json_error("Invalid JSON body")
-
-    prop = get_object_or_404(Property, pk=data.get("property_id"))
-    tenant = get_object_or_404(User, pk=data.get("tenant_id") if is_admin(acting_user) else acting_user.id)
-    if acting_user.role == User.Roles.TENANT and tenant.id != acting_user.id:
-        return forbidden()
-    if acting_user.role == User.Roles.TENANT:
-        lifecycle_errors = payment_lifecycle_errors(tenant, prop)
-        if lifecycle_errors:
-            return json_error("Payments unlock after physical viewing, approved application, and signed active lease", status=409, errors=lifecycle_errors)
-
-    now = timezone.now()
-    payment = Payment.objects.create(
-        tenant=tenant,
-        property=prop,
-        amount=parse_decimal(data.get("amount"), "amount"),
-        method=normalise_choice(data.get("method"), Payment.Method, Payment.Method.ECOCASH),
-        status=data.get("status", Payment.Status.RECEIVED) if is_admin(acting_user) else Payment.Status.PENDING,
-        provider_reference=data.get("provider_reference", ""),
-        receipt_number=data.get("receipt_number") or make_receipt_number(),
-        reminder_status=data.get("reminder_status", "Next reminder scheduled"),
-        due_date=data.get("due_date") or None,
-        paid_at=now if is_admin(acting_user) and data.get("status", Payment.Status.RECEIVED) == Payment.Status.RECEIVED else None,
-    )
-    for recipient_id in [payment.tenant_id, payment.property.owner_id]:
-        if recipient_id:
-            broadcast_to_user(recipient_id, "notification.created", {"kind": "payment.created", "payment_id": payment.id, "property_id": payment.property_id})
-    return JsonResponse(serialize_payment(payment), status=201)
-
-
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
-def payment_reminder(request, payment_id):
-    payment = get_object_or_404(Payment.objects.select_related("tenant", "property"), pk=payment_id)
-    acting_user, auth_response = require_authenticated(request)
-    if auth_response:
-        return auth_response
-    if not (is_admin(acting_user) or can_manage_property(acting_user, payment.property)):
-        return forbidden()
-
-    data = request_json(request)
-    if data is None:
-        return json_error("Invalid JSON body")
-
-    payment.reminder_status = data.get("reminder_status") or f"Reminder sent on {timezone.localdate().isoformat()}"
-    payment.save(update_fields=["reminder_status"])
-    for recipient_id in [payment.tenant_id, payment.property.owner_id]:
-        if recipient_id:
-            broadcast_to_user(recipient_id, "notification.created", {"kind": "payment.updated", "payment_id": payment.id, "property_id": payment.property_id})
-    return JsonResponse(serialize_payment(payment))
-@csrf_exempt
-@require_http_methods(["GET", "POST", "OPTIONS"])
-def leases_collection(request):
-    acting_user, auth_response = require_authenticated(request)
-    if auth_response:
-        return auth_response
-
-    if request.method == "GET":
-        leases = LeaseAgreement.objects.select_related("property", "tenant", "landlord").order_by("-created_at")
-        if acting_user.role == User.Roles.TENANT:
-            leases = leases.filter(tenant=acting_user)
-        elif acting_user.role in {User.Roles.LANDLORD, User.Roles.AGENT}:
-            leases = leases.filter(property__in=user_properties(acting_user))
-        elif not is_admin(acting_user):
-            return forbidden()
-        return JsonResponse({"results": [serialize_lease(item) for item in leases]})
-
-    if acting_user.role not in {User.Roles.LANDLORD, User.Roles.AGENT, User.Roles.ADMIN}:
-        return forbidden()
-
-    data = request_json(request)
-    if data is None:
-        return json_error("Invalid JSON body")
-    prop = get_object_or_404(Property, pk=data.get("property_id"))
-    if not can_manage_property(acting_user, prop):
-        return forbidden()
-    tenant = get_object_or_404(User, pk=data.get("tenant_id"))
-    lifecycle_errors = lease_lifecycle_errors(tenant, prop)
-    if lifecycle_errors:
-        return json_error("Lease generation unlocks after completed viewing and approved application", status=409, errors=lifecycle_errors)
-    lease = LeaseAgreement.objects.create(
-        property=prop,
-        tenant=tenant,
-        landlord_id=data.get("landlord_id") or prop.owner_id,
-        start_date=data.get("start_date"),
-        end_date=data.get("end_date"),
-        monthly_rent=parse_decimal(data.get("monthly_rent") or prop.monthly_rent, "monthly_rent"),
-        deposit=parse_decimal(data.get("deposit") or prop.deposit_required, "deposit"),
-        term=data.get("term", "12 Months"),
-        status=data.get("status", LeaseAgreement.Status.AWAITING_SIGNATURES),
-    )
-    for recipient_id in [lease.tenant_id, lease.landlord_id]:
-        if recipient_id:
-            broadcast_to_user(recipient_id, "notification.created", {"kind": "lease.created", "lease_id": lease.id, "property_id": lease.property_id})
-
-    return JsonResponse(serialize_lease(lease), status=201)
-
-
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
-def lease_sign(request, lease_id):
-    lease = get_object_or_404(LeaseAgreement, pk=lease_id)
-    acting_user, auth_response = require_authenticated(request)
-    if auth_response:
-        return auth_response
-    data = request_json(request)
-    if data is None:
-        return json_error("Invalid JSON body")
-
-    signer = data.get("signed_by")
-    if signer == "tenant":
-        if acting_user.id != lease.tenant_id and not is_admin(acting_user):
-            return forbidden()
-        lease.signed_by_tenant = True
-        lease.tenant_signed_at = timezone.now()
-    elif signer == "landlord":
-        if acting_user.id != lease.landlord_id and not is_admin(acting_user):
-            return forbidden()
-        lease.signed_by_landlord = True
-        lease.landlord_signed_at = timezone.now()
-    else:
-        return json_error("signed_by must be tenant or landlord")
-    lease.save()
-    for recipient_id in [lease.tenant_id, lease.landlord_id]:
-        if recipient_id:
-            broadcast_to_user(recipient_id, "notification.created", {"kind": "lease.updated", "lease_id": lease.id, "property_id": lease.property_id})
-    return JsonResponse(serialize_lease(lease))
-
-
-@csrf_exempt
-@require_http_methods(["GET", "POST", "OPTIONS"])
-def maintenance_collection(request):
-    acting_user, auth_response = require_authenticated(request)
-    if auth_response:
-        return auth_response
-
-    if request.method == "GET":
-        requests = MaintenanceRequest.objects.select_related("property", "tenant").order_by("-created_at")
-        if acting_user.role == User.Roles.TENANT:
-            requests = requests.filter(tenant=acting_user)
-        elif acting_user.role in {User.Roles.LANDLORD, User.Roles.AGENT}:
-            requests = requests.filter(property__in=user_properties(acting_user))
-        elif not is_admin(acting_user):
-            return forbidden()
-        return JsonResponse({"results": [serialize_maintenance(item) for item in requests]})
-
-    if acting_user.role != User.Roles.TENANT:
-        return forbidden()
-
-    data = request_data(request)
-    if data is None:
-        return json_error("Invalid request body")
-
-    prop = get_object_or_404(Property, pk=data.get("property_id"))
-    lifecycle_errors = maintenance_lifecycle_errors(acting_user, prop)
-    if lifecycle_errors:
-        return json_error("Maintenance unlocks after move-in is confirmed by an active lease", status=409, errors=lifecycle_errors)
-
-    ai_triage = triage_maintenance_payload(data) if settings.AI_ASSISTED_REVIEW_ENABLED else None
-    category = data.get("category") or (ai_triage or {}).get("suggested_category")
-    photo_file = request.FILES.get("photo") if hasattr(request, "FILES") else None
-    try:
-        photo_file = optimize_image_upload(validate_upload(photo_file, allowed_types=IMAGE_MIME_TYPES, max_bytes=MAX_IMAGE_BYTES, label="Maintenance photo")) if photo_file else None
-    except MediaValidationError as exc:
-        return json_error(str(exc))
-    ticket = MaintenanceRequest.objects.create(
-        property=prop,
-        tenant=acting_user,
-        issue=data.get("issue", ""),
-        category=normalise_choice(category, MaintenanceRequest.Category, MaintenanceRequest.Category.GENERAL),
-        description=data.get("description", ""),
-        photo=photo_file,
-        status=data.get("status", MaintenanceRequest.Status.OPEN),
-        priority=data.get("priority") or (ai_triage or {}).get("recommendation", "normal"),
-    )
-    if ticket.photo:
-        register_media_asset(acting_user, ticket.photo, scope=MediaAsset.Scope.MAINTENANCE, source_model="maintenance_request", source_id=ticket.id, original_name="maintenance_photo", mime_type="image/jpeg")
-    payload = serialize_maintenance(ticket)
-    for recipient_id in {acting_user.id, prop.owner_id} - {None}:
-        broadcast_to_user(recipient_id, "notification.created", {"kind": "maintenance", "maintenance_id": ticket.id, "property_id": prop.id})
-    if ai_triage:
-        payload["ai_triage"] = serialize_ai_analysis(record_ai_analysis(ai_triage, "maintenance_request", ticket.id))
-    return JsonResponse(payload, status=201)
-
-
-@csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])
 def ai_listing_review(request):
     acting_user, auth_response = require_roles(request, {User.Roles.LANDLORD, User.Roles.AGENT, User.Roles.ADMIN})
@@ -1490,18 +1219,6 @@ def ai_listing_review(request):
 
 @csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])
-def ai_maintenance_triage(request):
-    acting_user, auth_response = require_roles(request, {User.Roles.TENANT, User.Roles.ADMIN})
-    if auth_response:
-        return auth_response
-    data = request_json(request)
-    if data is None:
-        return json_error("Invalid JSON body")
-    return JsonResponse({"result": triage_maintenance_payload(data)})
-
-
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
 def ai_application_score(request):
     acting_user, auth_response = require_roles(request, {User.Roles.LANDLORD, User.Roles.AGENT, User.Roles.ADMIN})
     if auth_response:
@@ -1511,50 +1228,6 @@ def ai_application_score(request):
         return json_error("Invalid JSON body")
     tenant = User.objects.filter(pk=data.get("tenant_id")).first() if data.get("tenant_id") else None
     return JsonResponse({"result": score_application_payload(data, tenant)})
-
-
-@csrf_exempt
-@require_http_methods(["GET", "PATCH", "OPTIONS"])
-def maintenance_detail(request, maintenance_id):
-    ticket = get_object_or_404(MaintenanceRequest.objects.select_related("property", "tenant"), pk=maintenance_id)
-    acting_user, auth_response = require_authenticated(request)
-    if auth_response:
-        return auth_response
-    if not (is_admin(acting_user) or ticket.tenant_id == acting_user.id or can_manage_property(acting_user, ticket.property)):
-        return forbidden()
-
-    if request.method == "GET":
-        return JsonResponse(serialize_maintenance(ticket))
-
-    data = request_data(request)
-    if data is None:
-        return json_error("Invalid request body")
-    if data.get("issue") is not None:
-        ticket.issue = data["issue"]
-    if data.get("category"):
-        ticket.category = normalise_choice(data["category"], MaintenanceRequest.Category, ticket.category)
-    if data.get("description") is not None:
-        ticket.description = data["description"]
-    if data.get("status"):
-        ticket.status = normalise_choice(data["status"], MaintenanceRequest.Status, ticket.status)
-    if data.get("priority"):
-        ticket.priority = data["priority"]
-    if hasattr(request, "FILES") and request.FILES.get("photo"):
-        try:
-            photo_file = optimize_image_upload(validate_upload(request.FILES["photo"], allowed_types=IMAGE_MIME_TYPES, max_bytes=MAX_IMAGE_BYTES, label="Maintenance photo"))
-        except MediaValidationError as exc:
-            return json_error(str(exc))
-        remove_media_assets("maintenance_request", ticket.id)
-        if ticket.photo:
-            delete_file(ticket.photo)
-        ticket.photo = photo_file
-    ticket.save()
-    for recipient_id in [ticket.tenant_id, ticket.property.owner_id, ticket.property.agent_id]:
-        if recipient_id:
-            broadcast_to_user(recipient_id, "notification.created", {"kind": "maintenance.updated", "maintenance_id": ticket.id, "property_id": ticket.property_id})
-    if ticket.photo and hasattr(request, "FILES") and request.FILES.get("photo"):
-        register_media_asset(acting_user, ticket.photo, scope=MediaAsset.Scope.MAINTENANCE, source_model="maintenance_request", source_id=ticket.id, original_name="maintenance_photo", mime_type="image/jpeg")
-    return JsonResponse(serialize_maintenance(ticket))
 
 
 @csrf_exempt
@@ -1624,26 +1297,22 @@ def verification_email_otp_verify(request):
         challenge.save(update_fields=["status"])
         return json_error("Too many OTP attempts")
     if challenge.code_hash != hash_otp(code):
-        challenge.attempts += 1
-        challenge.save(update_fields=["attempts"])
-        return json_error("Invalid OTP")
-    if User.objects.exclude(pk=acting_user.pk).filter(email__iexact=challenge.email).exists():
-        challenge.status = EmailVerificationOTP.Status.EXPIRED
+            message = "OTP sent to your phone"
+    if not delivered:
+        challenge.status = PhoneVerificationOTP.Status.EXPIRED
         challenge.save(update_fields=["status", "updated_at"])
-        return json_error("An account with this email already exists")
-    challenge.status = EmailVerificationOTP.Status.VERIFIED
-    challenge.verified_at = timezone.now()
-    challenge.save(update_fields=["status", "verified_at"])
-    update_fields = []
-    if str(acting_user.email or "").lower() != challenge.email.lower():
-        acting_user.email = challenge.email
-        update_fields.append("email")
-    if not acting_user.email_verified:
-        acting_user.email_verified = True
-        update_fields.append("email_verified")
-    if update_fields:
-        acting_user.save(update_fields=update_fields)
-    return JsonResponse({"email_verified": True, "email": mask_email(challenge.email), "user": serialize_user(acting_user), "account": serialize_account_context(acting_user)})
+        return json_error("Phone OTP delivery is not configured", status=503)
+    return JsonResponse(
+        {
+            "otp_required": True,
+            "challenge_id": str(challenge.id),
+            "phone": phone,
+            "delivery_channel": delivery_channel,
+            "expires_in_seconds": 30,
+            "message": message,
+        },
+        status=201,
+    )
 
 
 @csrf_exempt
@@ -1694,7 +1363,6 @@ def verification_phone_otp(request):
         },
         status=201,
     )
-
 
 @csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])
@@ -2530,7 +2198,7 @@ def commissions_collection(request):
         return auth_response
 
     if request.method == "GET":
-        commissions = Commission.objects.select_related("agent", "property", "lease").order_by("-created_at")
+        commissions = Commission.objects.select_related("agent", "property").order_by("-created_at")
         if acting_user.role == User.Roles.AGENT:
             commissions = commissions.filter(agent=acting_user)
         elif is_admin(acting_user):
@@ -2551,7 +2219,6 @@ def commissions_collection(request):
     commission = Commission.objects.create(
         agent=agent,
         property_id=data.get("property_id"),
-        lease_id=data.get("lease_id") or None,
         amount=parse_decimal(data.get("amount"), "amount"),
         status=data.get("status", "pending"),
     )
@@ -2567,18 +2234,11 @@ def landlord_analytics(request, user_id):
 
     properties = Property.objects.filter(owner_id=user_id)
     property_ids = properties.values_list("id", flat=True)
-    total_properties = properties.count()
-    active_leases = LeaseAgreement.objects.filter(property_id__in=property_ids, status=LeaseAgreement.Status.ACTIVE).count()
-    received_payments = Payment.objects.filter(property_id__in=property_ids, status=Payment.Status.RECEIVED)
-    rental_income = received_payments.aggregate(total=Coalesce(Sum("amount"), Decimal("0")))["total"]
-
     return JsonResponse(
         {
             "listing_views": sum(item.views_count for item in properties),
             "saved_properties": SavedProperty.objects.filter(property_id__in=property_ids).count(),
             "applications": Application.objects.filter(property_id__in=property_ids).count(),
-            "occupancy_rate": round((active_leases / total_properties) * 100) if total_properties else 0,
-            "rental_income": str(rental_income),
             "properties": [serialize_property(item) for item in properties.annotate(application_total=Count("applications"))],
         }
     )
@@ -2742,7 +2402,7 @@ def apply_property_updates(prop, data, owner, agent, acting_user):
         prop.stands_available = max(1, int(data["stands_available"]))
     if data.get("land_size") is not None:
         prop.land_size = parse_decimal(data["land_size"], "land_size") if str(data["land_size"]).strip() else None
-    for field in ["land_size_unit", "title_deed_status", "servicing_status", "zoning", "road_access", "payment_terms"]:
+    for field in ["land_size_unit", "title_deed_status", "servicing_status", "zoning", "road_access"]:
         if data.get(field) is not None:
             setattr(prop, field, data[field])
     if data.get("property_type") is not None:
@@ -2819,10 +2479,6 @@ def normalise_agent_permissions(value):
     else:
         raw_values = list(value or [])
     return sorted({str(item).strip() for item in raw_values if str(item).strip() in allowed})
-
-
-def make_receipt_number():
-    return f"RCT-{timezone.now().year}-{Payment.objects.count() + 1:04d}"
 
 
 def default_checks_for_role(role):
@@ -3571,12 +3227,10 @@ def media_asset_queryset_for_user(user):
     visible_property_photo_ids = [str(item) for item in PropertyPhoto.objects.filter(property_id__in=property_ids).values_list("id", flat=True)]
     visible_property_video_ids = [str(item) for item in PropertyVideo.objects.filter(property_id__in=property_ids).values_list("id", flat=True)]
     conversation_message_ids = [str(item) for item in Message.objects.filter(conversation__participants=user).values_list("id", flat=True)]
-    maintenance_ids = [str(item) for item in MaintenanceRequest.objects.filter(Q(tenant=user) | Q(property__in=user_properties(user))).values_list("id", flat=True)]
     return assets.filter(
         Q(owner=user)
         | Q(access=MediaAsset.Access.PUBLIC, scope=MediaAsset.Scope.PROPERTY)
         | Q(source_model="message", source_id__in=conversation_message_ids)
-        | Q(source_model="maintenance_request", source_id__in=maintenance_ids)
         | Q(source_model="property_photo", source_id__in=visible_property_photo_ids)
         | Q(source_model="property_video", source_id__in=visible_property_video_ids)
     ).distinct()
@@ -3634,8 +3288,6 @@ def clear_media_source(asset):
             message.attachment_type = ""
             message.attachment_name = ""
             message.save(update_fields=["attachment", "attachment_url", "attachment_type", "attachment_name"])
-    elif asset.source_model == "maintenance_request":
-        MaintenanceRequest.objects.filter(pk=asset.source_id).update(photo="")
     elif asset.source_model == "user":
         user = User.objects.filter(pk=asset.source_id).first()
         if user:
@@ -3690,7 +3342,6 @@ def serialize_property(prop):
         "road_access": prop.road_access,
         "electricity_available": prop.electricity_available,
         "land_water_available": prop.land_water_available,
-        "payment_terms": prop.payment_terms,
         "bathrooms": str(prop.bathrooms),
         "furnished": prop.furnished,
         "water_availability": prop.water_availability,
@@ -3766,64 +3417,6 @@ def serialize_application(application):
         "score": application.score,
         "message": application.message,
         "created_at": application.created_at.isoformat(),
-    }
-
-
-def serialize_payment(payment):
-    return {
-        "id": payment.id,
-        "tenant_id": payment.tenant_id,
-        "tenant": str(payment.tenant),
-        "property_id": payment.property_id,
-        "property": payment.property.title,
-        "amount": str(payment.amount),
-        "method": payment.method,
-        "status": payment.status,
-        "provider_reference": payment.provider_reference,
-        "receipt_number": payment.receipt_number,
-        "reminder_status": payment.reminder_status,
-        "due_date": serialize_date(payment.due_date) if payment.due_date else None,
-        "paid_at": payment.paid_at.isoformat() if payment.paid_at else None,
-        "created_at": payment.created_at.isoformat(),
-    }
-
-
-def serialize_lease(lease):
-    return {
-        "id": lease.id,
-        "property_id": lease.property_id,
-        "property": lease.property.address,
-        "tenant_id": lease.tenant_id,
-        "tenant": str(lease.tenant),
-        "landlord_id": lease.landlord_id,
-        "landlord": str(lease.landlord),
-        "start_date": serialize_date(lease.start_date),
-        "end_date": serialize_date(lease.end_date),
-        "monthly_rent": str(lease.monthly_rent),
-        "deposit": str(lease.deposit),
-        "term": lease.term,
-        "contract_text": lease.contract_text,
-        "pdf": lease.pdf.url if lease.pdf else "",
-        "status": lease.status,
-        "signed_by_tenant": lease.signed_by_tenant,
-        "signed_by_landlord": lease.signed_by_landlord,
-    }
-
-
-def serialize_maintenance(ticket):
-    return {
-        "id": ticket.id,
-        "property_id": ticket.property_id,
-        "property": ticket.property.title,
-        "tenant_id": ticket.tenant_id,
-        "tenant": str(ticket.tenant),
-        "issue": ticket.issue,
-        "category": ticket.category,
-        "description": ticket.description,
-        "photo": signed_media_url(ticket.photo) if ticket.photo else "",
-        "status": ticket.status,
-        "priority": ticket.priority,
-        "updated_at": ticket.updated_at.isoformat(),
     }
 
 
@@ -4007,7 +3600,6 @@ def serialize_commission(commission):
         "agent": str(commission.agent),
         "property_id": commission.property_id,
         "property": commission.property.title,
-        "lease_id": commission.lease_id,
         "amount": str(commission.amount),
         "status": commission.status,
         "created_at": commission.created_at.isoformat(),
@@ -4016,10 +3608,6 @@ def serialize_commission(commission):
 
 def serialize_date(value):
     return value.isoformat() if hasattr(value, "isoformat") else str(value)
-    if acting_user.role == User.Roles.TENANT and ticket.tenant_id == acting_user.id:
-        allowed = {"issue", "category", "description", "photo"}
-        if set(data.keys()) - allowed:
-            return forbidden()
 
 @csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])

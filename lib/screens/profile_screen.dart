@@ -512,7 +512,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                       const _TextInfoPanel(
                         title: 'Privacy',
                         body:
-                            'Your account keeps your profile, bookings, conversations, leases, and applications together in one place. Identity documents are processed for verification and retained only for the configured review window.',
+                            'Your account keeps your profile, bookings, conversations, and applications together in one place. Identity documents are processed for verification and retained only for the configured review window.',
                       ),
                     ),
                   ),

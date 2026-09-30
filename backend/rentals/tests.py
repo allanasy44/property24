@@ -19,7 +19,7 @@ from .auth import issue_token_pair
 from .views import hash_otp, normalize_phone, phone_lookup_values
 from property24_backend.asgi import application
 
-from .models import AIAnalysis, Application, CallSession, ChatBlock, ChatReport, Conversation, DisputeReport, EmailVerificationOTP, LeaseAgreement, MaintenanceRequest, MediaAsset, Message, MessageReceipt, Payment, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, PropertyPhoto, PushDevice, SecurityAuditEvent, VerificationRequest, Viewing
+from .models import AIAnalysis, Application, CallSession, ChatBlock, ChatReport, Conversation, DisputeReport, EmailVerificationOTP, MediaAsset, Message, MessageReceipt, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, PropertyPhoto, PushDevice, SecurityAuditEvent, VerificationRequest, Viewing
 
 
 class RentalApiTests(TestCase):
@@ -914,36 +914,15 @@ class RentalApiTests(TestCase):
         self.assertEqual(response.status_code, 201, response.json())
         self.assertEqual(response.json()["document_type"], "identity_document")
 
-    def test_least_privilege_scopes_tenant_records_to_self(self):
+    def test_least_privilege_scopes_saved_properties_to_self(self):
         User = get_user_model()
         other_tenant = User.objects.create_user(username="other-tenant", password="secret12345", role=User.Roles.TENANT)
 
-        history_response = self.client.get(f"/api/users/{other_tenant.id}/rental-history/", **self.auth_header(self.tenant))
         save_response = self.post_json(f"/api/properties/{self.property.id}/save/", {"tenant_id": other_tenant.id}, user=self.tenant)
 
-        self.assertEqual(history_response.status_code, 403)
         self.assertEqual(save_response.json()["tenant_id"], self.tenant.id)
 
-    def complete_tenant_rental_lifecycle(self, tenant=None, prop=None):
-        tenant = tenant or self.tenant
-        prop = prop or self.property
-        Viewing.objects.create(property=prop, tenant=tenant, agent=self.agent, scheduled_for=timezone.now(), status=Viewing.Status.COMPLETED)
-        Application.objects.update_or_create(property=prop, tenant=tenant, defaults={"status": Application.Status.APPROVED, "score": 90})
-        return LeaseAgreement.objects.create(
-            property=prop,
-            tenant=tenant,
-            landlord=self.landlord,
-            start_date="2026-07-01",
-            end_date="2027-06-30",
-            monthly_rent=prop.monthly_rent,
-            deposit=prop.deposit_required,
-            term="12 Months",
-            status=LeaseAgreement.Status.ACTIVE,
-            signed_by_tenant=True,
-            signed_by_landlord=True,
-        )
-
-    def test_application_and_lease_follow_viewing_and_approval_order(self):
+    def test_application_requires_completed_viewing(self):
         early_application = self.post_json(
             "/api/applications/",
             {"property_id": self.property.id, "message": "I want to apply before viewing."},
@@ -960,101 +939,7 @@ class RentalApiTests(TestCase):
         )
         self.assertEqual(application.status_code, 201)
 
-        early_lease = self.post_json(
-            "/api/leases/",
-            {"property_id": self.property.id, "tenant_id": self.tenant.id, "start_date": "2026-07-01", "end_date": "2027-06-30"},
-            user=self.landlord,
-        )
-        self.assertEqual(early_lease.status_code, 409)
-        self.assertIn("approved", early_lease.json()["errors"][0].lower())
-
-        Application.objects.filter(property=self.property, tenant=self.tenant).update(status=Application.Status.APPROVED)
-        lease = self.post_json(
-            "/api/leases/",
-            {"property_id": self.property.id, "tenant_id": self.tenant.id, "start_date": "2026-07-01", "end_date": "2027-06-30"},
-            user=self.landlord,
-        )
-        self.assertEqual(lease.status_code, 201)
-
-    def test_payment_and_maintenance_unlock_only_after_verified_rental_lifecycle(self):
-        early_payment = self.post_json(
-            "/api/payments/",
-            {"property_id": self.property.id, "tenant_id": self.tenant.id, "amount": "450", "method": "ecocash"},
-            user=self.tenant,
-        )
-        early_maintenance = self.post_json(
-            "/api/maintenance/",
-            {"property_id": self.property.id, "tenant_id": self.tenant.id, "issue": "Leaking sink", "description": "Water under the sink."},
-            user=self.tenant,
-        )
-
-        self.assertEqual(early_payment.status_code, 409)
-        self.assertIn("Physical viewing", early_payment.json()["errors"][0])
-        self.assertEqual(early_maintenance.status_code, 409)
-        self.assertIn("active lease", early_maintenance.json()["errors"][0])
-
-        self.complete_tenant_rental_lifecycle()
-
-        unlocked_payment = self.post_json(
-            "/api/payments/",
-            {"property_id": self.property.id, "tenant_id": self.tenant.id, "amount": "450", "method": "ecocash", "status": "received"},
-            user=self.tenant,
-        )
-        unlocked_maintenance = self.post_json(
-            "/api/maintenance/",
-            {"property_id": self.property.id, "tenant_id": self.tenant.id, "issue": "Leaking sink", "description": "Water under the sink."},
-            user=self.tenant,
-        )
-
-        self.assertEqual(unlocked_payment.status_code, 201)
-        self.assertEqual(unlocked_payment.json()["status"], Payment.Status.PENDING)
-        self.assertEqual(unlocked_maintenance.status_code, 201)
-        self.assertEqual(unlocked_maintenance.json()["status"], MaintenanceRequest.Status.OPEN)
-
-    def test_least_privilege_tenant_payment_is_pending_not_self_marked_received(self):
-        self.complete_tenant_rental_lifecycle()
-        response = self.post_json(
-            "/api/payments/",
-            {"property_id": self.property.id, "tenant_id": self.tenant.id, "amount": "450", "method": "ecocash", "status": "received"},
-            user=self.tenant,
-        )
-
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["status"], Payment.Status.PENDING)
-        self.assertIsNone(response.json()["paid_at"])
-
-    def test_lease_generation_and_signing(self):
-        Viewing.objects.create(property=self.property, tenant=self.tenant, agent=self.agent, scheduled_for=timezone.now(), status=Viewing.Status.COMPLETED)
-        Application.objects.create(property=self.property, tenant=self.tenant, status=Application.Status.APPROVED, score=90)
-        response = self.post_json(
-            "/api/leases/",
-            {
-                "property_id": self.property.id,
-                "tenant_id": self.tenant.id,
-                "start_date": "2026-07-01",
-                "end_date": "2027-06-30",
-                "term": "12 Months",
-            },
-            user=self.landlord,
-        )
-
-        self.assertEqual(response.status_code, 201)
-        lease_id = response.json()["id"]
-        self.assertIn("Residential Lease Agreement", response.json()["contract_text"])
-
-        self.post_json(f"/api/leases/{lease_id}/sign/", {"signed_by": "tenant"}, user=self.tenant)
-        signed = self.post_json(f"/api/leases/{lease_id}/sign/", {"signed_by": "landlord"}, user=self.landlord).json()
-        self.assertEqual(signed["status"], LeaseAgreement.Status.ACTIVE)
-
-    def test_landlord_analytics_counts_income_and_activity(self):
-        Payment.objects.create(
-            tenant=self.tenant,
-            property=self.property,
-            amount="450.00",
-            method=Payment.Method.ECOCASH,
-            status=Payment.Status.RECEIVED,
-            receipt_number="RCT-2026-0001",
-        )
+    def test_landlord_analytics_counts_listing_activity(self):
         Viewing.objects.create(property=self.property, tenant=self.tenant, agent=self.agent, scheduled_for=timezone.now(), status=Viewing.Status.COMPLETED)
         self.post_json(
             "/api/applications/",
@@ -1067,7 +952,6 @@ class RentalApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["applications"], 1)
-        self.assertEqual(payload["rental_income"], "450")
 
     def test_verified_listing_requires_verified_owner_and_valid_role(self):
         User = get_user_model()
@@ -1093,7 +977,7 @@ class RentalApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("owner must be verified", response.json()["error"])
 
-    def test_ai_reviews_listing_application_and_maintenance_payloads(self):
+    def test_ai_reviews_listing_and_application_payloads(self):
         listing = self.post_json(
             "/api/properties/",
             {
@@ -1127,21 +1011,6 @@ class RentalApiTests(TestCase):
         )
         self.assertEqual(application.status_code, 201)
         self.assertIn("ai_score", application.json())
-
-        self.complete_tenant_rental_lifecycle()
-        maintenance = self.post_json(
-            "/api/maintenance/",
-            {
-                "property_id": self.property.id,
-                "tenant_id": self.tenant.id,
-                "issue": "Burst pipe flooding the kitchen",
-                "description": "Water is spreading quickly.",
-            },
-            user=self.tenant,
-        )
-        self.assertEqual(maintenance.status_code, 201)
-        self.assertEqual(maintenance.json()["priority"], "urgent")
-        self.assertEqual(maintenance.json()["category"], MaintenanceRequest.Category.PLUMBING)
 
     def test_tenant_opens_single_listing_conversation_with_verified_supplier(self):
         first = self.post_json("/api/conversations/", {"property_id": self.property.id}, user=self.tenant)
@@ -1362,7 +1231,7 @@ class RentalApiTests(TestCase):
         self.assertEqual(PropertyComment.objects.filter(property=self.property, author=self.tenant).count(), 1)
         self.assertEqual(anonymous_response.status_code, 401)
 
-    def test_property_media_saved_listing_and_rental_history(self):
+    def test_property_media_and_saved_listing(self):
         photo_response = self.post_json(f"/api/properties/{self.property.id}/photos/", {"caption": "Front elevation"}, user=self.landlord)
         video_response = self.post_json(f"/api/properties/{self.property.id}/videos/", {"external_url": "https://example.com/tour.mp4", "caption": "Walkthrough"}, user=self.landlord)
         save_response = self.post_json(f"/api/properties/{self.property.id}/save/", {"tenant_id": self.tenant.id}, user=self.tenant)
@@ -1404,30 +1273,11 @@ class RentalApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("maximum of 10 photos", response.json()["error"])
 
-        Payment.objects.create(
-            tenant=self.tenant,
-            property=self.property,
-            amount="450.00",
-            method=Payment.Method.ZIPIT,
-            status=Payment.Status.RECEIVED,
-            receipt_number="RCT-2026-0002",
-        )
-        history = self.client.get(f"/api/users/{self.tenant.id}/rental-history/", **self.auth_header(self.tenant)).json()
-        self.assertEqual(len(history["payments"]), 1)
-
-    def test_application_maintenance_report_commission_and_reminder_workflows(self):
+    def test_application_report_and_commission_workflows(self):
         application = Application.objects.create(property=self.property, tenant=self.tenant)
         application_response = self.client.patch(
             f"/api/applications/{application.id}/",
             data=json.dumps({"status": "approved", "score": 95}),
-            content_type="application/json",
-            **self.auth_header(self.landlord),
-        )
-
-        maintenance = MaintenanceRequest.objects.create(property=self.property, tenant=self.tenant, issue="Leaking sink", category=MaintenanceRequest.Category.PLUMBING)
-        maintenance_response = self.client.patch(
-            f"/api/maintenance/{maintenance.id}/",
-            data=json.dumps({"status": "resolved", "priority": "normal"}),
             content_type="application/json",
             **self.auth_header(self.landlord),
         )
@@ -1446,21 +1296,9 @@ class RentalApiTests(TestCase):
             user=self.agent,
         )
 
-        payment = Payment.objects.create(
-            tenant=self.tenant,
-            property=self.property,
-            amount="450.00",
-            method=Payment.Method.ECOCASH,
-            status=Payment.Status.PENDING,
-            receipt_number="RCT-2026-0003",
-        )
-        reminder_response = self.post_json(f"/api/payments/{payment.id}/reminder/", {"reminder_status": "Reminder sent by SMS"}, user=self.landlord)
-
         self.assertEqual(application_response.json()["status"], Application.Status.APPROVED)
-        self.assertEqual(maintenance_response.json()["status"], MaintenanceRequest.Status.RESOLVED)
         self.assertEqual(report_response.json()["status"], DisputeReport.Status.RESOLVED)
         self.assertEqual(commission_response.status_code, 201)
-        self.assertEqual(reminder_response.json()["reminder_status"], "Reminder sent by SMS")
 
 
 class RentalWebSocketTests(TransactionTestCase):

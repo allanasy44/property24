@@ -48,16 +48,6 @@ public enum EmailTemplateType {
             "email/rental-application-status-update",
             Set.of("firstName", "propertyTitle", "applicationStatus")
     ),
-    RENT_PAYMENT_REMINDER(
-            "Rent payment reminder",
-            "email/rent-payment-reminder",
-            Set.of("firstName", "propertyTitle", "amountDue", "dueDate")
-    ),
-    PAYMENT_CONFIRMATION(
-            "Payment confirmation",
-            "email/payment-confirmation",
-            Set.of("firstName", "propertyTitle", "amountPaid", "paymentDate")
-    ),
     GENERAL_NOTIFICATION(
             "Important update from [PLATFORM_NAME]",
             "email/general-notification",

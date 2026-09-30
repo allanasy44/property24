@@ -172,9 +172,6 @@ class AccountContext {
       visibleSections: [
         'search',
         'applications',
-        'payments',
-        'leases',
-        'maintenance',
         'inbox',
         'profile',
         'verification'
@@ -247,7 +244,6 @@ class PropertyListing {
     this.roadAccess = '',
     this.electricityAvailable = false,
     this.landWaterAvailable = false,
-    this.paymentTerms = '',
   });
 
   factory PropertyListing.fromJson(Map<String, dynamic> json) {
@@ -311,7 +307,6 @@ class PropertyListing {
       roadAccess: textValue(json, 'road_access'),
       electricityAvailable: json['electricity_available'] == true,
       landWaterAvailable: json['land_water_available'] == true,
-      paymentTerms: textValue(json, 'payment_terms'),
     );
   }
 
@@ -365,7 +360,6 @@ class PropertyListing {
   final String roadAccess;
   final bool electricityAvailable;
   final bool landWaterAvailable;
-  final String paymentTerms;
 
   AccountUser? get supplier => agent ?? owner;
   String get rentLabel => listingIntent == 'sale'
@@ -585,117 +579,6 @@ class PropertyFact {
   final String iconName;
   final String label;
   final String value;
-}
-
-class PaymentItem {
-  const PaymentItem({
-    required this.id,
-    required this.tenant,
-    required this.property,
-    required this.amount,
-    required this.method,
-    required this.status,
-    required this.receiptNumber,
-    required this.paidAt,
-  });
-
-  factory PaymentItem.fromJson(Map<String, dynamic> json) {
-    return PaymentItem(
-      id: textValue(json, 'id'),
-      tenant: textValue(json, 'tenant'),
-      property: textValue(json, 'property'),
-      amount: money(json['amount']),
-      method: titleize(json['method']),
-      status: titleize(json['status']),
-      receiptNumber: textValue(json, 'receipt_number'),
-      paidAt: localDate(json['paid_at'], 'Recorded'),
-    );
-  }
-
-  final String id;
-  final String tenant;
-  final String property;
-  final String amount;
-  final String method;
-  final String status;
-  final String receiptNumber;
-  final String paidAt;
-}
-
-class MaintenanceItem {
-  const MaintenanceItem({
-    required this.id,
-    required this.issue,
-    required this.category,
-    required this.property,
-    required this.tenant,
-    required this.description,
-    required this.status,
-    required this.priority,
-    required this.updatedAt,
-  });
-
-  factory MaintenanceItem.fromJson(Map<String, dynamic> json) {
-    return MaintenanceItem(
-      id: textValue(json, 'id'),
-      issue: textValue(json, 'issue'),
-      category: titleize(json['category']),
-      property: textValue(json, 'property'),
-      tenant: textValue(json, 'tenant'),
-      description: textValue(json, 'description'),
-      status: titleize(json['status']),
-      priority: titleize(json['priority']),
-      updatedAt: localDate(json['updated_at']),
-    );
-  }
-
-  final String id;
-  final String issue;
-  final String category;
-  final String property;
-  final String tenant;
-  final String description;
-  final String status;
-  final String priority;
-  final String updatedAt;
-}
-
-class LeaseItem {
-  const LeaseItem({
-    required this.id,
-    required this.property,
-    required this.tenant,
-    required this.landlord,
-    required this.monthlyRent,
-    required this.deposit,
-    required this.status,
-    required this.signedByTenant,
-    required this.signedByLandlord,
-  });
-
-  factory LeaseItem.fromJson(Map<String, dynamic> json) {
-    return LeaseItem(
-      id: textValue(json, 'id'),
-      property: textValue(json, 'property'),
-      tenant: textValue(json, 'tenant'),
-      landlord: textValue(json, 'landlord'),
-      monthlyRent: money(json['monthly_rent']),
-      deposit: money(json['deposit']),
-      status: titleize(json['status']),
-      signedByTenant: json['signed_by_tenant'] == true,
-      signedByLandlord: json['signed_by_landlord'] == true,
-    );
-  }
-
-  final String id;
-  final String property;
-  final String tenant;
-  final String landlord;
-  final String monthlyRent;
-  final String deposit;
-  final String status;
-  final bool signedByTenant;
-  final bool signedByLandlord;
 }
 
 class ApplicationItem {
@@ -937,9 +820,6 @@ class CallLogItem {
 class PlatformSnapshot {
   const PlatformSnapshot({
     required this.properties,
-    required this.payments,
-    required this.maintenance,
-    required this.leases,
     required this.applications,
     required this.verifications,
     required this.conversations,
@@ -951,9 +831,6 @@ class PlatformSnapshot {
   factory PlatformSnapshot.empty() {
     return const PlatformSnapshot(
       properties: [],
-      payments: [],
-      maintenance: [],
-      leases: [],
       applications: [],
       verifications: [],
       conversations: [],
@@ -964,9 +841,6 @@ class PlatformSnapshot {
   }
 
   final List<PropertyListing> properties;
-  final List<PaymentItem> payments;
-  final List<MaintenanceItem> maintenance;
-  final List<LeaseItem> leases;
   final List<ApplicationItem> applications;
   final List<VerificationItem> verifications;
   final List<ConversationItem> conversations;

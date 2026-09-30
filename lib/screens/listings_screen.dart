@@ -456,7 +456,6 @@ class _PropertyEditorState extends State<PropertyEditor> {
   late final TextEditingController _landSize;
   late final TextEditingController _zoning;
   late final TextEditingController _roadAccess;
-  late final TextEditingController _paymentTerms;
   String _intent = 'Rent';
   String _type = 'house';
   bool _furnished = false;
@@ -486,7 +485,6 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _landSize = TextEditingController(text: property?.landSize ?? '');
     _zoning = TextEditingController(text: property?.zoning ?? '');
     _roadAccess = TextEditingController(text: property?.roadAccess ?? '');
-    _paymentTerms = TextEditingController(text: property?.paymentTerms ?? '');
     _deposit = TextEditingController(text: property?.depositRequired ?? '');
     _beds = TextEditingController(text: '${property?.bedrooms ?? ''}');
     _baths = TextEditingController(text: '${property?.bathrooms ?? ''}');
@@ -537,7 +535,6 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _landSize.dispose();
     _zoning.dispose();
     _roadAccess.dispose();
-    _paymentTerms.dispose();
     super.dispose();
   }
 
@@ -882,8 +879,6 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         (value) => setState(() => _landWaterAvailable = value)),
                     _switch('Borehole on site', _borehole,
                         (value) => setState(() => _borehole = value)),
-                    _field(_paymentTerms, 'Payment terms',
-                        maxLines: 2, requiredField: false),
                   ],
                 ),
               ),
@@ -1197,7 +1192,6 @@ class _PropertyEditorState extends State<PropertyEditor> {
       roadAccess: isLandListing ? _roadAccess.text.trim() : '',
       electricityAvailable: isLandListing && _electricityAvailable,
       landWaterAvailable: isLandListing && _landWaterAvailable,
-      paymentTerms: isLandListing ? _paymentTerms.text.trim() : '',
     );
 
     try {

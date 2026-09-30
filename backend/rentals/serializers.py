@@ -81,62 +81,6 @@ def serialize_application(application):
     }
 
 
-def serialize_payment(payment):
-    return {
-        "id": payment.id,
-        "tenant_id": payment.tenant_id,
-        "tenant": str(payment.tenant),
-        "property_id": payment.property_id,
-        "property": payment.property.title,
-        "amount": str(payment.amount),
-        "method": payment.method,
-        "status": payment.status,
-        "provider_reference": payment.provider_reference,
-        "receipt_number": payment.receipt_number,
-        "reminder_status": payment.reminder_status,
-        "paid_at": payment.paid_at.isoformat() if payment.paid_at else None,
-    }
-
-
-def serialize_lease(lease):
-    return {
-        "id": lease.id,
-        "property_id": lease.property_id,
-        "property": lease.property.address,
-        "tenant_id": lease.tenant_id,
-        "tenant": str(lease.tenant),
-        "landlord_id": lease.landlord_id,
-        "landlord": str(lease.landlord),
-        "start_date": serialize_date(lease.start_date),
-        "end_date": serialize_date(lease.end_date),
-        "monthly_rent": str(lease.monthly_rent),
-        "deposit": str(lease.deposit),
-        "term": lease.term,
-        "contract_text": lease.contract_text,
-        "pdf": lease.pdf.url if lease.pdf else "",
-        "status": lease.status,
-        "signed_by_tenant": lease.signed_by_tenant,
-        "signed_by_landlord": lease.signed_by_landlord,
-    }
-
-
-def serialize_maintenance(ticket):
-    return {
-        "id": ticket.id,
-        "property_id": ticket.property_id,
-        "property": ticket.property.title,
-        "tenant_id": ticket.tenant_id,
-        "tenant": str(ticket.tenant),
-        "issue": ticket.issue,
-        "category": ticket.category,
-        "description": ticket.description,
-        "photo": ticket.photo.url if ticket.photo else "",
-        "status": ticket.status,
-        "priority": ticket.priority,
-        "updated_at": ticket.updated_at.isoformat(),
-    }
-
-
 def serialize_verification(verification):
     return {
         "id": verification.id,

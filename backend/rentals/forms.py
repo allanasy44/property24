@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 
-from .models import Application, Conversation, DisputeReport, LeaseAgreement, MaintenanceRequest, Payment, Property, Review, VerificationRequest, Viewing
+from .models import Application, Conversation, DisputeReport, Property, Review, VerificationRequest, Viewing
 
 
 User = get_user_model()
@@ -106,44 +106,6 @@ class ApplicationForm(JsonForm):
     status = forms.ChoiceField(choices=Application.Status.choices, required=False)
     score = forms.IntegerField(min_value=0, max_value=100, required=False)
     message = forms.CharField(required=False)
-
-
-class PaymentForm(JsonForm):
-    tenant_id = forms.ModelChoiceField(queryset=User.objects.all(), to_field_name="id")
-    property_id = forms.ModelChoiceField(queryset=Property.objects.all(), to_field_name="id")
-    amount = forms.DecimalField(max_digits=12, decimal_places=2)
-    method = forms.ChoiceField(choices=Payment.Method.choices)
-    status = forms.ChoiceField(choices=Payment.Status.choices, required=False)
-    provider_reference = forms.CharField(required=False, max_length=120)
-    receipt_number = forms.CharField(required=False, max_length=32)
-    reminder_status = forms.CharField(required=False, max_length=160)
-    due_date = forms.DateField(required=False)
-
-
-class LeaseForm(JsonForm):
-    property_id = forms.ModelChoiceField(queryset=Property.objects.all(), to_field_name="id")
-    tenant_id = forms.ModelChoiceField(queryset=User.objects.all(), to_field_name="id")
-    landlord_id = forms.ModelChoiceField(queryset=User.objects.all(), to_field_name="id", required=False)
-    start_date = forms.DateField()
-    end_date = forms.DateField()
-    monthly_rent = forms.DecimalField(max_digits=12, decimal_places=2, required=False)
-    deposit = forms.DecimalField(max_digits=12, decimal_places=2, required=False)
-    term = forms.CharField(max_length=80, required=False)
-    status = forms.ChoiceField(choices=LeaseAgreement.Status.choices, required=False)
-
-
-class LeaseSignatureForm(JsonForm):
-    signed_by = forms.ChoiceField(choices=(("tenant", "Tenant"), ("landlord", "Landlord")))
-
-
-class MaintenanceForm(JsonForm):
-    property_id = forms.ModelChoiceField(queryset=Property.objects.all(), to_field_name="id")
-    tenant_id = forms.ModelChoiceField(queryset=User.objects.all(), to_field_name="id")
-    issue = forms.CharField(max_length=180)
-    category = forms.ChoiceField(choices=MaintenanceRequest.Category.choices)
-    description = forms.CharField(required=False)
-    status = forms.ChoiceField(choices=MaintenanceRequest.Status.choices, required=False)
-    priority = forms.CharField(required=False, max_length=32)
 
 
 class VerificationForm(JsonForm):

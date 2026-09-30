@@ -44,21 +44,6 @@ Example verification request:
 }
 ```
 
-Example reminder request:
-
-```json
-{
-  "recipient": "tenant@example.com",
-  "templateType": "RENT_PAYMENT_REMINDER",
-  "variables": {
-    "firstName": "Tanaka",
-    "propertyTitle": "8 Willow Street",
-    "amountDue": "$850",
-    "dueDate": "2026-09-01"
-  }
-}
-```
-
 ## Template preview/testing
 
 Automated tests render templates without sending real email by mocking `JavaMailSender`. For quick manual preview, start the app and call the API with a local SMTP catcher such as MailHog or GreenMail.
@@ -85,6 +70,4 @@ Other microservices should call this service over the internal endpoint, provide
 - `VIEWING_REQUEST_CONFIRMATION`: `firstName`, `propertyTitle`, `preferredDate`
 - `RENTAL_APPLICATION_SUBMITTED`: `firstName`, `propertyTitle`, `applicationReference`
 - `RENTAL_APPLICATION_STATUS_UPDATE`: `firstName`, `propertyTitle`, `applicationStatus`
-- `RENT_PAYMENT_REMINDER`: `firstName`, `propertyTitle`, `amountDue`, `dueDate`
-- `PAYMENT_CONFIRMATION`: `firstName`, `propertyTitle`, `amountPaid`, `paymentDate`
 - `GENERAL_NOTIFICATION`: `firstName`, `message`

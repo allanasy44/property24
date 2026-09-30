@@ -1,6 +1,6 @@
 # Property24 Zimbabwe
 
-Mobile-first Flutter rental platform for Zimbabwean property discovery, applications, rent collection, maintenance, messaging, and verification.
+Mobile-first Flutter property platform for Zimbabwean property discovery, applications, messaging, and verification.
 
 ## Stack
 
@@ -11,9 +11,9 @@ Mobile-first Flutter rental platform for Zimbabwean property discovery, applicat
 - HTTP client connected to the Django API
 - Django 6 backend
 - PostgreSQL for the full backend stack
-- MinIO / S3-compatible object storage for images, videos, verification files, and lease documents
+- MinIO / S3-compatible object storage for images, videos, and verification files
 - JWT auth endpoints
-- Local AI-assisted review for listing scam risk, tenant applications, lease drafting, and maintenance triage
+- Local AI-assisted review for listing scam risk and tenant applications
 - SQLite remains available for lightweight local development and tests
 
 ## What’s included
@@ -22,7 +22,7 @@ Mobile-first Flutter rental platform for Zimbabwean property discovery, applicat
 - Advanced property browsing and detail screens
 - Trust and verification-first rental workflows
 - Inbox, analytics, and account management surfaces
-- Django rentals API for listings, verification, payments, leases, maintenance, messaging, reports, and analytics
+- Django rentals API for listings, verification, applications, messaging, reports, and analytics
 
 ## Run locally
 
@@ -96,15 +96,12 @@ The local Django backend and Docker expose JSON endpoints under `http://localhos
 - `GET /api/properties/` with filters for `city`, `suburb`, `rent_min`, `rent_max`, `bedrooms_min`, `type`, and `verified_only`
 - `POST /api/auth/login/`, `POST /api/auth/refresh/`, and `GET /api/auth/me/` for JWT authentication
 - `POST /api/auth/google/` for Google ID-token sign-in when `GOOGLE_SIGN_IN_ENABLED=true` and `GOOGLE_CLIENT_IDS` is configured
-- `POST /api/ai/listing-review/`, `POST /api/ai/application-score/`, and `POST /api/ai/maintenance-triage/` for AI-assisted review utilities
+- `POST /api/ai/listing-review/` and `POST /api/ai/application-score/` for AI-assisted review utilities
 - `POST /api/properties/` for landlords or agents adding listings
 - `POST /api/verifications/` and `POST /api/verifications/:id/review/` for phone and national ID verification using ID front/back images; uncertain OCR matches can be reviewed by an administrator.
 - `POST /api/applications/` for tenant rental applications
-- `POST /api/payments/` for EcoCash, ZIPIT, bank transfer, and Visa/Mastercard payment records
-- `POST /api/leases/` and `POST /api/leases/:id/sign/` for generated lease agreements and e-signing
-- `POST /api/maintenance/` for tenant repair requests
 - `POST /api/conversations/` and `/api/conversations/:id/messages/` for in-app messaging
-- `GET /api/analytics/landlords/:user_id/` for listing views, saves, applications, occupancy, and rental income
+- `GET /api/analytics/landlords/:user_id/` for listing views, saves, and applications
 
 ## Backend checks
 
@@ -119,5 +116,4 @@ python3 manage.py makemigrations --check --dry-run
 - When `OBJECT_STORAGE_PROVIDER=minio`, Django file fields use the MinIO bucket configured in `backend/.env`.
 - The backend still exposes `POST /api/auth/google/` for Google ID-token sign-in when `GOOGLE_SIGN_IN_ENABLED=true`; the Flutter frontend currently ships password registration/sign-in and can add a Google identity-provider package against that endpoint later.
 - `GET /api/health/` reports database, object storage, AI provider, and map provider status.
-- The Flutter data layer hydrates from the Django API and does not inject demo listings, payments, leases, or conversations.
-- Payment provider callbacks for EcoCash, ZIPIT, bank transfer reconciliation, and cards are still modeled as recorded payment events; production provider integrations should be added behind those endpoints before launch.
+- The Flutter data layer hydrates from the Django API and does not inject demo listings or conversations.

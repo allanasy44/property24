@@ -75,31 +75,6 @@ def review_listing_payload(data, owner=None):
     )
 
 
-def triage_maintenance_payload(data):
-    text = " ".join(str(data.get(field, "")) for field in ["issue", "category", "description"]).lower()
-    urgent_terms = ["fire", "spark", "electric shock", "burst", "flood", "sewage", "roof leak", "no power", "no water"]
-    high_terms = ["leak", "blocked", "broken", "security", "gate", "geyser"]
-    flags = []
-    priority = "normal"
-    if any(term in text for term in urgent_terms):
-        priority = "urgent"
-        flags.append("possible_emergency")
-    elif any(term in text for term in high_terms):
-        priority = "high"
-        flags.append("needs_fast_followup")
-
-    category = data.get("category") or infer_maintenance_category(text)
-    return ai_result(
-        analysis_type="maintenance_triage",
-        score={"normal": 30, "high": 65, "urgent": 90}[priority],
-        confidence=0.73,
-        flags=flags,
-        recommendation=priority,
-        summary=f"Suggested priority is {priority}.",
-        extra={"suggested_category": category},
-    )
-
-
 def score_application_payload(data, tenant=None):
     score = 50
     flags = []
@@ -110,11 +85,6 @@ def score_application_payload(data, tenant=None):
         flags.append("short_application_message")
 
     if tenant is not None:
-        history = tenant.digital_rental_history or []
-        on_time_payments = sum(1 for item in history if item.get("status") in {"paid_on_time", "received"})
-        late_payments = sum(1 for item in history if item.get("status") in {"late", "missed"})
-        score += min(25, on_time_payments * 5)
-        score -= min(30, late_payments * 10)
         if not tenant.is_verified:
             flags.append("tenant_not_verified")
             score -= 8
@@ -140,7 +110,7 @@ def score_application_payload(data, tenant=None):
         confidence=0.69,
         flags=flags,
         recommendation=recommendation,
-        summary="Tenant application scored from profile, rental history, and affordability signals.",
+        summary="Tenant application scored from profile and affordability signals.",
     )
 
 
@@ -169,7 +139,6 @@ def property_insights(property_obj):
         ("Location confirmed", 15, location_verified, "Coordinates or address review"),
         ("Listing freshness", 10, freshness_days <= 7, "Updated within the last 7 days"),
         ("Photos added", 5, photos_present, "Property photos available"),
-        ("Account history", 10, bool(owner.digital_rental_history), "Recorded rental history"),
     ]
     breakdown = [
         {"label": label, "score": points if complete else 0, "max_score": points, "complete": complete, "detail": detail}
@@ -336,7 +305,7 @@ def rank_property_candidates(query, properties, limit=20):
             getattr(prop, "stand_reference", ""), str(getattr(prop, "land_size", "")),
             getattr(prop, "land_size_unit", ""), getattr(prop, "title_deed_status", ""),
             getattr(prop, "servicing_status", ""), getattr(prop, "zoning", ""),
-            getattr(prop, "road_access", ""), getattr(prop, "payment_terms", ""),
+            getattr(prop, "road_access", ""),
             "land" if prop.property_type == "land" else "",
             "electricity" if getattr(prop, "electricity_available", False) else "",
             "water" if getattr(prop, "land_water_available", False) else "",
@@ -443,38 +412,6 @@ def optional_llm_explanation(query, intent, ranked):
         return str(body["choices"][0]["message"]["content"]).strip()
     except Exception:
         return ""
-
-
-def generate_lease_text(lease):
-    return (
-        "Residential Lease Agreement\n\n"
-        f"Landlord: {lease.landlord}\n"
-        f"Tenant: {lease.tenant}\n"
-        f"Property: {lease.property.address}\n"
-        f"Monthly Rent: ${lease.monthly_rent}\n"
-        f"Deposit: ${lease.deposit}\n"
-        f"Lease: {lease.term}\n"
-        f"Start Date: {lease.start_date}\n"
-        f"End Date: {lease.end_date}\n\n"
-        "Core Terms:\n"
-        "1. Rent is due monthly through the recorded payment methods supported by the platform.\n"
-        "2. The deposit is held against damages, unpaid rent, and agreed end-of-lease obligations.\n"
-        "3. Maintenance requests must be logged digitally with category, description, and photos where available.\n"
-        "4. Both parties may sign electronically, and signed activity is retained in the platform audit history.\n"
-        "5. This generated draft should be reviewed against local legal requirements before production use."
-    )
-
-
-def infer_maintenance_category(text):
-    if re.search(r"pipe|sink|toilet|water|sewage|drain|leak|geyser", text):
-        return "plumbing"
-    if re.search(r"power|plug|spark|light|electric|breaker", text):
-        return "electricity"
-    if re.search(r"roof|ceiling|gutter", text):
-        return "roofing"
-    if re.search(r"paint|wall|ceiling stain", text):
-        return "painting"
-    return "general_repairs"
 
 
 def ai_result(analysis_type, score, confidence, flags, recommendation, summary, extra=None):

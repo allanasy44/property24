@@ -43,7 +43,6 @@ class User(AbstractUser):
     cover_photo_url = models.URLField(blank=True)
     bio = models.TextField(blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
-    digital_rental_history = models.JSONField(default=list, blank=True)
 
     class Meta:
         verbose_name = "user"
@@ -314,7 +313,6 @@ class Property(models.Model):
     road_access = models.CharField(max_length=120, blank=True)
     electricity_available = models.BooleanField(default=False)
     land_water_available = models.BooleanField(default=False)
-    payment_terms = models.CharField(max_length=240, blank=True)
     bathrooms = models.DecimalField(max_digits=4, decimal_places=1, default=1)
     furnished = models.BooleanField(default=False)
     water_availability = models.CharField(max_length=160, blank=True)
@@ -454,105 +452,6 @@ class Viewing(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
-class Payment(models.Model):
-    class Method(models.TextChoices):
-        ECOCASH = "ecocash", "EcoCash"
-        ZIPIT = "zipit", "ZIPIT"
-        BANK_TRANSFER = "bank_transfer", "Bank transfer"
-        CARD = "card", "Visa/Mastercard"
-
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        RECEIVED = "received", "Received"
-        FAILED = "failed", "Failed"
-        REFUNDED = "refunded", "Refunded"
-
-    tenant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="payments")
-    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="payments")
-    amount = models.DecimalField(max_digits=12, decimal_places=2)
-    method = models.CharField(max_length=24, choices=Method.choices)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
-    provider_reference = models.CharField(max_length=120, blank=True)
-    receipt_number = models.CharField(max_length=32, unique=True)
-    reminder_status = models.CharField(max_length=160, blank=True)
-    due_date = models.DateField(null=True, blank=True)
-    paid_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.receipt_number} {self.amount}"
-
-
-class LeaseAgreement(models.Model):
-    class Status(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        AWAITING_SIGNATURES = "awaiting_signatures", "Awaiting signatures"
-        ACTIVE = "active", "Active"
-        EXPIRED = "expired", "Expired"
-        TERMINATED = "terminated", "Terminated"
-
-    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="leases")
-    tenant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="leases")
-    landlord = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="landlord_leases")
-    start_date = models.DateField()
-    end_date = models.DateField()
-    monthly_rent = models.DecimalField(max_digits=12, decimal_places=2)
-    deposit = models.DecimalField(max_digits=12, decimal_places=2)
-    term = models.CharField(max_length=80, default="12 Months")
-    contract_text = models.TextField(blank=True)
-    pdf = models.FileField(upload_to="leases/", blank=True)
-    status = models.CharField(max_length=24, choices=Status.choices, default=Status.DRAFT)
-    signed_by_tenant = models.BooleanField(default=False)
-    signed_by_landlord = models.BooleanField(default=False)
-    tenant_signed_at = models.DateTimeField(null=True, blank=True)
-    landlord_signed_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def generate_contract_text(self):
-        from .ai import generate_lease_text
-
-        return generate_lease_text(self)
-
-    def save(self, *args, **kwargs):
-        if not self.contract_text:
-            self.contract_text = self.generate_contract_text()
-        if self.signed_by_tenant and self.signed_by_landlord and self.status in {self.Status.DRAFT, self.Status.AWAITING_SIGNATURES}:
-            self.status = self.Status.ACTIVE
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"Lease for {self.property}"
-
-
-class MaintenanceRequest(models.Model):
-    class Category(models.TextChoices):
-        PLUMBING = "plumbing", "Plumbing"
-        ELECTRICITY = "electricity", "Electricity"
-        ROOFING = "roofing", "Roofing"
-        PAINTING = "painting", "Painting"
-        GENERAL = "general_repairs", "General repairs"
-
-    class Status(models.TextChoices):
-        OPEN = "open", "Open"
-        IN_PROGRESS = "in_progress", "In progress"
-        RESOLVED = "resolved", "Resolved"
-        CANCELLED = "cancelled", "Cancelled"
-
-    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="maintenance_requests")
-    tenant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="maintenance_requests")
-    issue = models.CharField(max_length=180)
-    category = models.CharField(max_length=32, choices=Category.choices)
-    description = models.TextField(blank=True)
-    photo = models.ImageField(upload_to="maintenance/photos/", blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.OPEN)
-    priority = models.CharField(max_length=32, default="normal")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.issue
-
-
 class Conversation(models.Model):
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
     participants = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="conversations")
@@ -633,7 +532,6 @@ class Review(models.Model):
 class Commission(models.Model):
     agent = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="commissions")
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="commissions")
-    lease = models.ForeignKey(LeaseAgreement, on_delete=models.SET_NULL, null=True, blank=True, related_name="commissions")
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     status = models.CharField(max_length=24, default="pending")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -717,9 +615,7 @@ class MediaAsset(models.Model):
         PROFILE = "profile", "Profile"
         PROPERTY = "property", "Property"
         CHAT = "chat", "Chat"
-        MAINTENANCE = "maintenance", "Maintenance"
         VERIFICATION = "verification", "Verification"
-        LEASE = "lease", "Lease"
 
     class MediaType(models.TextChoices):
         IMAGE = "image", "Image"
@@ -777,7 +673,6 @@ class MediaAsset(models.Model):
 class AIAnalysis(models.Model):
     class AnalysisType(models.TextChoices):
         LISTING_RISK = "listing_risk", "Listing risk"
-        MAINTENANCE_TRIAGE = "maintenance_triage", "Maintenance triage"
         APPLICATION_SCORE = "application_score", "Application score"
 
     analysis_type = models.CharField(max_length=32, choices=AnalysisType.choices)

@@ -8,10 +8,7 @@ from .models import (
     Conversation,
     DisputeReport,
     EmailVerificationOTP,
-    LeaseAgreement,
-    MaintenanceRequest,
     Message,
-    Payment,
     PendingRegistrationOTP,
     PhoneVerificationOTP,
     Property,
@@ -27,7 +24,7 @@ from .models import (
 
 @admin.register(User)
 class RentalUserAdmin(UserAdmin):
-    fieldsets = UserAdmin.fieldsets + (("Rental profile", {"fields": ("full_name", "phone", "role", "is_verified", "digital_rental_history")}),)
+    fieldsets = UserAdmin.fieldsets + (("Rental profile", {"fields": ("full_name", "phone", "role", "is_verified")}),)
     list_display = ("username", "email", "full_name", "phone", "role", "is_verified", "is_staff")
     list_filter = ("role", "is_verified", "is_staff")
     search_fields = ("username", "email", "full_name", "phone")
@@ -86,9 +83,6 @@ class PendingRegistrationOTPAdmin(admin.ModelAdmin):
 
 admin.site.register(Application)
 admin.site.register(Viewing)
-admin.site.register(Payment)
-admin.site.register(LeaseAgreement)
-admin.site.register(MaintenanceRequest)
 admin.site.register(Conversation)
 admin.site.register(Message)
 admin.site.register(SavedProperty)
