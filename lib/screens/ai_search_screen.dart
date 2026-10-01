@@ -24,15 +24,15 @@ class AiSearchScreen extends StatefulWidget {
 }
 
 class _AiSearchScreenState extends State<AiSearchScreen> {
-  static const _bg = AppTheme.bg;
-  static const _panel = Colors.white;
-  static const _panelBorder = AppTheme.borderMid;
+  static Color get _bg => AppTheme.bg;
+  static Color get _panel => AppTheme.bgCard;
+  static Color get _panelBorder => AppTheme.borderMid;
   static const _accent = AppTheme.accent;
   AiSearchResponse? _response;
   bool _searching = false;
   String? _error;
-  static const _text = AppTheme.textPrimary;
-  static const _muted = AppTheme.textMuted;
+  static Color get _text => AppTheme.textPrimary;
+  static Color get _muted => AppTheme.textMuted;
 
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
@@ -65,19 +65,22 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: Colors.transparent,
+      value: SystemUiOverlayStyle(
+        statusBarColor: _bg,
         systemNavigationBarColor: _bg,
-        systemNavigationBarIconBrightness: Brightness.dark,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        systemNavigationBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
       ),
       child: Scaffold(
         backgroundColor: _bg,
         resizeToAvoidBottomInset: true,
         body: DecoratedBox(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Colors.white, AppTheme.bg],
+              colors: [_panel, AppTheme.bg],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
@@ -149,13 +152,13 @@ class _SearchResults extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (searching) return const Center(child: CircularProgressIndicator());
+    if (searching) return Center(child: CircularProgressIndicator());
     if (error != null)
       return Center(
-          child: Text(error!, style: const TextStyle(color: Colors.redAccent)));
+          child: Text(error!, style: TextStyle(color: Colors.redAccent)));
     final result = response;
     if (result == null) {
-      return const Center(
+      return Center(
           child: Text(
               'Describe the home you need and I will rank live listings for you.',
               textAlign: TextAlign.center,
@@ -165,7 +168,7 @@ class _SearchResults extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 24),
       children: [
         Text(result.explanation,
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppTheme.textSecondary, fontSize: 13, height: 1.4)),
         const SizedBox(height: 14),
         for (final item in result.results)
@@ -201,15 +204,15 @@ class _SearchHeader extends StatelessWidget {
               tooltip: 'Back',
               onPressed: onBack,
               style: IconButton.styleFrom(
-                backgroundColor: Colors.white,
+                backgroundColor: AppTheme.bgCard,
                 foregroundColor: AppTheme.textPrimary,
                 fixedSize: const Size.square(36),
                 minimumSize: const Size.square(36),
               ),
-              icon: const Icon(CupertinoIcons.chevron_left, size: 20),
+              icon: Icon(CupertinoIcons.chevron_left, size: 20),
             ),
           ),
-          const Text(
+          Text(
             'AI Search',
             style: TextStyle(
               color: _AiSearchScreenState._text,
@@ -274,7 +277,7 @@ class _PromptBox extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(color: _AiSearchScreenState._accent),
                 ),
-                child: const Center(
+                child: Center(
                   child: Icon(
                     CupertinoIcons.circle,
                     color: _AiSearchScreenState._accent,
@@ -291,12 +294,12 @@ class _PromptBox extends StatelessWidget {
                   maxLines: 3,
                   textInputAction: TextInputAction.search,
                   cursorColor: _AiSearchScreenState._accent,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: _AiSearchScreenState._text,
                     fontSize: 14,
                     height: 1.4,
                   ),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
@@ -324,7 +327,7 @@ class _PromptBox extends StatelessWidget {
                   fixedSize: const Size.square(38),
                   minimumSize: const Size.square(38),
                 ),
-                icon: const Icon(CupertinoIcons.mic, size: 17),
+                icon: Icon(CupertinoIcons.mic, size: 17),
               ),
               const Spacer(),
               if (hasText) ...[
@@ -337,7 +340,7 @@ class _PromptBox extends StatelessWidget {
                     fixedSize: const Size.square(38),
                     minimumSize: const Size.square(38),
                   ),
-                  icon: const Icon(CupertinoIcons.xmark, size: 18),
+                  icon: Icon(CupertinoIcons.xmark, size: 18),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -353,7 +356,7 @@ class _PromptBox extends StatelessWidget {
                   fixedSize: const Size.square(42),
                   minimumSize: const Size.square(42),
                 ),
-                icon: const Icon(CupertinoIcons.arrow_right, size: 21),
+                icon: Icon(CupertinoIcons.arrow_right, size: 21),
               ),
             ],
           ),

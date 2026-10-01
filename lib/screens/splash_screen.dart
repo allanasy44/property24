@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
@@ -63,13 +62,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   void initState() {
     super.initState();
-
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-      ),
-    );
 
     _fadeController = AnimationController(
       vsync: this,
@@ -207,7 +199,7 @@ class _OnboardingView extends StatelessWidget {
               ),
               errorWidget: (_, __, ___) => Container(
                 color: AppTheme.bgCard,
-                child: const Icon(
+                child: Icon(
                   CupertinoIcons.house,
                   color: AppTheme.textMuted,
                   size: 48,
@@ -378,7 +370,7 @@ class _OnboardingView extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                const Icon(
+                                Icon(
                                   CupertinoIcons.arrow_right,
                                   color: Colors.white,
                                   size: 18,
@@ -748,7 +740,7 @@ class _RoleCard extends StatelessWidget {
                 ),
               ),
               child: isSelected
-                  ? const Icon(
+                  ? Icon(
                       CupertinoIcons.check_mark,
                       color: Colors.white,
                       size: 13,

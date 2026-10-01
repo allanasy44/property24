@@ -50,8 +50,8 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.fromLTRB(22, 18, 22, 112),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgCard,
                     borderRadius: BorderRadius.vertical(
                       top: Radius.circular(26),
                     ),
@@ -80,7 +80,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       if (property.description.trim().isNotEmpty)
                         Text(
                           property.description.trim(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 12.5,
                             height: 1.55,
@@ -88,7 +88,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         ),
                       const SizedBox(height: 20),
                       if (amenities.isNotEmpty) ...[
-                        const Text(
+                        Text(
                           'What this house offers',
                           style: TextStyle(
                             color: AppTheme.textPrimary,
@@ -188,7 +188,7 @@ class _HeroGallery extends StatelessWidget {
               if (photo.isEmpty) {
                 return Container(
                   color: AppTheme.bgSurface,
-                  child: const Icon(
+                  child: Icon(
                     CupertinoIcons.house,
                     color: AppTheme.textMuted,
                     size: 56,
@@ -200,7 +200,7 @@ class _HeroGallery extends StatelessWidget {
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Container(
                   color: AppTheme.bgSurface,
-                  child: const Icon(
+                  child: Icon(
                     CupertinoIcons.house,
                     color: AppTheme.textMuted,
                     size: 56,
@@ -308,7 +308,7 @@ class _PriceHeader extends StatelessWidget {
             children: [
               Text(
                 property.rentLabel,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -320,7 +320,7 @@ class _PriceHeader extends StatelessWidget {
                 property.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -331,7 +331,7 @@ class _PriceHeader extends StatelessWidget {
                 property.heroLocation,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textMuted,
                   fontSize: 11.5,
                 ),
@@ -375,7 +375,7 @@ class _MetaLine extends StatelessWidget {
       children: [
         Text(
           '${property.trustScore}% trust / ${property.isLand ? property.standSummary : '${property.moveInTotalLabel} move-in'}',
-          style: const TextStyle(
+          style: TextStyle(
             color: AppTheme.textPrimary,
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -384,7 +384,7 @@ class _MetaLine extends StatelessWidget {
         const SizedBox(height: 6),
         Row(
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.eye,
               size: 13,
               color: AppTheme.textMuted,
@@ -392,7 +392,7 @@ class _MetaLine extends StatelessWidget {
             const SizedBox(width: 5),
             Text(
               property.availabilityLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textMuted,
                 fontSize: 11,
               ),
@@ -524,8 +524,8 @@ class _TrustPassportCard extends StatelessWidget {
                     }
                   }
                 },
-                icon: const Icon(CupertinoIcons.refresh, size: 16),
-                label: const Text('Confirm availability'),
+                icon: Icon(CupertinoIcons.refresh, size: 16),
+                label: Text('Confirm availability'),
               ),
             ),
           ],
@@ -619,19 +619,18 @@ class _AmenityChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.bgSurface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: AppTheme.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(CupertinoIcons.check_mark,
-              size: 13, color: AppTheme.accent),
+          Icon(CupertinoIcons.check_mark, size: 13, color: AppTheme.accent),
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
@@ -665,7 +664,7 @@ class _Pill extends StatelessWidget {
           const SizedBox(width: 7),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textPrimary,
               fontSize: 11.5,
               fontWeight: FontWeight.w700,
@@ -724,7 +723,7 @@ class _HostCard extends StatelessWidget {
                   ? null
                   : Text(
                       initials,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -741,7 +740,7 @@ class _HostCard extends StatelessWidget {
                       name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w800,
@@ -753,7 +752,7 @@ class _HostCard extends StatelessWidget {
                       role,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textMuted,
                         fontSize: 10.5,
                       ),
@@ -763,7 +762,7 @@ class _HostCard extends StatelessWidget {
               ),
             ),
             if (supplier?.verified == true)
-              const Icon(
+              Icon(
                 CupertinoIcons.checkmark_seal_fill,
                 color: AppTheme.accent,
                 size: 18,
@@ -790,7 +789,7 @@ class _BottomActions extends StatelessWidget {
         MediaQuery.paddingOf(context).bottom + 14,
       ),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.bgCard,
         border: Border(top: BorderSide(color: AppTheme.border)),
         boxShadow: [
           BoxShadow(
@@ -811,7 +810,7 @@ class _BottomActions extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: const Text('Message host'),
+              child: Text('Message host'),
             ),
           ),
           const SizedBox(width: 12),
@@ -824,7 +823,7 @@ class _BottomActions extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: const Text('Reserve'),
+              child: Text('Reserve'),
             ),
           ),
         ],

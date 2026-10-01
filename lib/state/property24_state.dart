@@ -93,6 +93,7 @@ class Property24State extends ChangeNotifier {
       final preferences = await SharedPreferences.getInstance();
       _token = preferences.getString(_tokenKey);
       darkMode = preferences.getBool(_darkModeKey) ?? false;
+      notifyListeners();
       _refreshToken = preferences.getString(_refreshTokenKey);
       if (_token != null && _token!.isNotEmpty) {
         AuthSession session;

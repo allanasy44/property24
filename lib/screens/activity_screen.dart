@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../models/rental_models.dart';
 import '../routes/app_routes.dart';
 import '../state/property24_state.dart';
+import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
 import '../widgets/metric_tile.dart';
 
@@ -284,8 +285,8 @@ class _LandlordNotificationButton extends StatelessWidget {
     return Container(
       height: 48,
       width: 48,
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
@@ -304,9 +305,9 @@ class _LandlordNotificationButton extends StatelessWidget {
           backgroundColor: Theme.of(context).colorScheme.primary,
           textColor: Theme.of(context).colorScheme.onPrimary,
           label: Text('${items.length}', style: const TextStyle(fontSize: 10)),
-          child: const Icon(
+          child: Icon(
             CupertinoIcons.bell,
-            color: Color(0xff202124),
+            color: Theme.of(context).colorScheme.onSurface,
             size: 28,
           ),
         ),

@@ -25,10 +25,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _mapMode = false;
 
   static const _primary = AppTheme.accent;
-  static const _primarySoft = Color(0xfff1f1ff);
-  static const _searchFill = AppTheme.bgSurface;
-  static const _textDark = AppTheme.textPrimary;
-  static const _textMuted = AppTheme.textMuted;
+  static Color get _primarySoft => AppTheme.bgSurface;
+  static Color get _searchFill => AppTheme.bgSurface;
+  static Color get _textDark => AppTheme.textPrimary;
+  static Color get _textMuted => AppTheme.textMuted;
 
   static const _types = ['Popular', 'Nearby', 'Recommended'];
 
@@ -69,11 +69,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         Container(
                           height: 44,
                           width: 44,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: _primarySoft,
                           ),
-                          child: const Icon(CupertinoIcons.person,
+                          child: Icon(CupertinoIcons.person,
                               color: _primary, size: 22),
                         ),
                         const SizedBox(width: 12),
@@ -85,7 +85,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                 displayName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 16,
                                   color: _textDark,
                                   fontWeight: FontWeight.w700,
@@ -117,7 +117,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(CupertinoIcons.search,
+                                  Icon(CupertinoIcons.search,
                                       color: _textMuted, size: 20),
                                   const SizedBox(width: 10),
                                   Expanded(
@@ -139,7 +139,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                       tooltip: 'Clear search',
                                       onPressed: () =>
                                           setState(() => _query = ''),
-                                      icon: const Icon(
+                                      icon: Icon(
                                         CupertinoIcons.xmark,
                                         color: _textMuted,
                                         size: 18,
@@ -157,14 +157,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           child: Container(
                             height: 50,
                             width: 50,
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               color: _primary,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
-                                CupertinoIcons.slider_horizontal_3,
-                                color: Colors.white,
-                                size: 22),
+                            child: Icon(CupertinoIcons.slider_horizontal_3,
+                                color: Colors.white, size: 22),
                           ),
                         ),
                       ],
@@ -215,7 +213,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ),
             const SliverToBoxAdapter(child: ErrorBanner()),
             if (properties.isEmpty)
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 child: EmptyState(
                   icon: CupertinoIcons.search,
                   title: 'No matching listings',
@@ -292,7 +290,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.bgCard,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -302,7 +300,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Filters',
               style: TextStyle(
                 fontSize: 20,
@@ -346,7 +344,7 @@ class _NotificationButton extends StatelessWidget {
       height: 44,
       width: 44,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.bgCard,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
@@ -368,9 +366,9 @@ class _NotificationButton extends StatelessWidget {
           textColor: Colors.white,
           label: Text(
             '${syncedNotifications.length}',
-            style: const TextStyle(fontSize: 10),
+            style: TextStyle(fontSize: 10),
           ),
-          child: const Icon(
+          child: Icon(
             CupertinoIcons.bell,
             color: AppTheme.textPrimary,
             size: 24,
@@ -441,7 +439,7 @@ class _NotificationPanel extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Notifications',
                     style: TextStyle(
@@ -454,14 +452,14 @@ class _NotificationPanel extends StatelessWidget {
                 IconButton(
                   tooltip: 'Close notifications',
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(CupertinoIcons.xmark),
+                  icon: Icon(CupertinoIcons.xmark),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             Expanded(
               child: notifications.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'No new notifications',
                         style: TextStyle(color: AppTheme.textMuted),
@@ -470,10 +468,10 @@ class _NotificationPanel extends StatelessWidget {
                   : ListView.separated(
                       itemCount: notifications.length,
                       separatorBuilder: (_, __) =>
-                          const Divider(color: AppTheme.border),
+                          Divider(color: AppTheme.border),
                       itemBuilder: (context, index) => ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: const Icon(
+                        leading: Icon(
                           CupertinoIcons.bell,
                           color: AppTheme.accent,
                         ),
@@ -506,7 +504,7 @@ class _MapExplorer extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: const Color(0xfff1f1ff),
+            color: Theme.of(context).colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(22),
           ),
           child: Stack(
@@ -530,8 +528,8 @@ class _MapExplorer extends StatelessWidget {
                 bottom: 0,
                 child: FilledButton.icon(
                   onPressed: () {},
-                  icon: const Icon(CupertinoIcons.location_north),
-                  label: const Text('Open directions handoff'),
+                  icon: Icon(CupertinoIcons.location_north),
+                  label: Text('Open directions handoff'),
                 ),
               ),
             ],
@@ -541,8 +539,7 @@ class _MapExplorer extends StatelessWidget {
         for (final property in properties.take(3))
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading:
-                const Icon(CupertinoIcons.location, color: AppTheme.accent),
+            leading: Icon(CupertinoIcons.location, color: AppTheme.accent),
             title: Text(property.title,
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text(property.heroLocation),
@@ -577,7 +574,7 @@ class _MapPin extends StatelessWidget {
             property.monthlyRentValue > 0
                 ? '\$${property.monthlyRentValue.round()}'
                 : 'Home',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               color: Colors.white,
               fontWeight: FontWeight.w600,
@@ -631,7 +628,7 @@ class _ComparisonTray extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(20, 6, 20, 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(22),
       ),
       child: Column(
@@ -639,7 +636,7 @@ class _ComparisonTray extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Compare homes',
                   style: TextStyle(
@@ -651,7 +648,7 @@ class _ComparisonTray extends StatelessWidget {
               ),
               TextButton(
                 onPressed: onClear,
-                child: const Text(
+                child: Text(
                   'Clear',
                   style: TextStyle(
                     color: AppTheme.accent,
@@ -681,18 +678,18 @@ class _ComparisonTray extends StatelessWidget {
                         Text(property.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w600,
                               color: AppTheme.textPrimary,
                             )),
                         const SizedBox(height: 6),
                         Text(property.rentLabel,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.accent,
                               fontWeight: FontWeight.w700,
                             )),
                         Text('${property.trustScore}% trust',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               color: AppTheme.textMuted,
                             )),
@@ -700,7 +697,7 @@ class _ComparisonTray extends StatelessWidget {
                           property.isLand
                               ? '${property.landSizeLabel} · ${property.standSummary}'
                               : '${property.bedrooms} bed · ${property.bathrooms} bath',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             color: AppTheme.textMuted,
                           ),
@@ -727,10 +724,9 @@ class _TrustLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading:
-          const Icon(CupertinoIcons.checkmark_circle, color: AppTheme.accent),
+      leading: Icon(CupertinoIcons.checkmark_circle, color: AppTheme.accent),
       title: Text(label,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w600,
             color: AppTheme.textPrimary,
           )),

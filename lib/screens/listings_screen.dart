@@ -22,10 +22,10 @@ class _ListingsScreenState extends State<ListingsScreen> {
   String _query = '';
 
   static const _primary = AppTheme.accent;
-  static const _primarySoft = AppTheme.bgSurface;
-  static const _searchFill = AppTheme.bgSurface;
-  static const _textDark = AppTheme.textPrimary;
-  static const _textMuted = AppTheme.textMuted;
+  static Color get _primarySoft => AppTheme.bgSurface;
+  static Color get _searchFill => AppTheme.bgSurface;
+  static Color get _textDark => AppTheme.textPrimary;
+  static Color get _textMuted => AppTheme.textMuted;
 
   @override
   Widget build(BuildContext context) {
@@ -65,11 +65,11 @@ class _ListingsScreenState extends State<ListingsScreen> {
                           Container(
                             height: 44,
                             width: 44,
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: _primarySoft,
                             ),
-                            child: const Icon(CupertinoIcons.house,
+                            child: Icon(CupertinoIcons.house,
                                 color: _primary, size: 22),
                           ),
                           const SizedBox(width: 12),
@@ -81,7 +81,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                                   displayName,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 16,
                                     color: _textDark,
                                     fontWeight: FontWeight.w700,
@@ -97,18 +97,18 @@ class _ListingsScreenState extends State<ListingsScreen> {
                           child: Container(
                             height: 44,
                             width: 44,
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               color: _primary,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(CupertinoIcons.add,
+                            child: Icon(CupertinoIcons.add,
                                 color: Colors.white, size: 22),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 18),
-                    const Text(
+                    Text(
                       'Listings',
                       style: TextStyle(
                         fontSize: 20,
@@ -129,7 +129,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(CupertinoIcons.search,
+                            Icon(CupertinoIcons.search,
                                 color: _textMuted, size: 20),
                             const SizedBox(width: 10),
                             Expanded(
@@ -148,7 +148,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                               IconButton(
                                 tooltip: 'Clear search',
                                 onPressed: () => setState(() => _query = ''),
-                                icon: const Icon(
+                                icon: Icon(
                                   CupertinoIcons.xmark,
                                   color: _textMuted,
                                   size: 18,
@@ -165,7 +165,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
             ),
             const SliverToBoxAdapter(child: ErrorBanner()),
             if (state.snapshot.properties.isEmpty)
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 child: EmptyState(
                   icon: CupertinoIcons.house,
                   title: 'No listings yet',
@@ -174,7 +174,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                 ),
               )
             else if (listings.isEmpty)
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 child: EmptyState(
                   icon: CupertinoIcons.search,
                   title: 'No matching listings',
@@ -233,15 +233,15 @@ class _ListingsScreenState extends State<ListingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: const Text('Delete listing?'),
+        title: Text('Delete listing?'),
         content: Text(property.title),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: Text('Cancel')),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
+              child: Text('Delete')),
         ],
       ),
     );
@@ -270,7 +270,7 @@ class _Section extends StatelessWidget {
             padding: const EdgeInsets.only(left: 2, bottom: 8),
             child: Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -343,7 +343,7 @@ class _LandlordListingTile extends StatelessWidget {
                         PopupMenuItem(
                             value: 'delete', child: Text('Delete listing')),
                       ],
-                      icon: const Icon(CupertinoIcons.ellipsis_circle_fill,
+                      icon: Icon(CupertinoIcons.ellipsis_circle_fill,
                           color: Colors.white),
                     ),
                   ),
@@ -425,9 +425,9 @@ class PropertyEditor extends StatefulWidget {
 
 class _PropertyEditorState extends State<PropertyEditor> {
   static const _primary = AppTheme.accent;
-  static const _searchFill = AppTheme.bgSurface;
-  static const _textDark = AppTheme.textPrimary;
-  static const _textMuted = AppTheme.textMuted;
+  static Color get _searchFill => AppTheme.bgSurface;
+  static Color get _textDark => AppTheme.textPrimary;
+  static Color get _textMuted => AppTheme.textMuted;
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _title;
@@ -560,7 +560,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
           IconButton(
             tooltip: 'Close',
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(CupertinoIcons.xmark),
+            icon: Icon(CupertinoIcons.xmark),
           ),
         ],
       ),
@@ -925,14 +925,13 @@ class _PropertyEditorState extends State<PropertyEditor> {
                     children: [
                       OutlinedButton.icon(
                         onPressed: () => _pickPhoto(camera: true),
-                        icon: const Icon(CupertinoIcons.camera, size: 18),
-                        label: const Text('Take photo'),
+                        icon: Icon(CupertinoIcons.camera, size: 18),
+                        label: Text('Take photo'),
                       ),
                       OutlinedButton.icon(
                         onPressed: _pickPhoto,
-                        icon: const Icon(CupertinoIcons.photo_on_rectangle,
-                            size: 18),
-                        label: const Text('Choose photos'),
+                        icon: Icon(CupertinoIcons.photo_on_rectangle, size: 18),
+                        label: Text('Choose photos'),
                       ),
                     ],
                   ),
@@ -959,7 +958,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                               height: 86,
                               color: AppTheme.bgSurface,
                               alignment: Alignment.center,
-                              child: const Icon(CupertinoIcons.photo),
+                              child: Icon(CupertinoIcons.photo),
                             ),
                           ),
                         ),
@@ -975,15 +974,15 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
-                        leading: const Icon(CupertinoIcons.photo,
-                            color: AppTheme.accent),
+                        leading:
+                            Icon(CupertinoIcons.photo, color: AppTheme.accent),
                         title: Text(file.name,
                             maxLines: 1, overflow: TextOverflow.ellipsis),
                         trailing: IconButton(
                           tooltip: 'Remove photo',
                           onPressed: () =>
                               setState(() => _newImages.remove(file)),
-                          icon: const Icon(CupertinoIcons.xmark_circle),
+                          icon: Icon(CupertinoIcons.xmark_circle),
                         ),
                       ),
                   ],
@@ -997,13 +996,13 @@ class _PropertyEditorState extends State<PropertyEditor> {
                     children: [
                       OutlinedButton.icon(
                         onPressed: () => _pickVideo(camera: true),
-                        icon: const Icon(CupertinoIcons.videocam, size: 18),
+                        icon: Icon(CupertinoIcons.videocam, size: 18),
                         label:
                             Text(isLand ? 'Record site video' : 'Record video'),
                       ),
                       OutlinedButton.icon(
                         onPressed: _pickVideo,
-                        icon: const Icon(CupertinoIcons.film, size: 18),
+                        icon: Icon(CupertinoIcons.film, size: 18),
                         label:
                             Text(isLand ? 'Choose site video' : 'Choose video'),
                       ),
@@ -1013,14 +1012,14 @@ class _PropertyEditorState extends State<PropertyEditor> {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,
-                      leading: const Icon(CupertinoIcons.film,
-                          color: AppTheme.accent),
+                      leading:
+                          Icon(CupertinoIcons.film, color: AppTheme.accent),
                       title: Text(_newVideo!.name,
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                       trailing: IconButton(
                         tooltip: 'Remove video',
                         onPressed: () => setState(() => _newVideo = null),
-                        icon: const Icon(CupertinoIcons.xmark_circle),
+                        icon: Icon(CupertinoIcons.xmark_circle),
                       ),
                     ),
                 ],
@@ -1053,17 +1052,17 @@ class _PropertyEditorState extends State<PropertyEditor> {
         labelText: label,
         filled: true,
         fillColor: _searchFill,
-        labelStyle: const TextStyle(
+        labelStyle: TextStyle(
           color: _textMuted,
           fontWeight: FontWeight.w500,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppTheme.border),
+          borderSide: BorderSide(color: AppTheme.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppTheme.border),
+          borderSide: BorderSide(color: AppTheme.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -1087,7 +1086,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
         decoration: _inputDeco(label),
         keyboardType: keyboardType,
         maxLines: maxLines,
-        style: const TextStyle(color: _textDark),
+        style: TextStyle(color: _textDark),
         validator: (value) =>
             requiredField && (value == null || value.trim().isEmpty)
                 ? 'Required'
@@ -1101,7 +1100,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
       contentPadding: EdgeInsets.zero,
       activeColor: _primary,
       title: Text(label,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w500,
             color: _textDark,
           )),
@@ -1241,11 +1240,11 @@ class _PropertyEditorState extends State<PropertyEditor> {
                   ),
                   child: Container(
                     margin: const EdgeInsets.all(14),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: AppTheme.accent,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       CupertinoIcons.check_mark,
                       color: Colors.white,
                       size: 28,
@@ -1253,7 +1252,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                const Text(
+                Text(
                   'Congratulations!',
                   style: TextStyle(
                     color: AppTheme.textPrimary,
@@ -1267,7 +1266,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       ? 'Your property listed successfully.'
                       : 'Your listing was updated successfully.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
                     height: 1.35,
@@ -1284,7 +1283,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
-                    child: const Text('Continue'),
+                    child: Text('Continue'),
                   ),
                 ),
               ],

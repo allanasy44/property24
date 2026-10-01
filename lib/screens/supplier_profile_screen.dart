@@ -32,7 +32,7 @@ class SupplierProfileScreen extends StatelessWidget {
     final initials = _initials(supplier.name);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.bg,
       body: SafeArea(
         child: Column(
           children: [
@@ -48,7 +48,7 @@ class SupplierProfileScreen extends StatelessWidget {
                             supplier.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 20,
                               fontWeight: FontWeight.w800,
@@ -57,7 +57,7 @@ class SupplierProfileScreen extends StatelessWidget {
                         ),
                         if (supplier.verified) ...[
                           const SizedBox(width: 8),
-                          const Icon(
+                          Icon(
                             CupertinoIcons.check_mark,
                             color: AppTheme.accent,
                             size: 20,
@@ -69,7 +69,7 @@ class SupplierProfileScreen extends StatelessWidget {
                   IconButton(
                     tooltip: 'More',
                     onPressed: () {},
-                    icon: const Icon(CupertinoIcons.ellipsis),
+                    icon: Icon(CupertinoIcons.ellipsis),
                   ),
                 ],
               ),
@@ -81,7 +81,7 @@ class SupplierProfileScreen extends StatelessWidget {
                   Center(
                     child: Container(
                       padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: LinearGradient(
                           colors: [AppTheme.accent, AppTheme.accentTeal],
@@ -91,7 +91,7 @@ class SupplierProfileScreen extends StatelessWidget {
                       ),
                       child: CircleAvatar(
                         radius: 54,
-                        backgroundColor: Colors.white,
+                        backgroundColor: AppTheme.bgCard,
                         child: CircleAvatar(
                           radius: 50,
                           backgroundColor: AppTheme.bgSurface,
@@ -102,7 +102,7 @@ class SupplierProfileScreen extends StatelessWidget {
                               ? null
                               : Text(
                                   initials,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: AppTheme.textPrimary,
                                     fontSize: 24,
                                     fontWeight: FontWeight.w800,
@@ -135,7 +135,7 @@ class SupplierProfileScreen extends StatelessWidget {
                     [supplier.role.label, supplier.email]
                         .where((value) => value.trim().isNotEmpty)
                         .join(' at '),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textPrimary,
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -145,7 +145,7 @@ class SupplierProfileScreen extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       supplier.bio.trim(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 13,
                         height: 1.35,
@@ -164,7 +164,7 @@ class SupplierProfileScreen extends StatelessWidget {
                               borderRadius: BorderRadius.circular(7),
                             ),
                           ),
-                          child: const Text('Follow'),
+                          child: Text('Follow'),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -177,7 +177,7 @@ class SupplierProfileScreen extends StatelessWidget {
                               borderRadius: BorderRadius.circular(7),
                             ),
                           ),
-                          child: const Text('Chat'),
+                          child: Text('Chat'),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -190,7 +190,7 @@ class SupplierProfileScreen extends StatelessWidget {
                               borderRadius: BorderRadius.circular(7),
                             ),
                           ),
-                          child: const Text('Contacts'),
+                          child: Text('Contacts'),
                         ),
                       ),
                     ],
@@ -241,7 +241,7 @@ class SupplierProfileScreen extends StatelessWidget {
                         child: image.isEmpty
                             ? Container(
                                 color: AppTheme.bgSurface,
-                                child: const Icon(
+                                child: Icon(
                                   CupertinoIcons.house,
                                   color: AppTheme.textMuted,
                                 ),
@@ -251,7 +251,7 @@ class SupplierProfileScreen extends StatelessWidget {
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => Container(
                                   color: AppTheme.bgSurface,
-                                  child: const Icon(
+                                  child: Icon(
                                     CupertinoIcons.house,
                                     color: AppTheme.textMuted,
                                   ),
@@ -292,7 +292,7 @@ class _Stat extends StatelessWidget {
         children: [
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textPrimary,
               fontSize: 15,
               fontWeight: FontWeight.w800,
@@ -300,7 +300,7 @@ class _Stat extends StatelessWidget {
           ),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 12,
             ),
@@ -346,7 +346,7 @@ class _ProfileTab extends StatelessWidget {
             const SizedBox(width: 7),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 12,
                 fontWeight: FontWeight.w800,

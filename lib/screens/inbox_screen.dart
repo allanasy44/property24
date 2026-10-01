@@ -45,7 +45,7 @@ class _InboxScreenState extends State<InboxScreen> {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Inbox',
                     style: TextStyle(
@@ -70,7 +70,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       CupertinoIcons.search,
                       color: AppTheme.textMuted,
                       size: 20,
@@ -94,7 +94,7 @@ class _InboxScreenState extends State<InboxScreen> {
                       IconButton(
                         tooltip: 'Clear search',
                         onPressed: () => setState(() => _query = ''),
-                        icon: const Icon(
+                        icon: Icon(
                           CupertinoIcons.xmark,
                           color: AppTheme.textMuted,
                           size: 18,
@@ -177,7 +177,7 @@ class _ConversationTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: Colors.white,
+        color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
@@ -195,7 +195,7 @@ class _ConversationTile extends StatelessWidget {
                           : null,
                   child: participant?.profilePicture.isNotEmpty == true
                       ? null
-                      : const Icon(
+                      : Icon(
                           CupertinoIcons.person,
                           color: AppTheme.textMuted,
                         ),
@@ -209,7 +209,7 @@ class _ConversationTile extends StatelessWidget {
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
@@ -220,7 +220,7 @@ class _ConversationTile extends StatelessWidget {
                         property?.heroLocation ?? conversation.preview,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textMuted,
                           fontSize: 12,
                         ),
@@ -231,7 +231,7 @@ class _ConversationTile extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   conversation.updatedAt,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -336,7 +336,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 if (_loading && _messages.isEmpty)
-                  const Center(child: CircularProgressIndicator()),
+                  Center(child: CircularProgressIndicator()),
                 for (final item in _messages)
                   _PersistedMessageBubble(
                       item: item, mine: item.senderId == state.user?.id),
@@ -347,8 +347,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
             top: false,
             child: Container(
               padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
-              decoration: const BoxDecoration(
-                color: Colors.white,
+              decoration: BoxDecoration(
+                color: AppTheme.bgCard,
                 border: Border(top: BorderSide(color: AppTheme.border)),
               ),
               child: Row(
@@ -356,7 +356,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                   IconButton(
                     tooltip: 'Add photo or video',
                     onPressed: _uploading ? null : _showAttachmentSheet,
-                    icon: const Icon(CupertinoIcons.paperclip),
+                    icon: Icon(CupertinoIcons.paperclip),
                   ),
                   IconButton(
                     tooltip: _recording ? 'Stop recording' : 'Record audio',
@@ -376,14 +376,14 @@ class _ConversationScreenState extends State<ConversationScreen> {
                             await _loadMessages();
                           }
                         : null,
-                    icon: const Icon(CupertinoIcons.location),
+                    icon: Icon(CupertinoIcons.location),
                   ),
                   Expanded(
                     child: TextField(
                       controller: _message,
                       minLines: 1,
                       maxLines: 4,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                           hintText: 'Write a message',
                           border: InputBorder.none),
                     ),
@@ -391,7 +391,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                   IconButton.filled(
                     tooltip: 'Send',
                     onPressed: _send,
-                    icon: const Icon(CupertinoIcons.arrow_up),
+                    icon: Icon(CupertinoIcons.arrow_up),
                   ),
                 ],
               ),
@@ -410,32 +410,32 @@ class _ConversationScreenState extends State<ConversationScreen> {
         child: Wrap(
           children: [
             ListTile(
-              leading: const Icon(CupertinoIcons.camera),
-              title: const Text('Take a photo'),
+              leading: Icon(CupertinoIcons.camera),
+              title: Text('Take a photo'),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _pickChatMedia(source: ImageSource.camera, video: false);
               },
             ),
             ListTile(
-              leading: const Icon(CupertinoIcons.photo_on_rectangle),
-              title: const Text('Choose a photo'),
+              leading: Icon(CupertinoIcons.photo_on_rectangle),
+              title: Text('Choose a photo'),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _pickChatMedia(source: ImageSource.gallery, video: false);
               },
             ),
             ListTile(
-              leading: const Icon(CupertinoIcons.videocam),
-              title: const Text('Record a video'),
+              leading: Icon(CupertinoIcons.videocam),
+              title: Text('Record a video'),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _pickChatMedia(source: ImageSource.camera, video: true);
               },
             ),
             ListTile(
-              leading: const Icon(CupertinoIcons.film),
-              title: const Text('Choose a video'),
+              leading: Icon(CupertinoIcons.film),
+              title: Text('Choose a video'),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _pickChatMedia(source: ImageSource.gallery, video: true);
@@ -548,7 +548,7 @@ class _TextBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: mine ? AppTheme.accent : Colors.white,
+          color: mine ? AppTheme.accent : AppTheme.bgCard,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(

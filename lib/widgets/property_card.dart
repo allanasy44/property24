@@ -42,7 +42,7 @@ class PropertyCard extends StatelessWidget {
                   aspectRatio: 16 / 9,
                   child: property.photos.isEmpty
                       ? DecoratedBox(
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [AppTheme.bgSurface, AppTheme.borderMid],
                               begin: Alignment.topLeft,
@@ -238,8 +238,9 @@ class _RoundIconButton extends StatelessWidget {
         onPressed: onPressed,
         icon: Icon(icon, size: 18),
         style: IconButton.styleFrom(
-          backgroundColor:
-              selected ? colorScheme.primary : Colors.white.withOpacity(0.9),
+          backgroundColor: selected
+              ? colorScheme.primary
+              : colorScheme.surface.withOpacity(0.9),
           foregroundColor:
               selected ? colorScheme.onPrimary : colorScheme.secondary,
           fixedSize: const Size.square(40),
@@ -263,10 +264,13 @@ class _ImageBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: emphasized ? AppTheme.trustHigh : Colors.white.withOpacity(0.92),
+        color: emphasized
+            ? AppTheme.trustHigh
+            : colorScheme.surface.withOpacity(0.92),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -274,12 +278,15 @@ class _ImageBadge extends StatelessWidget {
         children: [
           Icon(icon,
               size: 15,
-              color: emphasized ? Colors.white : AppTheme.textPrimary),
+              color:
+                  emphasized ? colorScheme.onPrimary : colorScheme.onSurface),
           const SizedBox(width: 5),
           Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: emphasized ? Colors.white : AppTheme.textPrimary,
+                  color: emphasized
+                      ? colorScheme.onPrimary
+                      : colorScheme.onSurface,
                   fontWeight: FontWeight.w800,
                 ),
           ),

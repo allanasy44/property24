@@ -119,7 +119,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           shape: BoxShape.circle,
                           border: Border.all(color: AppTheme.bg, width: 3),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           CupertinoIcons.pencil,
                           size: 14,
                           color: Colors.white,
@@ -198,8 +198,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onPressed: user == null
                   ? null
                   : () => context.read<Property24State>().signOut(),
-              icon: const Icon(CupertinoIcons.square_arrow_right, size: 18),
-              label: const Text(
+              icon: Icon(CupertinoIcons.square_arrow_right, size: 18),
+              label: Text(
                 'Sign out',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
@@ -366,7 +366,7 @@ class _MenuCardTile extends StatelessWidget {
                           child: Text(
                             '$badge',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                               color: Colors.white,
@@ -604,7 +604,7 @@ class _PanelHeader extends StatelessWidget {
         IconButton(
           tooltip: 'Close',
           onPressed: onClose,
-          icon: const Icon(CupertinoIcons.xmark),
+          icon: Icon(CupertinoIcons.xmark),
         ),
       ],
     );
@@ -999,7 +999,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                   onPressed: _saving ? null : _save,
                   child: _saving
                       ? const CupertinoActivityIndicator(color: Colors.white)
-                      : const Text('Save changes'),
+                      : Text('Save changes'),
                 ),
               ),
             ],
@@ -1129,8 +1129,8 @@ class _ProfileImagePicker extends StatelessWidget {
                         visualDensity: VisualDensity.compact,
                       ),
                       onPressed: onPick,
-                      icon: const Icon(CupertinoIcons.photo, size: 16),
-                      label: const Text('Upload'),
+                      icon: Icon(CupertinoIcons.photo, size: 16),
+                      label: Text('Upload'),
                     ),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
@@ -1139,8 +1139,8 @@ class _ProfileImagePicker extends StatelessWidget {
                         visualDensity: VisualDensity.compact,
                       ),
                       onPressed: onRemove,
-                      icon: const Icon(CupertinoIcons.trash, size: 16),
-                      label: const Text('Remove'),
+                      icon: Icon(CupertinoIcons.trash, size: 16),
+                      label: Text('Remove'),
                     ),
                   ],
                 ),
@@ -1470,12 +1470,12 @@ class _VerificationSheetState extends State<_VerificationSheet> {
               if (user.verified)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(CupertinoIcons.phone,
-                      color: AppTheme.textMuted),
-                  title: const Text('Phone number'),
+                  leading:
+                      Icon(CupertinoIcons.phone, color: AppTheme.textMuted),
+                  title: Text('Phone number'),
                   subtitle: Text(
                     user.phone.isEmpty ? 'Not provided' : user.phone,
-                    style: const TextStyle(color: AppTheme.textMuted),
+                    style: TextStyle(color: AppTheme.textMuted),
                   ),
                 )
               else
@@ -1576,8 +1576,8 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     onPressed: _busy ? null : _submitIdentity,
-                    icon: const Icon(CupertinoIcons.checkmark_shield),
-                    label: const Text('Submit identity verification'),
+                    icon: Icon(CupertinoIcons.checkmark_shield),
+                    label: Text('Submit identity verification'),
                   ),
                 ),
               ],

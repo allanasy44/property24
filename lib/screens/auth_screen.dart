@@ -87,7 +87,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     onPressed: () => _showForm
                         ? setState(() => _showForm = false)
                         : context.go(AppRoutes.initial),
-                    icon: const Icon(CupertinoIcons.chevron_left),
+                    icon: Icon(CupertinoIcons.chevron_left),
                   ),
                 ),
               ],
@@ -101,7 +101,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget _background() {
     return IgnorePointer(
       child: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           image: DecorationImage(
             image: NetworkImage(_heroImage),
             fit: BoxFit.cover,
@@ -131,7 +131,7 @@ class _AuthScreenState extends State<AuthScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Connecting You\nwith the\nPerfect Property',
           style: TextStyle(
             color: AppTheme.textPrimary,
@@ -144,7 +144,7 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 22),
         _authChoice(),
         const SizedBox(height: 14),
-        const Center(
+        Center(
           child: Text(
             'Continue With Following',
             style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
@@ -206,7 +206,7 @@ class _AuthScreenState extends State<AuthScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _socialButton(
-          const Icon(CupertinoIcons.person_fill),
+          Icon(CupertinoIcons.person_fill),
           AppTheme.accent,
           onTap: _googleAuth,
         ),
@@ -263,7 +263,7 @@ class _AuthScreenState extends State<AuthScreen> {
         children: [
           Text(
             _registering ? 'Create your account' : 'Welcome back',
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textPrimary,
               fontSize: 28,
               height: 1.1,
@@ -273,7 +273,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 4),
           Text(
             '${widget.role.label} account',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 16),
           if (_registering) ...[
@@ -300,7 +300,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 : null,
             decoration: InputDecoration(
               hintText: 'Password',
-              prefixIcon: const Icon(CupertinoIcons.lock, size: 18),
+              prefixIcon: Icon(CupertinoIcons.lock, size: 18),
               suffixIcon: IconButton(
                 onPressed: () =>
                     setState(() => _obscurePassword = !_obscurePassword),
@@ -328,7 +328,7 @@ class _AuthScreenState extends State<AuthScreen> {
               validator: (value) => RegExp(r'^\d{6}$').hasMatch(value ?? '')
                   ? null
                   : 'Enter the 6-digit email code',
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Email verification code',
                 prefixIcon: Icon(CupertinoIcons.mail, size: 18),
               ),
@@ -351,19 +351,19 @@ class _AuthScreenState extends State<AuthScreen> {
             height: 44,
             child: OutlinedButton.icon(
               onPressed: _submitting ? null : _googleAuth,
-              icon: const Icon(CupertinoIcons.person_fill, size: 18),
+              icon: Icon(CupertinoIcons.person_fill, size: 18),
               label: Text(
                 _registering ? 'Create with Google' : 'Continue with Google',
               ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.textPrimary,
-                side: const BorderSide(color: AppTheme.border),
+                side: BorderSide(color: AppTheme.border),
                 backgroundColor: AppTheme.bgCard.withAlpha(210),
               ),
             ),
           ),
           const SizedBox(height: 10),
-          const Center(
+          Center(
             child: Text(
               'or continue with your account details',
               style: TextStyle(color: AppTheme.textMuted, fontSize: 11),

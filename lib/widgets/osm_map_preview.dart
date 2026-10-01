@@ -149,7 +149,7 @@ class _TileMap extends StatelessWidget {
                     child: Container(
                       height: 16,
                       width: 16,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: AppTheme.accent,
                       ),
@@ -247,13 +247,13 @@ class _MapLabel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
+        color: Theme.of(context).colorScheme.surface.withOpacity(0.92),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             CupertinoIcons.location,
             color: AppTheme.accent,
             size: 16,
@@ -264,7 +264,7 @@ class _MapLabel extends StatelessWidget {
               label.isEmpty ? prefix : '$prefix: $label',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
@@ -285,10 +285,10 @@ class _Attribution extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.88),
+        color: Theme.of(context).colorScheme.surface.withOpacity(0.88),
         borderRadius: BorderRadius.circular(7),
       ),
-      child: const Text(
+      child: Text(
         '© OpenStreetMap',
         style: TextStyle(
           color: AppTheme.textSecondary,

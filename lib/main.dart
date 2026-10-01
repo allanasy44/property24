@@ -55,17 +55,29 @@ class MyApp extends StatelessWidget {
         builder: (context, orientation, screenType) {
           return Consumer<Property24State>(
             builder: (context, state, _) {
+              AppTheme.setDarkMode(state.darkMode);
               return MaterialApp.router(
                 title: 'Property 24',
                 theme: AppTheme.lightTheme,
                 darkTheme: AppTheme.darkTheme,
                 themeMode: state.darkMode ? ThemeMode.dark : ThemeMode.light,
                 builder: (context, child) {
-                  return MediaQuery(
-                    data: MediaQuery.of(
-                      context,
-                    ).copyWith(textScaler: TextScaler.linear(1.0)),
-                    child: child ?? const SizedBox.shrink(),
+                  final iconBrightness =
+                      state.darkMode ? Brightness.light : Brightness.dark;
+                  return AnnotatedRegion<SystemUiOverlayStyle>(
+                    value: SystemUiOverlayStyle(
+                      statusBarColor: AppTheme.bg,
+                      systemNavigationBarColor: AppTheme.bg,
+                      statusBarIconBrightness: iconBrightness,
+                      systemNavigationBarIconBrightness: iconBrightness,
+                      systemNavigationBarDividerColor: AppTheme.border,
+                    ),
+                    child: MediaQuery(
+                      data: MediaQuery.of(
+                        context,
+                      ).copyWith(textScaler: TextScaler.linear(1.0)),
+                      child: child ?? const SizedBox.shrink(),
+                    ),
                   );
                 },
                 debugShowCheckedModeBanner: false,

@@ -50,7 +50,7 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
                 elevation: 0,
                 scrolledUnderElevation: 0,
                 pinned: true,
-                title: const Text('Saved & Reserved'),
+                title: Text('Saved & Reserved'),
               ),
               SliverToBoxAdapter(
                 child: Padding(
@@ -79,13 +79,13 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
                 ),
               ),
               if (state.loading && properties.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   child: Center(
                     child: CircularProgressIndicator(color: AppTheme.accent),
                   ),
                 )
               else if (visible.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   child: Center(
                     child: Text(
                       'Nothing saved or reserved yet.',
@@ -187,8 +187,8 @@ class _PropertyCard extends StatelessWidget {
                     ? Container(
                         width: 96,
                         height: 112,
-                        color: const Color(0xFFE0DACF),
-                        child: const Icon(
+                        color: AppTheme.bgSurface,
+                        child: Icon(
                           CupertinoIcons.building_2_fill,
                           color: AppTheme.textMuted,
                         ),
@@ -201,8 +201,8 @@ class _PropertyCard extends StatelessWidget {
                         errorBuilder: (_, __, ___) => Container(
                           width: 96,
                           height: 112,
-                          color: const Color(0xFFE0DACF),
-                          child: const Icon(
+                          color: AppTheme.bgSurface,
+                          child: Icon(
                             CupertinoIcons.building_2_fill,
                             color: AppTheme.textMuted,
                           ),
@@ -229,8 +229,7 @@ class _PropertyCard extends StatelessWidget {
                         IconButton(
                           tooltip: 'Remove saved property',
                           onPressed: onRemove,
-                          icon: const Icon(CupertinoIcons.bookmark_fill,
-                              size: 18),
+                          icon: Icon(CupertinoIcons.bookmark_fill, size: 18),
                           visualDensity: VisualDensity.compact,
                         ),
                       ],
@@ -328,7 +327,7 @@ class _DetailChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,
           color: AppTheme.textSecondary,
