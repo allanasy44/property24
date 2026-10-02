@@ -948,6 +948,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final phoneLocked = widget.user.phone.trim().isNotEmpty;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -985,6 +986,8 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                 label: 'Zimbabwe phone number',
                 hint: '+263771234567',
                 keyboardType: TextInputType.phone,
+                enabled: !phoneLocked,
+                suffixIcon: phoneLocked ? CupertinoIcons.lock_fill : null,
               ),
               const SizedBox(height: 12),
               _ThemedField(controller: _bio, label: 'Bio', maxLines: 3),
@@ -1160,6 +1163,8 @@ class _ThemedField extends StatelessWidget {
     this.hint,
     this.maxLines = 1,
     this.keyboardType,
+    this.enabled = true,
+    this.suffixIcon,
   });
 
   final TextEditingController controller;
@@ -1167,11 +1172,14 @@ class _ThemedField extends StatelessWidget {
   final String? hint;
   final int maxLines;
   final TextInputType? keyboardType;
+  final bool enabled;
+  final IconData? suffixIcon;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      enabled: enabled,
       maxLines: maxLines,
       keyboardType: keyboardType,
       style: TextStyle(color: AppTheme.textPrimary),
@@ -1181,7 +1189,10 @@ class _ThemedField extends StatelessWidget {
         labelStyle: TextStyle(color: AppTheme.textMuted),
         hintStyle: TextStyle(color: AppTheme.textMuted),
         filled: true,
-        fillColor: AppTheme.bgSurface,
+        fillColor: enabled ? AppTheme.bgSurface : AppTheme.bgCard,
+        suffixIcon: suffixIcon == null
+            ? null
+            : Icon(suffixIcon, size: 16, color: AppTheme.textMuted),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -1467,15 +1478,20 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                 onClose: () => Navigator.of(context).pop(),
               ),
               const SizedBox(height: 14),
-              if (user.verified)
+              if (user.phone.trim().isNotEmpty)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading:
                       Icon(CupertinoIcons.phone, color: AppTheme.textMuted),
                   title: Text('Phone number'),
                   subtitle: Text(
-                    user.phone.isEmpty ? 'Not provided' : user.phone,
+                    user.phone,
                     style: TextStyle(color: AppTheme.textMuted),
+                  ),
+                  trailing: Icon(
+                    CupertinoIcons.lock_fill,
+                    size: 16,
+                    color: AppTheme.textMuted,
                   ),
                 )
               else

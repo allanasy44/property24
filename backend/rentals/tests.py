@@ -16,10 +16,11 @@ from django.test import Client, TestCase, TransactionTestCase
 from PIL import Image
 
 from .auth import issue_token_pair
+from .chat_services import broadcast_to_user
 from .views import hash_otp, normalize_phone, phone_lookup_values
 from property24_backend.asgi import application
 
-from .models import AIAnalysis, Application, CallSession, ChatBlock, ChatReport, Conversation, DisputeReport, EmailVerificationOTP, MediaAsset, Message, MessageReceipt, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, PropertyPhoto, PushDevice, SecurityAuditEvent, VerificationRequest, Viewing
+from .models import AIAnalysis, Application, CallSession, ChatBlock, ChatReport, Conversation, DisputeReport, EmailVerificationOTP, MediaAsset, Message, MessageReceipt, Notification, PendingRegistrationOTP, PhoneVerificationOTP, Property, PropertyComment, PropertyPhoto, PushDevice, SecurityAuditEvent, VerificationRequest, Viewing
 
 
 class RentalApiTests(TestCase):
@@ -814,7 +815,7 @@ class RentalApiTests(TestCase):
         self.assertEqual(allowed.status_code, 201, allowed.json())
 
     def test_verification_submission_requires_id_evidence_without_phone_otp(self):
-        phone = "+263779000001"
+        phone = "+263771111111"
         incomplete = self.post_json(
             "/api/verifications/",
             {"role": "landlord", "name": "John Doe", "phone": phone, "national_id_number": "63-000000L63", "phone_verified": False},
@@ -856,7 +857,7 @@ class RentalApiTests(TestCase):
         verification = VerificationRequest.objects.get(user=self.landlord)
         self.assertFalse(verification.phone_verified)
         self.landlord.refresh_from_db()
-        self.assertEqual(self.landlord.phone, phone)
+        self.assertEqual(normalize_phone(self.landlord.phone), phone)
         self.assertFalse(self.landlord.phone_verified)
 
     def test_identity_document_number_must_have_valid_format(self):
@@ -1060,6 +1061,35 @@ class RentalApiTests(TestCase):
         self.assertIsNotNone(agent_receipt.read_at)
         self.assertEqual(list_response.json()["results"][0]["delivery_status"], "read")
 
+    def test_conversation_list_exposes_unread_count_and_opening_clears_it(self):
+        conversation = Conversation.objects.create(property=self.property, title="Unread chat")
+        conversation.participants.set([self.tenant, self.agent])
+        message_response = self.post_json(
+            f"/api/conversations/{conversation.id}/messages/",
+            {"body": "Your viewing is confirmed."},
+            user=self.agent,
+        )
+
+        unread_response = self.client.get("/api/conversations/", **self.auth_header(self.tenant))
+        messages_response = self.client.get(
+            f"/api/conversations/{conversation.id}/messages/",
+            **self.auth_header(self.tenant),
+        )
+        cleared_response = self.client.get("/api/conversations/", **self.auth_header(self.tenant))
+
+        self.assertEqual(message_response.status_code, 201, message_response.json())
+        self.assertEqual(unread_response.status_code, 200, unread_response.json())
+        self.assertEqual(messages_response.status_code, 200, messages_response.json())
+        self.assertEqual(cleared_response.status_code, 200, cleared_response.json())
+        unread_item = next(
+            item for item in unread_response.json()["results"] if str(item["id"]) == str(conversation.id)
+        )
+        cleared_item = next(
+            item for item in cleared_response.json()["results"] if str(item["id"]) == str(conversation.id)
+        )
+        self.assertEqual(unread_item["unread_count"], 1)
+        self.assertEqual(cleared_item["unread_count"], 0)
+
     def test_conversation_message_can_be_edited_deleted_blocked_and_reported(self):
         conversation = Conversation.objects.create(property=self.property, title="Borrowdale chat")
         conversation.participants.set([self.tenant, self.agent])
@@ -1163,7 +1193,7 @@ class RentalApiTests(TestCase):
         self.assertEqual(asset.status, MediaAsset.Status.DELETED)
         self.assertFalse(bool(self.tenant.profile_picture))
 
-    def test_profile_phone_change_requires_new_phone_verification(self):
+    def test_profile_phone_cannot_be_changed_after_it_is_set(self):
         self.tenant.phone = "+263779123456"
         self.tenant.phone_verified = True
         self.tenant.save(update_fields=["phone", "phone_verified"])
@@ -1174,10 +1204,85 @@ class RentalApiTests(TestCase):
             **self.auth_header(self.tenant),
         )
 
-        self.assertEqual(response.status_code, 200, response.json())
+        self.assertEqual(response.status_code, 400, response.json())
+        self.assertIn("cannot be changed", response.json()["error"])
         self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.phone, "+263779123457")
-        self.assertFalse(self.tenant.phone_verified)
+        self.assertEqual(self.tenant.phone, "+263779123456")
+        self.assertTrue(self.tenant.phone_verified)
+
+    def test_notifications_can_be_read_deleted_and_cleared(self):
+        first = Notification.objects.create(
+            user=self.tenant,
+            kind="application",
+            message="New application received",
+            payload={"application_id": 1},
+        )
+        second = Notification.objects.create(
+            user=self.tenant,
+            kind="viewing",
+            message="New viewing request",
+        )
+
+        listed = self.client.get(
+            "/api/notifications/",
+            **self.auth_header(self.tenant),
+        )
+        marked = self.client.post(
+            f"/api/notifications/{first.id}/read/",
+            **self.auth_header(self.tenant),
+        )
+        marked_all = self.client.post(
+            "/api/notifications/read-all/",
+            **self.auth_header(self.tenant),
+        )
+        deleted = self.client.delete(
+            f"/api/notifications/{first.id}/",
+            **self.auth_header(self.tenant),
+        )
+        cleared = self.client.delete(
+            "/api/notifications/",
+            **self.auth_header(self.tenant),
+        )
+
+        self.assertEqual(listed.status_code, 200, listed.json())
+        self.assertEqual(len(listed.json()["results"]), 2)
+        self.assertFalse(listed.json()["results"][0]["is_read"])
+        self.assertEqual(marked.status_code, 200, marked.json())
+        self.assertTrue(marked.json()["is_read"])
+        self.assertEqual(marked_all.status_code, 200, marked_all.json())
+        self.assertFalse(Notification.objects.filter(user=self.tenant, is_read=False).exists())
+        self.assertEqual(deleted.status_code, 200, deleted.json())
+        self.assertEqual(cleared.status_code, 200, cleared.json())
+        self.assertFalse(Notification.objects.filter(user=self.tenant).exists())
+
+    def test_notification_events_are_persisted_for_the_recipient(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            broadcast_to_user(
+                self.tenant.id,
+                "notification.created",
+                {"kind": "application", "application_id": self.property.id},
+            )
+
+        notification = Notification.objects.get(user=self.tenant)
+        self.assertEqual(notification.kind, "application")
+        self.assertEqual(notification.message, "New application received")
+        self.assertEqual(notification.payload["application_id"], self.property.id)
+
+    @override_settings(OTP_DELIVERY_CHANNEL="sms")
+    def test_phone_otp_cannot_replace_existing_phone(self):
+        self.tenant.phone = "+263779123456"
+        self.tenant.phone_verified = True
+        self.tenant.save(update_fields=["phone", "phone_verified"])
+
+        response = self.post_json(
+            "/api/verifications/phone-otp/",
+            {"phone": "+263779123457"},
+            user=self.tenant,
+        )
+
+        self.assertEqual(response.status_code, 400, response.json())
+        self.assertIn("cannot be changed", response.json()["error"])
+        self.assertFalse(PhoneVerificationOTP.objects.filter(user=self.tenant).exists())
 
     def test_property_media_gallery_and_delete_cleanup(self):
         upload = self.client.post(

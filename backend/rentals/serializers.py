@@ -119,8 +119,20 @@ def serialize_viewing(viewing):
     }
 
 
-def serialize_conversation(conversation):
+def serialize_conversation(conversation, viewer=None):
     messages = list(conversation.messages.all())
+    unread_count = 0
+    if viewer and getattr(viewer, "is_authenticated", False):
+        from .chat_services import ensure_message_receipts, is_admin
+        from .models import MessageReceipt
+
+        if not is_admin(viewer):
+            ensure_message_receipts(conversation)
+            unread_count = MessageReceipt.objects.filter(
+                message__conversation_id=conversation.id,
+                user_id=viewer.id,
+                read_at__isnull=True,
+            ).exclude(message__sender_id=viewer.id).count()
     return {
         "id": conversation.id,
         "property_id": conversation.property_id,
@@ -129,6 +141,7 @@ def serialize_conversation(conversation):
         "phone_numbers_revealed": conversation.phone_numbers_revealed,
         "last_message": serialize_message(messages[-1]) if messages else None,
         "updated_at": conversation.updated_at.isoformat(),
+        "unread_count": unread_count,
     }
 
 

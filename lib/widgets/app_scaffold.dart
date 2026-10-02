@@ -19,6 +19,7 @@ class AppScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<Property24State>();
     return Scaffold(
       backgroundColor: AppTheme.bg,
       extendBody: true,
@@ -31,8 +32,8 @@ class AppScaffold extends StatelessWidget {
             initialLocation: index == navigationShell.currentIndex,
           );
         },
-        isLandlord:
-            context.watch<Property24State>().user?.role == AccountRole.landlord,
+        isLandlord: state.user?.role == AccountRole.landlord,
+        unreadMessages: state.unreadMessageCount,
       ),
     );
   }
@@ -43,11 +44,13 @@ class _BottomNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     required this.isLandlord,
+    required this.unreadMessages,
   });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
   final bool isLandlord;
+  final int unreadMessages;
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +69,11 @@ class _BottomNav extends StatelessWidget {
           ];
     final allItems = [
       ...items,
-      _NavItem(icon: CupertinoIcons.chat_bubble, label: 'Messages'),
+      _NavItem(
+        icon: CupertinoIcons.chat_bubble,
+        label: 'Messages',
+        badgeCount: unreadMessages,
+      ),
       _NavItem(icon: CupertinoIcons.person_circle, label: 'Profile'),
     ];
 
@@ -180,12 +187,19 @@ class _BottomNavItem extends StatelessWidget {
                 ),
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    item.icon,
-                    size: selected ? 22 : 21,
-                    color: selected
-                        ? AppTheme.accent
-                        : colorScheme.onSurfaceVariant,
+                  Badge(
+                    isLabelVisible: item.badgeCount > 0,
+                    label: Text(
+                      item.badgeCount > 99 ? '99+' : '${item.badgeCount}',
+                      style: const TextStyle(fontSize: 9),
+                    ),
+                    child: Icon(
+                      item.icon,
+                      size: selected ? 22 : 21,
+                      color: selected
+                          ? AppTheme.accent
+                          : colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -216,8 +230,10 @@ class _NavItem {
   const _NavItem({
     required this.icon,
     required this.label,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final String label;
+  final int badgeCount;
 }

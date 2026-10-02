@@ -41,6 +41,7 @@ from .models import (
     EmailVerificationOTP,
     MediaAsset,
     Message,
+    MessageReceipt,
     PendingRegistrationOTP,
     PropertyHold,
     PhoneVerificationOTP,
@@ -52,6 +53,7 @@ from .models import (
     SavedProperty,
     SecurityAuditEvent,
     SupplierFollow,
+    Notification,
     VerificationRequest,
     Viewing,
 )
@@ -68,6 +70,7 @@ from .chat_services import (
     default_attachment_body,
     delete_chat_message,
     edit_chat_message,
+    ensure_message_receipts,
     list_conversations_for_user,
     mark_conversation_delivered,
     mark_conversation_read,
@@ -466,9 +469,12 @@ def auth_profile(request):
         phone_error = validate_phone_field(phone, required=True)
         if phone_error:
             return json_error(phone_error)
+        phone_lock_error = phone_change_error(user, phone)
+        if phone_lock_error:
+            return json_error(phone_lock_error)
         if User.objects.exclude(pk=user.pk).filter(phone_identity_query(phone)).exists():
             return json_error("An account with this phone number already exists")
-        if user.phone != phone:
+        if normalize_phone(user.phone) != phone:
             user.phone = phone
             user.phone_verified = False
             changed_fields.extend(["phone", "phone_verified"])
@@ -521,6 +527,53 @@ def auth_profile(request):
         if "cover_photo" in changed_fields and user.cover_photo:
             register_media_asset(user, user.cover_photo, scope=MediaAsset.Scope.PROFILE, source_model="user", source_id=user.id, original_name="cover_photo", mime_type="image/jpeg", metadata={"slot": "cover_photo"})
     return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user)})
+
+
+@csrf_exempt
+@require_http_methods(["GET", "DELETE", "OPTIONS"])
+def notifications_collection(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    if request.method == "GET":
+        notifications = Notification.objects.filter(user=acting_user).order_by("-created_at")[:100]
+        return JsonResponse({"results": [serialize_notification(item) for item in notifications]})
+    deleted_count, _ = Notification.objects.filter(user=acting_user).delete()
+    return JsonResponse({"cleared": True, "deleted_count": deleted_count})
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def notifications_mark_all_read(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    updated_count = Notification.objects.filter(user=acting_user, is_read=False).update(is_read=True)
+    return JsonResponse({"marked_read": True, "updated_count": updated_count})
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def notification_mark_read(request, notification_id):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    notification = get_object_or_404(Notification, pk=notification_id, user=acting_user)
+    if not notification.is_read:
+        notification.is_read = True
+        notification.save(update_fields=["is_read"])
+    return JsonResponse(serialize_notification(notification))
+
+
+@csrf_exempt
+@require_http_methods(["DELETE", "OPTIONS"])
+def notification_detail(request, notification_id):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    notification = get_object_or_404(Notification, pk=notification_id, user=acting_user)
+    notification.delete()
+    return JsonResponse({"deleted": True, "notification_id": str(notification_id)})
 
 
 @csrf_exempt
@@ -743,8 +796,12 @@ def landlord_agent_detail(request, agent_id):
         phone_error = validate_phone_field(phone, required=False)
         if phone_error:
             return json_error(phone_error)
-        agent.phone = phone
-        changed_fields.append("phone")
+        phone_lock_error = phone_change_error(agent, phone)
+        if phone_lock_error:
+            return json_error(phone_lock_error)
+        if normalize_phone(agent.phone) != phone:
+            agent.phone = phone
+            changed_fields.append("phone")
     if changed_fields:
         agent.save(update_fields=sorted(set(changed_fields)))
     return JsonResponse(serialize_user(agent))
@@ -1328,6 +1385,9 @@ def verification_phone_otp(request):
     phone_error = validate_phone_field(phone, required=True)
     if phone_error:
         return json_error(phone_error)
+    phone_lock_error = phone_change_error(acting_user, phone)
+    if phone_lock_error:
+        return json_error(phone_lock_error)
     if User.objects.exclude(pk=acting_user.pk).filter(phone_identity_query(phone)).exists():
         return json_error("An account with this phone number already exists")
 
@@ -1392,6 +1452,11 @@ def verification_phone_otp_verify(request):
         challenge.attempts += 1
         challenge.save(update_fields=["attempts"])
         return json_error("Invalid OTP")
+    phone_lock_error = phone_change_error(acting_user, challenge.phone)
+    if phone_lock_error:
+        challenge.status = PhoneVerificationOTP.Status.EXPIRED
+        challenge.save(update_fields=["status", "updated_at"])
+        return json_error(phone_lock_error)
     if User.objects.exclude(pk=acting_user.pk).filter(phone_identity_query(challenge.phone)).exists():
         challenge.status = PhoneVerificationOTP.Status.EXPIRED
         challenge.save(update_fields=["status", "updated_at"])
@@ -1400,7 +1465,7 @@ def verification_phone_otp_verify(request):
     challenge.verified_at = timezone.now()
     challenge.save(update_fields=["status", "verified_at"])
     update_fields = []
-    if acting_user.phone != challenge.phone:
+    if not normalize_phone(acting_user.phone):
         acting_user.phone = challenge.phone
         update_fields.append("phone")
     if not acting_user.phone_verified:
@@ -1471,7 +1536,10 @@ def verifications_collection(request):
     if full_name and user.full_name != full_name:
         user.full_name = full_name
         profile_updates.append("full_name")
-    if phone and user.phone != phone:
+    if phone and normalize_phone(user.phone) != phone:
+        phone_lock_error = phone_change_error(user, phone)
+        if phone_lock_error:
+            return json_error(phone_lock_error)
         if User.objects.exclude(pk=user.pk).filter(phone_identity_query(phone)).exists():
             return json_error("An account with this phone number already exists")
         user.phone = phone
@@ -1669,7 +1737,7 @@ def conversations_collection(request):
 
     if request.method == "GET":
         conversations = list_conversations_for_user(acting_user)
-        return JsonResponse({"results": [serialize_conversation(item) for item in conversations]})
+        return JsonResponse({"results": [serialize_conversation(item, viewer=acting_user) for item in conversations]})
 
     data = request_json(request)
     if data is None:
@@ -1687,7 +1755,7 @@ def conversations_collection(request):
     if created:
         for participant_id in conversation.participants.values_list("id", flat=True):
             broadcast_to_user(participant_id, "notification.created", {"kind": "conversation.created", "conversation_id": conversation.id, "property_id": prop.id})
-    return JsonResponse(serialize_conversation(conversation), status=201 if created else 200)
+    return JsonResponse(serialize_conversation(conversation, viewer=acting_user), status=201 if created else 200)
 
 
 @csrf_exempt
@@ -1740,7 +1808,7 @@ def property_hold(request, property_id):
         "property_id": prop.id,
         "hold_id": hold.id,
         "held_until": hold.expires_at.isoformat(),
-        "conversation": serialize_conversation(conversation),
+        "conversation": serialize_conversation(conversation, viewer=acting_user),
     }, status=201)
 @csrf_exempt
 @require_http_methods(["GET", "PATCH", "OPTIONS"])
@@ -1753,7 +1821,7 @@ def conversation_detail(request, conversation_id):
         return forbidden()
 
     if request.method == "GET":
-        return JsonResponse(serialize_conversation(conversation))
+        return JsonResponse(serialize_conversation(conversation, viewer=acting_user))
 
     data = request_json(request)
     if data is None:
@@ -1763,7 +1831,7 @@ def conversation_detail(request, conversation_id):
     if data.get("phone_numbers_revealed") is not None:
         conversation.phone_numbers_revealed = to_bool(data["phone_numbers_revealed"])
     conversation.save()
-    payload = serialize_conversation(conversation)
+    payload = serialize_conversation(conversation, viewer=acting_user)
     broadcast_to_conversation(conversation.id, "conversation.updated", payload)
     return JsonResponse(payload)
 
@@ -2746,6 +2814,14 @@ def normalize_phone(value):
     return normalized
 
 
+def phone_change_error(user, phone):
+    """Phone numbers are account identifiers after the first one is assigned."""
+    current_phone = normalize_phone(getattr(user, "phone", ""))
+    if current_phone and current_phone != normalize_phone(phone):
+        return "Phone number cannot be changed once it has been set"
+    return ""
+
+
 def phone_lookup_values(phone):
     normalized = normalize_phone(phone)
     if not normalized:
@@ -3185,6 +3261,17 @@ def serialize_user(user):
     }
 
 
+def serialize_notification(notification):
+    return {
+        "id": str(notification.id),
+        "kind": notification.kind,
+        "message": notification.message,
+        "payload": notification.payload,
+        "is_read": notification.is_read,
+        "created_at": notification.created_at.isoformat(),
+    }
+
+
 def account_media_url(user, field_name):
     external_url = getattr(user, f"{field_name}_url", "")
     if external_url:
@@ -3474,8 +3561,16 @@ def serialize_viewing(viewing):
     }
 
 
-def serialize_conversation(conversation):
+def serialize_conversation(conversation, viewer=None):
     messages = list(conversation.messages.all())
+    unread_count = 0
+    if viewer and not is_admin(viewer):
+        ensure_message_receipts(conversation)
+        unread_count = MessageReceipt.objects.filter(
+            message__conversation_id=conversation.id,
+            user_id=viewer.id,
+            read_at__isnull=True,
+        ).exclude(message__sender_id=viewer.id).count()
     return {
         "id": conversation.id,
         "property_id": conversation.property_id,
@@ -3484,6 +3579,7 @@ def serialize_conversation(conversation):
         "phone_numbers_revealed": conversation.phone_numbers_revealed,
         "last_message": serialize_message(messages[-1]) if messages else None,
         "updated_at": conversation.updated_at.isoformat(),
+        "unread_count": unread_count,
     }
 
 

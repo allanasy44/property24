@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 
 import '../models/rental_models.dart';
 import '../routes/app_routes.dart';
+import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
 import '../widgets/metric_tile.dart';
+import 'inbox_screen.dart';
 
 class ActivityScreen extends StatelessWidget {
   const ActivityScreen({super.key});
@@ -200,14 +202,77 @@ class ActivityScreen extends StatelessWidget {
                 for (final item in state.snapshot.conversations.take(5))
                   ListTile(
                     leading: const Icon(CupertinoIcons.chat_bubble),
-                    title: Text(item.title),
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.title,
+                            style: TextStyle(
+                              fontWeight: item.unreadCount > 0
+                                  ? FontWeight.w800
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        if (item.unreadCount > 0)
+                          _ActivityUnreadBadge(count: item.unreadCount),
+                      ],
+                    ),
                     subtitle: Text(item.preview,
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                     trailing: Text(item.updatedAt),
+                    onTap: () => _openConversation(context, state, item),
                   ),
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _openConversation(
+    BuildContext context,
+    Property24State state,
+    ConversationItem conversation,
+  ) {
+    PropertyListing? property;
+    for (final item in state.snapshot.properties) {
+      if (item.id == conversation.propertyId) {
+        property = item;
+        break;
+      }
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ConversationScreen(
+          conversation: conversation,
+          property: property,
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityUnreadBadge extends StatelessWidget {
+  const _ActivityUnreadBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onPrimary,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );
@@ -281,7 +346,6 @@ class _LandlordNotificationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = state.allNotifications;
     return Container(
       height: 48,
       width: 48,
@@ -299,12 +363,13 @@ class _LandlordNotificationButton extends StatelessWidget {
       child: IconButton(
         tooltip: 'Notifications',
         padding: EdgeInsets.zero,
-        onPressed: () => _openLandlordNotifications(context, items),
+        onPressed: () => _openLandlordNotifications(context, state),
         icon: Badge(
-          isLabelVisible: items.isNotEmpty,
+          isLabelVisible: state.unreadNotificationCount > 0,
           backgroundColor: Theme.of(context).colorScheme.primary,
           textColor: Theme.of(context).colorScheme.onPrimary,
-          label: Text('${items.length}', style: const TextStyle(fontSize: 10)),
+          label: Text('${state.unreadNotificationCount}',
+              style: const TextStyle(fontSize: 10)),
           child: Icon(
             CupertinoIcons.bell,
             color: Theme.of(context).colorScheme.onSurface,
@@ -316,8 +381,7 @@ class _LandlordNotificationButton extends StatelessWidget {
   }
 }
 
-void _openLandlordNotifications(
-    BuildContext context, List<String> notifications) {
+void _openLandlordNotifications(BuildContext context, Property24State state) {
   final width = MediaQuery.sizeOf(context).width;
   showGeneralDialog<void>(
     context: context,
@@ -336,7 +400,10 @@ void _openLandlordNotifications(
           child: SizedBox(
             width: width < 560 ? width * 0.92 : 440,
             height: double.infinity,
-            child: _LandlordNotificationPanel(notifications: notifications),
+            child: ListenableBuilder(
+              listenable: state,
+              builder: (_, __) => _LandlordNotificationPanel(state: state),
+            ),
           ),
         ),
       ),
@@ -355,9 +422,9 @@ void _openLandlordNotifications(
 }
 
 class _LandlordNotificationPanel extends StatelessWidget {
-  const _LandlordNotificationPanel({required this.notifications});
+  const _LandlordNotificationPanel({required this.state});
 
-  final List<String> notifications;
+  final Property24State state;
 
   @override
   Widget build(BuildContext context) {
@@ -374,6 +441,32 @@ class _LandlordNotificationPanel extends StatelessWidget {
                     child: Text('Notifications',
                         style: theme.textTheme.titleLarge)),
                 IconButton(
+                  tooltip: 'Mark all as read',
+                  onPressed: state.unreadNotificationCount == 0
+                      ? null
+                      : () async {
+                          try {
+                            await state.markAllNotificationsRead();
+                          } catch (exception) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(userFacingError(exception)),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  icon: const Icon(CupertinoIcons.checkmark_circle),
+                ),
+                IconButton(
+                  tooltip: 'Clear all notifications',
+                  onPressed: state.allNotifications.isEmpty
+                      ? null
+                      : () => _clearAll(context),
+                  icon: const Icon(CupertinoIcons.trash),
+                ),
+                IconButton(
                     tooltip: 'Close notifications',
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(CupertinoIcons.xmark)),
@@ -381,26 +474,126 @@ class _LandlordNotificationPanel extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: notifications.isEmpty
+              child: state.allNotifications.isEmpty
                   ? Center(
                       child: Text('No new notifications',
                           style: theme.textTheme.bodyMedium))
                   : ListView.separated(
-                      itemCount: notifications.length,
+                      itemCount: state.allNotifications.length,
                       separatorBuilder: (_, __) =>
                           Divider(color: theme.colorScheme.outlineVariant),
-                      itemBuilder: (_, index) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(CupertinoIcons.bell,
-                            color: theme.colorScheme.primary),
-                        title: Text(notifications[index]),
-                      ),
+                      itemBuilder: (context, index) {
+                        final notification = state.allNotifications[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            notification.isRead
+                                ? CupertinoIcons.bell
+                                : CupertinoIcons.bell_fill,
+                            color: notification.isRead
+                                ? theme.colorScheme.onSurfaceVariant
+                                : theme.colorScheme.primary,
+                          ),
+                          title: Text(
+                            notification.message,
+                            style: TextStyle(
+                              fontWeight: notification.isRead
+                                  ? FontWeight.w400
+                                  : FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: Text(notification.createdAt),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!notification.isRead)
+                                IconButton(
+                                  tooltip: 'Mark as read',
+                                  onPressed: () => _markAsRead(
+                                    context,
+                                    notification.id,
+                                  ),
+                                  icon: Icon(
+                                    CupertinoIcons.checkmark_circle,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              IconButton(
+                                tooltip: 'Clear notification',
+                                onPressed: () => _clearOne(
+                                  context,
+                                  notification.id,
+                                ),
+                                icon: Icon(
+                                  CupertinoIcons.trash,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _markAsRead(BuildContext context, String notificationId) async {
+    try {
+      await state.markNotificationRead(notificationId);
+    } catch (exception) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearOne(BuildContext context, String notificationId) async {
+    try {
+      await state.clearNotification(notificationId);
+    } catch (exception) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearAll(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear notifications?'),
+        content:
+            const Text('All notifications will be removed from this area.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Clear all'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await state.clearAllNotifications();
+    } catch (exception) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
   }
 }
 

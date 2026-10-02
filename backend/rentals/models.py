@@ -56,6 +56,24 @@ class User(AbstractUser):
         return self.full_name or self.username
 
 
+class Notification(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    kind = models.CharField(max_length=80)
+    message = models.TextField()
+    payload = models.JSONField(default=dict, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "is_read", "-created_at"]),
+            models.Index(fields=["user", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.kind} notification for {self.user_id}"
+
+
 class PendingRegistrationOTP(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

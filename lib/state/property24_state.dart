@@ -42,7 +42,6 @@ class Property24State extends ChangeNotifier {
   final Set<String> savedPropertyIds = <String>{};
   final Set<String> comparisonPropertyIds = <String>{};
   final List<String> smartAlerts = <String>[];
-  final List<String> notifications = <String>[];
 
   int conversationRevision(String conversationId) =>
       _conversationRevisions[conversationId] ?? 0;
@@ -56,30 +55,13 @@ class Property24State extends ChangeNotifier {
 
   int get verifiedProperties =>
       snapshot.properties.where((item) => item.verified).length;
-  List<String> get allNotifications {
-    final items = <String>[
-      ...notifications,
-      for (final item in snapshot.conversations)
-        'Message in ${item.title}: ${item.preview}',
-      for (final item in snapshot.applications)
-        user?.role == AccountRole.landlord
-            ? '${item.applicant} applied for ${item.property}: ${item.status}'
-            : 'Application for ${item.property}: ${item.status}',
-      for (final item in snapshot.viewings)
-        user?.role == AccountRole.landlord
-            ? '${item.tenant} viewing for ${item.property}: ${item.status}'
-            : 'Viewing for ${item.property}: ${item.status}',
-      for (final item in snapshot.verifications)
-        'Identity verification ${item.status.toLowerCase()}: ${item.role}',
-      for (final item in snapshot.calls)
-        '${item.direction} ${item.mode.name} call with ${item.name} about ${item.property}',
-    ];
-    final seen = <String>{};
-    return items
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty && seen.add(item))
-        .toList(growable: false);
-  }
+  List<NotificationItem> get allNotifications => snapshot.notifications;
+  int get unreadNotificationCount =>
+      snapshot.notifications.where((item) => !item.isRead).length;
+  int get unreadMessageCount => snapshot.conversations.fold(
+        0,
+        (total, conversation) => total + conversation.unreadCount,
+      );
 
   List<PropertyListing> get comparedProperties => snapshot.properties
       .where((property) => comparisonPropertyIds.contains(property.id))
@@ -218,7 +200,18 @@ class Property24State extends ChangeNotifier {
           'identity_verification' => 'Identity verification updated',
           _ => kind.isEmpty ? 'New notification' : titleize(kind),
         };
-        addNotification(message.isNotEmpty ? message : fallback);
+        final notificationId = '${payload['notification_id'] ?? ''}'.trim();
+        if (notificationId.isNotEmpty) {
+          addNotification(
+            NotificationItem(
+              id: notificationId,
+              kind: kind.isEmpty ? 'general' : kind,
+              message: message.isNotEmpty ? message : fallback,
+              isRead: false,
+              createdAt: 'Just now',
+            ),
+          );
+        }
       }
       final conversationId =
           payload is Map ? '${payload['conversation_id'] ?? ''}' : '';
@@ -579,7 +572,19 @@ class Property24State extends ChangeNotifier {
     String conversationId,
   ) async {
     final activeToken = _requireToken();
-    return _api.conversationMessages(activeToken, conversationId);
+    final messages =
+        await _api.conversationMessages(activeToken, conversationId);
+    snapshot = snapshot.copyWith(
+      conversations: snapshot.conversations
+          .map(
+            (conversation) => conversation.id == conversationId
+                ? conversation.copyWith(unreadCount: 0)
+                : conversation,
+          )
+          .toList(growable: false),
+    );
+    notifyListeners();
+    return messages;
   }
 
   Future<void> shareLocation(
@@ -681,11 +686,60 @@ class Property24State extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addNotification(String notification) {
-    final value = notification.trim();
-    if (value.isEmpty || notifications.contains(value)) return;
-    notifications.insert(0, value);
-    if (notifications.length > 100) notifications.removeLast();
+  void addNotification(NotificationItem notification) {
+    if (snapshot.notifications.any((item) => item.id == notification.id)) {
+      return;
+    }
+    snapshot = snapshot.copyWith(
+      notifications: [notification, ...snapshot.notifications],
+    );
+    notifyListeners();
+  }
+
+  Future<void> markNotificationRead(String notificationId) async {
+    final activeToken = _requireToken();
+    await _api.markNotificationRead(
+      token: activeToken,
+      notificationId: notificationId,
+    );
+    snapshot = snapshot.copyWith(
+      notifications: snapshot.notifications
+          .map((item) =>
+              item.id == notificationId ? item.copyWith(isRead: true) : item)
+          .toList(growable: false),
+    );
+    notifyListeners();
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    final activeToken = _requireToken();
+    await _api.markAllNotificationsRead(token: activeToken);
+    snapshot = snapshot.copyWith(
+      notifications: snapshot.notifications
+          .map((item) => item.copyWith(isRead: true))
+          .toList(growable: false),
+    );
+    notifyListeners();
+  }
+
+  Future<void> clearNotification(String notificationId) async {
+    final activeToken = _requireToken();
+    await _api.deleteNotification(
+      token: activeToken,
+      notificationId: notificationId,
+    );
+    snapshot = snapshot.copyWith(
+      notifications: snapshot.notifications
+          .where((item) => item.id != notificationId)
+          .toList(growable: false),
+    );
+    notifyListeners();
+  }
+
+  Future<void> clearAllNotifications() async {
+    final activeToken = _requireToken();
+    await _api.clearNotifications(token: activeToken);
+    snapshot = snapshot.copyWith(notifications: const []);
     notifyListeners();
   }
 
@@ -752,6 +806,7 @@ class Property24State extends ChangeNotifier {
       viewings: publicSnapshot.viewings,
       calls: publicSnapshot.calls,
       savedProperties: publicSnapshot.savedProperties,
+      notifications: publicSnapshot.notifications,
     );
   }
 

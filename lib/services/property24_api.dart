@@ -458,6 +458,7 @@ class Property24Api {
       _get('calls/', token: token),
       _get('viewings/', token: token),
       _get('saved-properties/', token: token),
+      _get('notifications/', token: token),
     ]);
 
     return PlatformSnapshot(
@@ -472,7 +473,39 @@ class Property24Api {
       viewings: _results(responses[4]).map(ViewingItem.fromJson).toList(),
       savedProperties:
           _results(responses[5]).map(PropertyListing.fromJson).toList(),
+      notifications:
+          _results(responses[6]).map(NotificationItem.fromJson).toList(),
     );
+  }
+
+  Future<void> markNotificationRead({
+    required String token,
+    required String notificationId,
+  }) async {
+    await _post(
+      'notifications/$notificationId/read/',
+      token: token,
+      body: const {},
+    );
+  }
+
+  Future<void> markAllNotificationsRead({required String token}) async {
+    await _post(
+      'notifications/read-all/',
+      token: token,
+      body: const {},
+    );
+  }
+
+  Future<void> deleteNotification({
+    required String token,
+    required String notificationId,
+  }) async {
+    await _delete('notifications/$notificationId/', token: token);
+  }
+
+  Future<void> clearNotifications({required String token}) async {
+    await _delete('notifications/', token: token);
   }
 
   Future<List<PropertyListing>> searchProperties({
@@ -859,27 +892,5 @@ class Property24Api {
     return (response['results'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .toList();
-  }
-}
-
-extension on PlatformSnapshot {
-  PlatformSnapshot copyWith({
-    List<PropertyListing>? properties,
-    List<ApplicationItem>? applications,
-    List<VerificationItem>? verifications,
-    List<ConversationItem>? conversations,
-    List<ViewingItem>? viewings,
-    List<CallLogItem>? calls,
-    List<PropertyListing>? savedProperties,
-  }) {
-    return PlatformSnapshot(
-      properties: properties ?? this.properties,
-      applications: applications ?? this.applications,
-      verifications: verifications ?? this.verifications,
-      conversations: conversations ?? this.conversations,
-      viewings: viewings ?? this.viewings,
-      calls: calls ?? this.calls,
-      savedProperties: savedProperties ?? this.savedProperties,
-    );
   }
 }

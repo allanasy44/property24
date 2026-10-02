@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'activity_screen.dart';
 
 import '../models/rental_models.dart';
+import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
@@ -339,7 +340,6 @@ class _NotificationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final syncedNotifications = state.allNotifications;
     return Container(
       height: 44,
       width: 44,
@@ -356,16 +356,13 @@ class _NotificationButton extends StatelessWidget {
       ),
       child: IconButton(
         padding: EdgeInsets.zero,
-        onPressed: () => _openNotificationPanel(
-          context,
-          syncedNotifications,
-        ),
+        onPressed: () => _openNotificationPanel(context, state),
         icon: Badge(
-          isLabelVisible: syncedNotifications.isNotEmpty,
+          isLabelVisible: state.unreadNotificationCount > 0,
           backgroundColor: AppTheme.accent,
           textColor: Colors.white,
           label: Text(
-            '${syncedNotifications.length}',
+            '${state.unreadNotificationCount}',
             style: TextStyle(fontSize: 10),
           ),
           child: Icon(
@@ -379,7 +376,7 @@ class _NotificationButton extends StatelessWidget {
   }
 }
 
-void _openNotificationPanel(BuildContext context, List<String> notifications) {
+void _openNotificationPanel(BuildContext context, Property24State state) {
   final width = MediaQuery.sizeOf(context).width;
   showGeneralDialog<void>(
     context: context,
@@ -401,7 +398,10 @@ void _openNotificationPanel(BuildContext context, List<String> notifications) {
             child: SizedBox(
               width: width < 560 ? width * 0.92 : 440,
               height: double.infinity,
-              child: _NotificationPanel(notifications: notifications),
+              child: ListenableBuilder(
+                listenable: state,
+                builder: (_, __) => _NotificationPanel(state: state),
+              ),
             ),
           ),
         ),
@@ -425,9 +425,9 @@ void _openNotificationPanel(BuildContext context, List<String> notifications) {
 }
 
 class _NotificationPanel extends StatelessWidget {
-  const _NotificationPanel({required this.notifications});
+  const _NotificationPanel({required this.state});
 
-  final List<String> notifications;
+  final Property24State state;
 
   @override
   Widget build(BuildContext context) {
@@ -450,6 +450,31 @@ class _NotificationPanel extends StatelessWidget {
                   ),
                 ),
                 IconButton(
+                  tooltip: 'Mark all as read',
+                  onPressed: state.unreadNotificationCount == 0
+                      ? null
+                      : () async {
+                          try {
+                            await state.markAllNotificationsRead();
+                          } catch (exception) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                    content: Text(userFacingError(exception))),
+                              );
+                            }
+                          }
+                        },
+                  icon: Icon(CupertinoIcons.checkmark_circle),
+                ),
+                IconButton(
+                  tooltip: 'Clear all notifications',
+                  onPressed: state.allNotifications.isEmpty
+                      ? null
+                      : () => _clearAll(context),
+                  icon: Icon(CupertinoIcons.trash),
+                ),
+                IconButton(
                   tooltip: 'Close notifications',
                   onPressed: () => Navigator.of(context).pop(),
                   icon: Icon(CupertinoIcons.xmark),
@@ -458,7 +483,7 @@ class _NotificationPanel extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: notifications.isEmpty
+              child: state.allNotifications.isEmpty
                   ? Center(
                       child: Text(
                         'No new notifications',
@@ -466,23 +491,125 @@ class _NotificationPanel extends StatelessWidget {
                       ),
                     )
                   : ListView.separated(
-                      itemCount: notifications.length,
+                      itemCount: state.allNotifications.length,
                       separatorBuilder: (_, __) =>
                           Divider(color: AppTheme.border),
-                      itemBuilder: (context, index) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                          CupertinoIcons.bell,
-                          color: AppTheme.accent,
-                        ),
-                        title: Text(notifications[index]),
-                      ),
+                      itemBuilder: (context, index) {
+                        final notification = state.allNotifications[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            notification.isRead
+                                ? CupertinoIcons.bell
+                                : CupertinoIcons.bell_fill,
+                            color: notification.isRead
+                                ? AppTheme.textMuted
+                                : AppTheme.accent,
+                          ),
+                          title: Text(
+                            notification.message,
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontWeight: notification.isRead
+                                  ? FontWeight.w400
+                                  : FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: Text(
+                            notification.createdAt,
+                            style: TextStyle(color: AppTheme.textMuted),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!notification.isRead)
+                                IconButton(
+                                  tooltip: 'Mark as read',
+                                  onPressed: () => _markAsRead(
+                                    context,
+                                    notification.id,
+                                  ),
+                                  icon: Icon(
+                                    CupertinoIcons.checkmark_circle,
+                                    color: AppTheme.accent,
+                                  ),
+                                ),
+                              IconButton(
+                                tooltip: 'Clear notification',
+                                onPressed: () => _clearOne(
+                                  context,
+                                  notification.id,
+                                ),
+                                icon: Icon(
+                                  CupertinoIcons.trash,
+                                  color: AppTheme.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _markAsRead(BuildContext context, String notificationId) async {
+    try {
+      await state.markNotificationRead(notificationId);
+    } catch (exception) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearOne(BuildContext context, String notificationId) async {
+    try {
+      await state.clearNotification(notificationId);
+    } catch (exception) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearAll(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear notifications?'),
+        content:
+            const Text('All notifications will be removed from this area.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Clear all'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await state.clearAllNotifications();
+    } catch (exception) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
   }
 }
 

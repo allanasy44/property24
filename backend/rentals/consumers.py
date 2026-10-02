@@ -19,6 +19,7 @@ from .chat_services import (
     touch_user_presence,
     user_conversation_ids,
     public_group_name,
+    broadcast_to_user,
     user_group_name,
 )
 from .models import CallSession, SecurityAuditEvent
@@ -124,6 +125,20 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         payload["client_id"] = str(content.get("client_id") or "")[:80]
         await self.audit("message_created", metadata={"conversation_id": conversation.id, "message_id": message.id})
         await self.channel_layer.group_send(conversation_group_name(conversation.id), {"type": "chat.event", "event": "message.created", "payload": payload})
+        participant_ids = await database_sync_to_async(list)(
+            conversation.participants.exclude(pk=self.user.id).values_list("id", flat=True)
+        )
+        for participant_id in participant_ids:
+            await database_sync_to_async(broadcast_to_user)(
+                participant_id,
+                "notification.created",
+                {
+                    "kind": "message",
+                    "conversation_id": conversation.id,
+                    "message_id": message.id,
+                    "message": f"New message in {conversation.title or 'your conversation'}",
+                },
+            )
         await database_sync_to_async(send_chat_message_push)(message)
 
     async def handle_typing(self, conversation, content):
@@ -176,6 +191,20 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         payload = await database_sync_to_async(serialize_call_session)(call)
         await self.audit("call_started", metadata={"conversation_id": conversation.id, "call_id": call.id, "mode": call.mode})
         await self.channel_layer.group_send(conversation_group_name(conversation.id), {"type": "chat.event", "event": "call.started", "payload": payload})
+        participant_ids = await database_sync_to_async(list)(
+            conversation.participants.exclude(pk=self.user.id).values_list("id", flat=True)
+        )
+        for participant_id in participant_ids:
+            await database_sync_to_async(broadcast_to_user)(
+                participant_id,
+                "notification.created",
+                {
+                    "kind": "call",
+                    "conversation_id": conversation.id,
+                    "call_id": call.id,
+                    "message": f"Incoming {call.mode} call from {self.user}",
+                },
+            )
         await database_sync_to_async(send_call_push)(call)
 
     async def handle_call_signal(self, conversation, content):

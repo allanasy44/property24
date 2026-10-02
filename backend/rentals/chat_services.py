@@ -11,7 +11,7 @@ from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import CallSession, ChatBlock, ChatReport, Conversation, Message, MessageReceipt, PushDevice, SecurityAuditEvent
+from .models import CallSession, ChatBlock, ChatReport, Conversation, Message, MessageReceipt, Notification, PushDevice, SecurityAuditEvent
 
 logger = logging.getLogger(__name__)
 
@@ -350,12 +350,50 @@ def broadcast_to_conversation(conversation_id, event_type, payload):
 
 
 def broadcast_to_user(user_id, event_type, payload):
-    _broadcast_group(
-        user_group_name(user_id),
-        event_type,
-        payload,
-        context={"user_id": user_id},
-    )
+    if event_type != "notification.created":
+        _broadcast_group(
+            user_group_name(user_id),
+            event_type,
+            payload,
+            context={"user_id": user_id},
+        )
+        return
+
+    data = dict(payload or {})
+
+    def persist_and_dispatch():
+        notification = Notification.objects.create(
+            user_id=user_id,
+            kind=str(data.get("kind") or "general")[:80],
+            message=notification_message(data),
+            payload=data,
+        )
+        event_payload = {**data, "notification_id": str(notification.pk)}
+        _broadcast_group(
+            user_group_name(user_id),
+            event_type,
+            event_payload,
+            context={"user_id": user_id},
+        )
+
+    _dispatch_realtime(persist_and_dispatch)
+
+
+def notification_message(payload):
+    message = str(payload.get("message") or "").strip()
+    if message:
+        return message
+    messages = {
+        "application": "New application received",
+        "application.updated": "Application status updated",
+        "viewing": "New viewing request",
+        "viewing.updated": "Viewing status updated",
+        "conversation.created": "New conversation",
+        "property.hold": "Property hold updated",
+        "identity_verification": "Identity verification updated",
+    }
+    kind = str(payload.get("kind") or "").strip()
+    return messages.get(kind, kind.replace(".", " ").replace("_", " ").title() or "New notification")
 
 
 def broadcast_to_public(event_type, payload):

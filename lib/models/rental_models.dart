@@ -745,6 +745,7 @@ class ConversationItem {
     required this.updatedAt,
     required this.phoneNumbersRevealed,
     required this.participants,
+    required this.unreadCount,
   });
 
   factory ConversationItem.fromJson(Map<String, dynamic> json) {
@@ -768,6 +769,7 @@ class ConversationItem {
       updatedAt: localDate(json['updated_at']),
       phoneNumbersRevealed: json['phone_numbers_revealed'] == true,
       participants: participants,
+      unreadCount: int.tryParse('${json['unread_count'] ?? 0}') ?? 0,
     );
   }
 
@@ -778,6 +780,20 @@ class ConversationItem {
   final String updatedAt;
   final bool phoneNumbersRevealed;
   final List<AccountUser> participants;
+  final int unreadCount;
+
+  ConversationItem copyWith({int? unreadCount}) {
+    return ConversationItem(
+      id: id,
+      propertyId: propertyId,
+      title: title,
+      preview: preview,
+      updatedAt: updatedAt,
+      phoneNumbersRevealed: phoneNumbersRevealed,
+      participants: participants,
+      unreadCount: unreadCount ?? this.unreadCount,
+    );
+  }
 }
 
 enum CallMode { voice, video }
@@ -817,6 +833,42 @@ class CallLogItem {
   final String status;
 }
 
+class NotificationItem {
+  const NotificationItem({
+    required this.id,
+    required this.kind,
+    required this.message,
+    required this.isRead,
+    required this.createdAt,
+  });
+
+  factory NotificationItem.fromJson(Map<String, dynamic> json) {
+    return NotificationItem(
+      id: textValue(json, 'id'),
+      kind: textValue(json, 'kind', 'general'),
+      message: textValue(json, 'message', 'New notification'),
+      isRead: json['is_read'] == true,
+      createdAt: localDate(json['created_at'], 'Just now'),
+    );
+  }
+
+  final String id;
+  final String kind;
+  final String message;
+  final bool isRead;
+  final String createdAt;
+
+  NotificationItem copyWith({bool? isRead}) {
+    return NotificationItem(
+      id: id,
+      kind: kind,
+      message: message,
+      isRead: isRead ?? this.isRead,
+      createdAt: createdAt,
+    );
+  }
+}
+
 class PlatformSnapshot {
   const PlatformSnapshot({
     required this.properties,
@@ -826,6 +878,7 @@ class PlatformSnapshot {
     required this.viewings,
     required this.calls,
     required this.savedProperties,
+    required this.notifications,
   });
 
   factory PlatformSnapshot.empty() {
@@ -837,6 +890,7 @@ class PlatformSnapshot {
       viewings: [],
       calls: [],
       savedProperties: [],
+      notifications: [],
     );
   }
 
@@ -847,4 +901,27 @@ class PlatformSnapshot {
   final List<ViewingItem> viewings;
   final List<CallLogItem> calls;
   final List<PropertyListing> savedProperties;
+  final List<NotificationItem> notifications;
+
+  PlatformSnapshot copyWith({
+    List<PropertyListing>? properties,
+    List<ApplicationItem>? applications,
+    List<VerificationItem>? verifications,
+    List<ConversationItem>? conversations,
+    List<ViewingItem>? viewings,
+    List<CallLogItem>? calls,
+    List<PropertyListing>? savedProperties,
+    List<NotificationItem>? notifications,
+  }) {
+    return PlatformSnapshot(
+      properties: properties ?? this.properties,
+      applications: applications ?? this.applications,
+      verifications: verifications ?? this.verifications,
+      conversations: conversations ?? this.conversations,
+      viewings: viewings ?? this.viewings,
+      calls: calls ?? this.calls,
+      savedProperties: savedProperties ?? this.savedProperties,
+      notifications: notifications ?? this.notifications,
+    );
+  }
 }
