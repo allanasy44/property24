@@ -14,10 +14,12 @@ import '../theme/app_theme.dart';
 class AiSearchScreen extends StatefulWidget {
   const AiSearchScreen({
     this.initialQuery = '',
+    this.searchScope = 'discover',
     super.key,
   });
 
   final String initialQuery;
+  final String searchScope;
 
   @override
   State<AiSearchScreen> createState() => _AiSearchScreenState();
@@ -129,8 +131,10 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
       _error = null;
     });
     try {
-      final response =
-          await context.read<Property24State>().searchWithAi(query);
+      final response = await context.read<Property24State>().searchWithAi(
+            query,
+            scope: widget.searchScope,
+          );
       if (!mounted) return;
       setState(() => _response = response);
     } catch (exception) {
@@ -172,16 +176,70 @@ class _SearchResults extends StatelessWidget {
                 color: AppTheme.textSecondary, fontSize: 13, height: 1.4)),
         const SizedBox(height: 14),
         for (final item in result.results)
-          PropertyCard(
-            property: item.property,
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => PropertyDetailScreen(property: item.property))),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              PropertyCard(
+                property: item.property,
+                trailing: _MatchBadge(score: item.score),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => PropertyDetailScreen(
+                      property: item.property,
+                    ),
+                  ),
+                ),
+              ),
+              if (item.reasons.isNotEmpty)
+                ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                  childrenPadding: const EdgeInsets.only(bottom: 12),
+                  title: const Text('Why this match?'),
+                  children: [
+                    for (final reason in item.reasons)
+                      ListTile(
+                        dense: true,
+                        leading: Icon(
+                          CupertinoIcons.checkmark_circle_fill,
+                          color: AppTheme.accent,
+                          size: 18,
+                        ),
+                        title: Text(reason),
+                      ),
+                  ],
+                ),
+            ],
           ),
         if (result.results.isEmpty)
           const Padding(
               padding: EdgeInsets.only(top: 28),
               child: Center(child: Text('No matching live listings yet.'))),
       ],
+    );
+  }
+}
+
+class _MatchBadge extends StatelessWidget {
+  const _MatchBadge({required this.score});
+
+  final int score;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withAlpha(24),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        '$score% match',
+        style: TextStyle(
+          color: AppTheme.accent,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 }

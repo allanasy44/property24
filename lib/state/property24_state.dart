@@ -461,8 +461,15 @@ class Property24State extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<AiSearchResponse> searchWithAi(String query) {
-    return _api.aiPropertySearch(token: _token, query: query.trim());
+  Future<AiSearchResponse> searchWithAi(
+    String query, {
+    String scope = 'discover',
+  }) {
+    return _api.aiPropertySearch(
+      token: _token,
+      query: query.trim(),
+      scope: scope,
+    );
   }
 
   Future<PropertyListing> saveProperty(PropertyDraft draft,

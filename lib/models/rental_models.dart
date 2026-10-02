@@ -407,6 +407,7 @@ class PropertyListing {
   String get moveInTotalLabel => money(moveInTotal);
 
   int get trustScore {
+    if (backendTrustScore != null) return backendTrustScore!.clamp(0, 100);
     var score = 48;
     if (verified) score += 18;
     if (supplier?.verified == true) score += 12;

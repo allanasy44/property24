@@ -20,12 +20,19 @@ class ListingsScreen extends StatefulWidget {
 
 class _ListingsScreenState extends State<ListingsScreen> {
   String _query = '';
+  final TextEditingController _searchController = TextEditingController();
 
   static const _primary = AppTheme.accent;
   static Color get _primarySoft => AppTheme.bgSurface;
   static Color get _searchFill => AppTheme.bgSurface;
   static Color get _textDark => AppTheme.textPrimary;
   static Color get _textMuted => AppTheme.textMuted;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +49,9 @@ class _ListingsScreenState extends State<ListingsScreen> {
         property.rentLabel,
         property.parking,
         property.waterAvailability,
+        property.bedrooms.toString(),
+        property.borehole ? 'borehole' : '',
+        property.solarPower ? 'solar' : '',
       ].join(' ').toLowerCase();
       return _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
     }).toList();
@@ -117,46 +127,66 @@ class _ListingsScreenState extends State<ListingsScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    InkWell(
-                      onTap: _openAiSearch,
-                      borderRadius: BorderRadius.circular(28),
-                      child: Container(
-                        height: 50,
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                        decoration: BoxDecoration(
-                          color: _searchFill,
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(CupertinoIcons.search,
-                                color: _textMuted, size: 20),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _query.isEmpty ? '' : _query,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color:
-                                      _query.isEmpty ? _textMuted : _textDark,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: _searchFill,
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            child: TextField(
+                              controller: _searchController,
+                              onChanged: (value) =>
+                                  setState(() => _query = value),
+                              textInputAction: TextInputAction.search,
+                              style: TextStyle(
+                                color: _textDark,
+                                fontSize: 13.5,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'Search your listings',
+                                hintStyle: TextStyle(
+                                  color: _textMuted,
                                   fontSize: 13.5,
+                                ),
+                                prefixIcon: Icon(
+                                  CupertinoIcons.search,
+                                  color: _textMuted,
+                                  size: 20,
+                                ),
+                                suffixIcon: _query.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        tooltip: 'Clear search',
+                                        onPressed: _searchController.clear,
+                                        icon: Icon(
+                                          CupertinoIcons.xmark,
+                                          color: _textMuted,
+                                          size: 18,
+                                        ),
+                                      ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 15,
                                 ),
                               ),
                             ),
-                            if (_query.isNotEmpty)
-                              IconButton(
-                                tooltip: 'Clear search',
-                                onPressed: () => setState(() => _query = ''),
-                                icon: Icon(
-                                  CupertinoIcons.xmark,
-                                  color: _textMuted,
-                                  size: 18,
-                                ),
-                              ),
-                          ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'AI property matching',
+                          onPressed: _openAiSearch,
+                          style: IconButton.styleFrom(
+                            backgroundColor: _primary,
+                            foregroundColor: Colors.white,
+                            fixedSize: const Size.square(50),
+                          ),
+                          icon: const Icon(CupertinoIcons.lightbulb),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 18),
                   ],
@@ -221,10 +251,14 @@ class _ListingsScreenState extends State<ListingsScreen> {
     final query = await Navigator.of(context).push<String>(
       MaterialPageRoute<String>(
         fullscreenDialog: true,
-        builder: (_) => AiSearchScreen(initialQuery: _query),
+        builder: (_) => AiSearchScreen(
+          initialQuery: _query,
+          searchScope: 'listings',
+        ),
       ),
     );
     if (!mounted || query == null) return;
+    _searchController.text = query;
     setState(() => _query = query);
   }
 

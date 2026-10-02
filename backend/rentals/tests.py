@@ -1345,6 +1345,32 @@ class RentalApiTests(TestCase):
         self.assertEqual(video_response.status_code, 201)
         self.assertEqual(save_response.json()["saved_count"], 1)
 
+    def test_ai_search_extracts_structured_preferences_and_explains_matches(self):
+        self.property.description = "Quiet home near town with reliable water and secure parking."
+        self.property.water_availability = "Reliable municipal water"
+        self.property.parking = "Covered parking"
+        self.property.borehole = True
+        self.property.save(update_fields=["description", "water_availability", "parking", "borehole"])
+
+        response = self.post_json(
+            "/api/ai/property-search/",
+            {
+                "query": "I want a two bedroom house around $450 in a quiet area with reliable water, parking and not too far from town.",
+                "scope": "discover",
+            },
+        )
+        intent = response.json()["intent"]
+
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertEqual(intent["bedrooms_min"], 2)
+        self.assertEqual(intent["budget_max"], "450")
+        self.assertTrue(intent["water_reliability"])
+        self.assertTrue(intent["parking"])
+        self.assertTrue(intent["quiet_area"])
+        self.assertEqual(intent["distance_to_town"], "short")
+        self.assertTrue(response.json()["results"])
+        self.assertTrue(response.json()["results"][0]["match_reasons"])
+
     def test_landlord_can_assign_agent_when_creating_listing(self):
         response = self.post_json(
             "/api/properties/",

@@ -531,11 +531,12 @@ class Property24Api {
   Future<AiSearchResponse> aiPropertySearch({
     String? token,
     required String query,
+    String scope = 'discover',
   }) async {
     final body = await _post(
       'ai/property-search/',
       token: token,
-      body: {'query': query},
+      body: {'query': query, 'scope': scope},
     );
     return AiSearchResponse.fromJson(body);
   }

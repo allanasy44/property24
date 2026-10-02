@@ -11,7 +11,6 @@ import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
 import '../widgets/osm_map_preview.dart';
-import 'ai_search_screen.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -22,6 +21,13 @@ class InboxScreen extends StatefulWidget {
 
 class _InboxScreenState extends State<InboxScreen> {
   String _query = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,49 +64,44 @@ class _InboxScreenState extends State<InboxScreen> {
               ],
             ),
             const SizedBox(height: 14),
-            InkWell(
-              onTap: _openAiSearch,
-              borderRadius: BorderRadius.circular(28),
-              child: Container(
-                height: 50,
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                decoration: BoxDecoration(
-                  color: AppTheme.bgSurface,
-                  borderRadius: BorderRadius.circular(28),
+            Container(
+              height: 50,
+              decoration: BoxDecoration(
+                color: AppTheme.bgSurface,
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (value) => setState(() => _query = value),
+                textInputAction: TextInputAction.search,
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13.5,
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      CupertinoIcons.search,
-                      color: AppTheme.textMuted,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _query.isEmpty ? '' : _query,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: _query.isEmpty
-                              ? AppTheme.textMuted
-                              : AppTheme.textPrimary,
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w400,
+                decoration: InputDecoration(
+                  hintText: 'Search people, properties, or messages',
+                  hintStyle: TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 13.5,
+                  ),
+                  prefixIcon: Icon(
+                    CupertinoIcons.search,
+                    color: AppTheme.textMuted,
+                    size: 20,
+                  ),
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear search',
+                          onPressed: _searchController.clear,
+                          icon: Icon(
+                            CupertinoIcons.xmark,
+                            color: AppTheme.textMuted,
+                            size: 18,
+                          ),
                         ),
-                      ),
-                    ),
-                    if (_query.isNotEmpty)
-                      IconButton(
-                        tooltip: 'Clear search',
-                        onPressed: () => setState(() => _query = ''),
-                        icon: Icon(
-                          CupertinoIcons.xmark,
-                          color: AppTheme.textMuted,
-                          size: 18,
-                        ),
-                      ),
-                  ],
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 15),
                 ),
               ),
             ),
@@ -140,17 +141,6 @@ class _InboxScreenState extends State<InboxScreen> {
       if (property.id == conversation.propertyId) return property;
     }
     return null;
-  }
-
-  Future<void> _openAiSearch() async {
-    final query = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        fullscreenDialog: true,
-        builder: (_) => AiSearchScreen(initialQuery: _query),
-      ),
-    );
-    if (!mounted || query == null) return;
-    setState(() => _query = query);
   }
 }
 

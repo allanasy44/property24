@@ -225,8 +225,24 @@ def parse_search_intent(query):
     land_query = bool(re.search(r"\b(land|stand|stands|plot|residential stand|farm)\b", text))
     sale_query = bool(re.search(r"\b(buy|sale|sell|buying|purchase|for sale)\b", text))
     intent = "sale" if sale_query or land_query else "rent"
-    bedrooms = re.search(r"(\d+)\s*(?:bed|beds|bedroom|bedrooms)", text)
-    budget = re.search(r"(?:under|below|less than|up to|max(?:imum)?)[^0-9]{0,8}([0-9][0-9,]*(?:\.[0-9]+)?)", text)
+    bedrooms = re.search(
+        r"(\d+|one|two|three|four|five)\s*(?:bed|beds|bedroom|bedrooms)",
+        text,
+    )
+    bedroom_value = bedrooms.group(1) if bedrooms else None
+    bedroom_value = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+    }.get(bedroom_value, bedroom_value)
+    budget = re.search(
+        r"(?:under|below|less than|up to|max(?:imum)?|around|about|budget(?: of)?)\s*\$?\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
+        text,
+    )
+    if budget is None:
+        budget = re.search(r"\$\s*([0-9][0-9,]*(?:\.[0-9]+)?)", text)
     size = re.search(r"(?:at least|minimum|min)[^0-9]{0,8}([0-9][0-9,]*(?:\.[0-9]+)?)\s*(sqm|m2|square metres?|hectares?|ha|acres?)", text)
     stands = re.search(r"(\d+)\s+(?:[a-z]+\s+){0,3}(?:stands?|plots?)", text)
     property_type = "land" if land_query else None
@@ -251,6 +267,7 @@ def parse_search_intent(query):
         "serviced": ("serviced", "fully serviced"),
         "electricity": ("electricity", "zesa", "power lines"),
         "water": ("water", "municipal water"),
+        "parking": ("parking", "garage", "carport"),
     }
     for feature, terms in feature_terms.items():
         if any(term in text for term in terms):
@@ -260,13 +277,20 @@ def parse_search_intent(query):
         "query": str(query or "").strip(),
         "intent": intent,
         "city": city,
-        "bedrooms_min": int(bedrooms.group(1)) if bedrooms else None,
+        "bedrooms_min": int(bedroom_value) if bedroom_value else None,
         "budget_max": str(budget.group(1)).replace(",", "") if budget else None,
         "land_size_min": str(size.group(1)).replace(",", "") if size else None,
         "land_size_unit": size.group(2).lower() if size else None,
         "stands_min": int(stands.group(1)) if stands else None,
         "property_type": property_type,
         "features": features,
+        "water_reliability": bool(re.search(r"\b(reliable|reliability|constant|consistent|uninterrupted)\s+water\b", text))
+        or "borehole" in text,
+        "parking": bool(re.search(r"\b(parking|garage|carport)\b", text)),
+        "quiet_area": bool(re.search(r"\b(quiet|peaceful|calm|low traffic|quiet area)\b", text)),
+        "distance_to_town": "short"
+        if re.search(r"\b(near|nearby|close to|not (?:too )?far from|walking distance|minutes from)\s+(town|the cbd|cbd|city centre|city center)\b", text)
+        else None,
         "tokens": tokens[:32],
     }
 
@@ -341,6 +365,43 @@ def rank_property_candidates(query, properties, limit=20):
         if intent.get("bedrooms_min") and prop.bedrooms >= intent["bedrooms_min"]:
             rules += 12
             reasons.append("meets your bedroom requirement")
+        if intent.get("budget_max"):
+            budget = as_decimal(intent["budget_max"])
+            if budget and prop.monthly_rent <= budget:
+                rules += 15
+                reasons.append(f"fits your budget of ${budget.normalize()}")
+            elif budget:
+                rules -= 14
+                reasons.append("is above your stated budget")
+        if intent.get("parking"):
+            has_parking = bool(str(prop.parking or "").strip()) and str(prop.parking).lower() not in {"none", "no", "n/a"}
+            if has_parking:
+                rules += 10
+                reasons.append("parking is listed")
+            else:
+                rules -= 8
+                reasons.append("parking is not confirmed")
+        if intent.get("water_reliability"):
+            water_text = f"{prop.water_availability} {prop.description}".lower()
+            has_reliable_water = prop.borehole or getattr(prop, "land_water_available", False) or any(
+                term in water_text for term in ("reliable", "constant", "consistent", "municipal", "available")
+            )
+            if has_reliable_water:
+                rules += 10
+                reasons.append("water availability is supported")
+            else:
+                rules -= 7
+                reasons.append("water reliability is not confirmed")
+        if intent.get("quiet_area"):
+            location_text = f"{prop.title} {prop.description} {prop.suburb} {prop.address}".lower()
+            if any(term in location_text for term in ("quiet", "peaceful", "calm", "low traffic", "cul-de-sac")):
+                rules += 8
+                reasons.append("quiet-area language is present")
+        if intent.get("distance_to_town") == "short":
+            location_text = f"{prop.title} {prop.description} {prop.suburb} {prop.address}".lower()
+            if any(term in location_text for term in ("near cbd", "near town", "close to town", "minutes from", "walking distance")):
+                rules += 8
+                reasons.append("short town/CBD distance is described")
         for feature in intent["features"]:
             if feature == "furnished" and prop.furnished:
                 rules += 8
@@ -380,6 +441,15 @@ def search_explanation(query, intent, ranked):
         filters.append(f"{intent['bedrooms_min']}+ bedrooms")
     if intent.get("budget_max"):
         filters.append(f"up to {intent['budget_max']}")
+    requested = []
+    if intent.get("water_reliability"):
+        requested.append("reliable water")
+    if intent.get("parking"):
+        requested.append("parking")
+    if intent.get("quiet_area"):
+        requested.append("a quiet area")
+    if requested:
+        filters.append(" and ".join(requested))
     detail = ", ".join(filters) or "your description"
     return f"I found {len(ranked)} live listing(s) matching {detail}. The strongest match is {top}."
 

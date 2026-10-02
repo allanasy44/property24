@@ -22,6 +22,7 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
   String _query = '';
+  final TextEditingController _searchController = TextEditingController();
   String _type = 'Popular';
   bool _mapMode = false;
 
@@ -32,6 +33,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   static Color get _textMuted => AppTheme.textMuted;
 
   static const _types = ['Popular', 'Nearby', 'Recommended'];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +54,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         property.city,
         property.suburb,
         property.propertyType,
+        property.description,
+        property.rentLabel,
+        property.waterAvailability,
+        property.parking,
+        '${property.bedrooms} bedrooms',
+        property.borehole ? 'borehole' : '',
+        property.solarPower ? 'solar' : '',
       ].join(' ').toLowerCase();
       final matchesQuery =
           _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
@@ -105,53 +119,63 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: InkWell(
-                            onTap: _openAiSearch,
-                            borderRadius: BorderRadius.circular(28),
-                            child: Container(
-                              height: 50,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 18),
-                              decoration: BoxDecoration(
-                                color: _searchFill,
-                                borderRadius: BorderRadius.circular(28),
+                          child: Container(
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: _searchFill,
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            child: TextField(
+                              controller: _searchController,
+                              onChanged: (value) =>
+                                  setState(() => _query = value),
+                              textInputAction: TextInputAction.search,
+                              style: TextStyle(
+                                color: _textDark,
+                                fontSize: 13.5,
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(CupertinoIcons.search,
-                                      color: _textMuted, size: 20),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      _query.isEmpty ? '' : _query,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: _query.isEmpty
-                                            ? _textMuted
-                                            : _textDark,
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w400,
+                              decoration: InputDecoration(
+                                hintText: 'Search homes, suburbs, or types',
+                                hintStyle: TextStyle(
+                                  color: _textMuted,
+                                  fontSize: 13.5,
+                                ),
+                                prefixIcon: Icon(
+                                  CupertinoIcons.search,
+                                  color: _textMuted,
+                                  size: 20,
+                                ),
+                                suffixIcon: _query.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        tooltip: 'Clear search',
+                                        onPressed: _searchController.clear,
+                                        icon: Icon(
+                                          CupertinoIcons.xmark,
+                                          color: _textMuted,
+                                          size: 18,
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  if (_query.isNotEmpty)
-                                    IconButton(
-                                      tooltip: 'Clear search',
-                                      onPressed: () =>
-                                          setState(() => _query = ''),
-                                      icon: Icon(
-                                        CupertinoIcons.xmark,
-                                        color: _textMuted,
-                                        size: 18,
-                                      ),
-                                    ),
-                                ],
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 15,
+                                ),
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 10),
+                        IconButton(
+                          tooltip: 'AI property matching',
+                          onPressed: _openAiSearch,
+                          style: IconButton.styleFrom(
+                            backgroundColor: _primary,
+                            foregroundColor: Colors.white,
+                            fixedSize: const Size.square(50),
+                          ),
+                          icon: const Icon(CupertinoIcons.lightbulb),
+                        ),
+                        const SizedBox(width: 8),
                         InkWell(
                           borderRadius: BorderRadius.circular(28),
                           onTap: () => _showTrustCenter(context, state),
@@ -280,10 +304,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final query = await Navigator.of(context).push<String>(
       MaterialPageRoute<String>(
         fullscreenDialog: true,
-        builder: (_) => AiSearchScreen(initialQuery: _query),
+        builder: (_) => AiSearchScreen(
+          initialQuery: _query,
+          searchScope: 'discover',
+        ),
       ),
     );
     if (!mounted || query == null) return;
+    _searchController.text = query;
     setState(() => _query = query);
   }
 

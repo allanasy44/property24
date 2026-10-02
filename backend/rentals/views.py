@@ -3714,10 +3714,24 @@ def ai_property_search(request):
     query = str(data.get("query") or "").strip()
     if not query:
         return json_error("query is required")
+    scope = str(data.get("scope") or "discover").strip().lower()
     intent = parse_search_intent(query)
-    properties = public_listings(
-        Property.objects.select_related("owner", "agent").prefetch_related("photos", "videos")
-    )
+    base_properties = Property.objects.select_related("owner", "agent").prefetch_related("photos", "videos")
+    if scope in {"listings", "mine"}:
+        acting_user, auth_response = require_authenticated(request)
+        if auth_response:
+            return auth_response
+        if acting_user.role not in {User.Roles.LANDLORD, User.Roles.AGENT, User.Roles.ADMIN}:
+            return forbidden()
+        properties = (
+            user_properties(acting_user)
+            if acting_user.role != User.Roles.ADMIN
+            else base_properties
+        ).select_related("owner", "agent").prefetch_related("photos", "videos")
+    elif scope == "discover":
+        properties = public_listings(base_properties)
+    else:
+        return json_error("Unsupported search scope")
     properties = properties.filter(
         listing_status=Property.ListingStatus.VERIFIED,
         owner__is_verified=True,
@@ -3760,7 +3774,13 @@ def ai_property_search(request):
         elif feature == "electricity":
             properties = properties.filter(electricity_available=True)
         elif feature == "water":
-            properties = properties.filter(land_water_available=True)
+            properties = properties.filter(
+                Q(land_water_available=True)
+                | Q(borehole=True)
+                | Q(water_availability__icontains="available")
+                | Q(water_availability__icontains="reliable")
+                | Q(water_availability__icontains="municipal")
+            )
     candidates = list(properties.order_by("-updated_at")[:250])
     intent, ranked = rank_property_candidates(query, candidates)
     results = []
