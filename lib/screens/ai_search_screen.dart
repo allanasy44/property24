@@ -26,9 +26,6 @@ class AiSearchScreen extends StatefulWidget {
 }
 
 class _AiSearchScreenState extends State<AiSearchScreen> {
-  static Color get _bg => AppTheme.bg;
-  static Color get _panel => AppTheme.bgCard;
-  static Color get _panelBorder => AppTheme.borderMid;
   static const _accent = AppTheme.accent;
   AiSearchResponse? _response;
   bool _searching = false;
@@ -68,49 +65,71 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
-        statusBarColor: _bg,
-        systemNavigationBarColor: _bg,
+        statusBarColor: theme.scaffoldBackgroundColor,
+        systemNavigationBarColor: theme.scaffoldBackgroundColor,
         statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
         systemNavigationBarIconBrightness:
             isDark ? Brightness.light : Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: _bg,
+        backgroundColor: theme.scaffoldBackgroundColor,
         resizeToAvoidBottomInset: true,
-        body: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [_panel, AppTheme.bg],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: 'Back',
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(CupertinoIcons.chevron_left),
           ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SearchHeader(onBack: () => Navigator.pop(context)),
-                  const SizedBox(height: 18),
-                  _PromptBox(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    hasText: _hasText,
-                    onClear: _controller.clear,
-                    onSubmit: _submit,
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: _SearchResults(
-                      response: _response,
+          titleSpacing: 0,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'AI property matching',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                'Describe the home you need',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        body: SafeArea(
+          top: false,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _PromptBox(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      hasText: _hasText,
+                      onClear: _controller.clear,
+                      onSubmit: _submit,
                       searching: _searching,
-                      error: _error,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: _SearchResults(
+                        response: _response,
+                        searching: _searching,
+                        error: _error,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -156,64 +175,239 @@ class _SearchResults extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (searching) return Center(child: CircularProgressIndicator());
-    if (error != null)
+    final theme = Theme.of(context);
+    if (searching) {
       return Center(
-          child: Text(error!, style: TextStyle(color: Colors.redAccent)));
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(strokeWidth: 2.5),
+            const SizedBox(height: 14),
+            Text(
+              'Finding the closest live listings',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      );
+    }
+    if (error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                CupertinoIcons.exclamationmark_circle,
+                color: theme.colorScheme.error,
+                size: 30,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                error!,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final result = response;
     if (result == null) {
       return Center(
-          child: Text(
-              'Describe the home you need and I will rank live listings for you.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.textMuted, fontSize: 13)));
-    }
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 24),
-      children: [
-        Text(result.explanation,
-            style: TextStyle(
-                color: AppTheme.textSecondary, fontSize: 13, height: 1.4)),
-        const SizedBox(height: 14),
-        for (final item in result.results)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              PropertyCard(
-                property: item.property,
-                trailing: _MatchBadge(score: item.score),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => PropertyDetailScreen(
-                      property: item.property,
-                    ),
-                  ),
+              Icon(
+                CupertinoIcons.house,
+                color: theme.colorScheme.primary,
+                size: 34,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Tell us what would make the home feel right',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              if (item.reasons.isNotEmpty)
-                ExpansionTile(
-                  tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-                  childrenPadding: const EdgeInsets.only(bottom: 12),
-                  title: const Text('Why this match?'),
-                  children: [
-                    for (final reason in item.reasons)
-                      ListTile(
-                        dense: true,
-                        leading: Icon(
-                          CupertinoIcons.checkmark_circle_fill,
-                          color: AppTheme.accent,
-                          size: 18,
-                        ),
-                        title: Text(reason),
-                      ),
-                  ],
-                ),
+              const SizedBox(height: 6),
+              Text(
+                'Try bedrooms, budget, location, water, parking, or distance to town.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium,
+              ),
             ],
           ),
+        ),
+      );
+    }
+    return ListView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.only(bottom: 32),
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Text(
+                'Matches',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Text(
+              '${result.results.length} ${result.results.length == 1 ? 'listing' : 'listings'}',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _IntentSummary(intent: result.intent),
+        const SizedBox(height: 10),
+        Text(
+          result.explanation,
+          style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+        ),
+        const SizedBox(height: 16),
+        for (final item in result.results)
+          _AiMatchResult(
+            item: item,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => PropertyDetailScreen(
+                  property: item.property,
+                ),
+              ),
+            ),
+          ),
         if (result.results.isEmpty)
-          const Padding(
-              padding: EdgeInsets.only(top: 28),
-              child: Center(child: Text('No matching live listings yet.'))),
+          Padding(
+            padding: const EdgeInsets.only(top: 28),
+            child: Center(
+              child: Text(
+                'No matching live listings yet.',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _AiMatchResult extends StatelessWidget {
+  const _AiMatchResult({required this.item, required this.onTap});
+
+  final AiSearchCandidate item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PropertyCard(
+          property: item.property,
+          trailing: _MatchBadge(score: item.score),
+          onTap: onTap,
+        ),
+        if (item.reasons.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Why this match',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                for (final reason in item.reasons)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          reason.contains('above') ||
+                                  reason.contains('not confirmed')
+                              ? CupertinoIcons.exclamationmark_circle
+                              : CupertinoIcons.checkmark_circle_fill,
+                          color: reason.contains('above') ||
+                                  reason.contains('not confirmed')
+                              ? theme.colorScheme.tertiary
+                              : theme.colorScheme.primary,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            reason,
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _IntentSummary extends StatelessWidget {
+  const _IntentSummary({required this.intent});
+
+  final Map<String, dynamic> intent;
+
+  @override
+  Widget build(BuildContext context) {
+    final values = <String>[
+      if (intent['bedrooms_min'] != null) '${intent['bedrooms_min']}+ beds',
+      if ('${intent['budget_max'] ?? ''}'.isNotEmpty)
+        'up to \$${intent['budget_max']}',
+      if ('${intent['city'] ?? ''}'.isNotEmpty) '${intent['city']}',
+      if (intent['water_reliability'] == true) 'reliable water',
+      if (intent['parking'] == true) 'parking',
+      if (intent['quiet_area'] == true) 'quiet area',
+      if (intent['distance_to_town'] == 'short') 'near town',
+    ];
+    if (values.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final value in values)
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              child: Text(
+                value,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -227,59 +421,20 @@ class _MatchBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      constraints: const BoxConstraints(minWidth: 76),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: AppTheme.accent.withAlpha(24),
-        borderRadius: BorderRadius.circular(12),
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         '$score% match',
-        style: TextStyle(
-          color: AppTheme.accent,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchHeader extends StatelessWidget {
-  const _SearchHeader({required this.onBack});
-
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 44,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: IconButton(
-              tooltip: 'Back',
-              onPressed: onBack,
-              style: IconButton.styleFrom(
-                backgroundColor: AppTheme.bgCard,
-                foregroundColor: AppTheme.textPrimary,
-                fixedSize: const Size.square(36),
-                minimumSize: const Size.square(36),
-              ),
-              icon: Icon(CupertinoIcons.chevron_left, size: 20),
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
             ),
-          ),
-          Text(
-            'AI Search',
-            style: TextStyle(
-              color: _AiSearchScreenState._text,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -292,6 +447,7 @@ class _PromptBox extends StatelessWidget {
     required this.hasText,
     required this.onClear,
     required this.onSubmit,
+    required this.searching,
   });
 
   final TextEditingController controller;
@@ -299,95 +455,63 @@ class _PromptBox extends StatelessWidget {
   final bool hasText;
   final VoidCallback onClear;
   final ValueChanged<String?> onSubmit;
+  final bool searching;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 132,
-      padding: const EdgeInsets.fromLTRB(14, 14, 12, 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 10),
       decoration: BoxDecoration(
-        color: _AiSearchScreenState._panel,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _AiSearchScreenState._panelBorder),
-        boxShadow: [
-          BoxShadow(
-            color: _AiSearchScreenState._accent.withOpacity(0.12),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
-          ),
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 22,
-                width: 22,
-                margin: const EdgeInsets.only(top: 1),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: _AiSearchScreenState._accent),
-                ),
-                child: Center(
-                  child: Icon(
-                    CupertinoIcons.circle,
-                    color: _AiSearchScreenState._accent,
-                    size: 6,
-                  ),
-                ),
+          TextField(
+            controller: controller,
+            focusNode: focusNode,
+            minLines: 2,
+            maxLines: 4,
+            textInputAction: TextInputAction.search,
+            cursorColor: _AiSearchScreenState._accent,
+            style: TextStyle(
+              color: _AiSearchScreenState._text,
+              fontSize: 14,
+              height: 1.4,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+              hintText:
+                  'Example: two bedrooms around \$450, quiet area, reliable water and parking',
+              hintStyle: TextStyle(
+                color: _AiSearchScreenState._muted,
+                fontSize: 14,
+                height: 1.4,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  minLines: 1,
-                  maxLines: 3,
-                  textInputAction: TextInputAction.search,
-                  cursorColor: _AiSearchScreenState._accent,
-                  style: TextStyle(
-                    color: _AiSearchScreenState._text,
-                    fontSize: 14,
-                    height: 1.4,
-                  ),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                    hintText: '',
-                    hintStyle: TextStyle(
-                      color: _AiSearchScreenState._muted,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  onSubmitted: onSubmit,
-                ),
-              ),
-            ],
+            ),
+            onSubmitted: onSubmit,
           ),
-          const Spacer(),
+          const SizedBox(height: 10),
           Row(
             children: [
-              IconButton(
-                tooltip: 'Voice search',
-                onPressed: () {},
-                style: IconButton.styleFrom(
-                  backgroundColor: AppTheme.bgSurface,
-                  foregroundColor: AppTheme.textPrimary,
-                  fixedSize: const Size.square(38),
-                  minimumSize: const Size.square(38),
-                ),
-                icon: Icon(CupertinoIcons.mic, size: 17),
+              Icon(
+                CupertinoIcons.lightbulb,
+                color: Theme.of(context).colorScheme.primary,
+                size: 17,
               ),
-              const Spacer(),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  'Natural-language search across verified live listings',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
               if (hasText) ...[
                 IconButton(
                   tooltip: 'Clear search',
@@ -404,17 +528,24 @@ class _PromptBox extends StatelessWidget {
               ],
               IconButton(
                 tooltip: 'Search',
-                onPressed: hasText ? () => onSubmit(null) : null,
+                onPressed: hasText && !searching ? () => onSubmit(null) : null,
                 style: IconButton.styleFrom(
-                  backgroundColor:
-                      hasText ? _AiSearchScreenState._accent : AppTheme.border,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppTheme.border,
-                  disabledForegroundColor: AppTheme.textMuted,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  disabledBackgroundColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                  disabledForegroundColor:
+                      Theme.of(context).colorScheme.onSurfaceVariant,
                   fixedSize: const Size.square(42),
                   minimumSize: const Size.square(42),
                 ),
-                icon: Icon(CupertinoIcons.arrow_right, size: 21),
+                icon: searching
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(CupertinoIcons.search, size: 19),
               ),
             ],
           ),
