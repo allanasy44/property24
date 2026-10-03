@@ -1,11 +1,11 @@
 {
-    "name": "property24_zimbabwe",
-    "short_name": "property24_zimbabwe",
+    "name": "inprop",
+    "short_name": "inprop",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "inprop property discovery and rental platform.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

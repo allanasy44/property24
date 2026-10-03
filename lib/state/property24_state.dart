@@ -457,7 +457,11 @@ class Property24State extends ChangeNotifier {
     await _clearToken();
     user = null;
     account = AccountContext.guest();
-    snapshot = await _api.snapshot();
+    try {
+      snapshot = await _api.snapshot();
+    } catch (_) {
+      snapshot = PlatformSnapshot.empty();
+    }
     notifyListeners();
   }
 

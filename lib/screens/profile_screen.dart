@@ -4,9 +4,11 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
+import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
@@ -197,7 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               onPressed: user == null
                   ? null
-                  : () => context.read<Property24State>().signOut(),
+                  : () => _signOut(context),
               icon: Icon(CupertinoIcons.square_arrow_right, size: 18),
               label: Text(
                 'Sign out',
@@ -217,6 +219,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (user == null) return 'Sign in to verify your account';
     if (user.verified) return 'Identity verification complete';
     return 'Identity verification pending';
+  }
+
+  Future<void> _signOut(BuildContext context) async {
+    await context.read<Property24State>().signOut();
+    if (context.mounted) context.go(AppRoutes.initial);
   }
 
   void _openProfileEditor(BuildContext context, AccountUser user) {

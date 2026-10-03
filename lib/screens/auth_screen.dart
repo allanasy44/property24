@@ -10,6 +10,7 @@ import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/inprop_brand.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({required this.role, super.key});
@@ -74,6 +75,8 @@ class _AuthScreenState extends State<AuthScreen> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         const SizedBox(height: 250),
+                        const InPropBrand(onImage: true),
+                        const SizedBox(height: 22),
                         if (_showForm) _formContent() else _landingContent(),
                       ],
                     ),

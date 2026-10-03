@@ -3,8 +3,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
-import '../../theme/app_theme.dart';
+import '../routes/app_routes.dart';
+import '../state/property24_state.dart';
+import '../theme/app_theme.dart';
+import '../widgets/inprop_brand.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -25,6 +29,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
+  bool _homeRedirectScheduled = false;
 
   final List<_OnboardSlide> _slides = [
     _OnboardSlide(
@@ -117,8 +122,27 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     context.go('/auth/$role');
   }
 
+  void _redirectSignedInUser() {
+    if (_homeRedirectScheduled) return;
+    _homeRedirectScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (context.read<Property24State>().signedIn) {
+        context.go(AppRoutes.homeScreen);
+      } else {
+        _homeRedirectScheduled = false;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<Property24State>();
+    if (state.loading || state.signedIn) {
+      if (state.signedIn) _redirectSignedInUser();
+      return const _SessionGateView();
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: AnimatedSwitcher(
@@ -229,6 +253,12 @@ class _OnboardingView extends StatelessWidget {
               ],
             ),
           ),
+        ),
+
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 16,
+          left: 20,
+          child: const InPropBrand(onImage: true),
         ),
 
         // Skip button
@@ -507,9 +537,13 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
                 children: [
                   const SizedBox(height: 48),
 
+                  const InPropBrand(),
+
+                  const SizedBox(height: 42),
+
                   // Header
                   Text(
-                    'How will you\nuse PropNest?',
+                    'How will you\nuse inprop?',
                     style: GoogleFonts.poppins(
                       fontSize: 32,
                       fontWeight: FontWeight.w700,
@@ -626,6 +660,22 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionGateView extends StatelessWidget {
+  const _SessionGateView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: const SafeArea(
+        child: Center(
+          child: InPropBrand(),
         ),
       ),
     );

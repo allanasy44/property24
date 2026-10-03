@@ -30,8 +30,6 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
   AiSearchResponse? _response;
   bool _searching = false;
   String? _error;
-  static Color get _text => AppTheme.textPrimary;
-  static Color get _muted => AppTheme.textMuted;
 
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
@@ -65,53 +63,69 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final theme = Theme.of(context);
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
-        statusBarColor: theme.scaffoldBackgroundColor,
-        systemNavigationBarColor: theme.scaffoldBackgroundColor,
+        statusBarColor: AppTheme.bg,
+        systemNavigationBarColor: AppTheme.bg,
         statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
         systemNavigationBarIconBrightness:
             isDark ? Brightness.light : Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
+        backgroundColor: AppTheme.bg,
         resizeToAvoidBottomInset: true,
-        appBar: AppBar(
-          leading: IconButton(
-            tooltip: 'Back',
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(CupertinoIcons.chevron_left),
-          ),
-          titleSpacing: 0,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'AI property matching',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              Text(
-                'Describe the home you need',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
         body: SafeArea(
-          top: false,
+          top: true,
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 760),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    Row(
+                      children: [
+                        Container(
+                          height: 44,
+                          width: 44,
+                          decoration: BoxDecoration(
+                            color: AppTheme.bgCard,
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            tooltip: 'Back',
+                            onPressed: () => Navigator.pop(context),
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(CupertinoIcons.chevron_left),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'AI property matching',
+                                style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Text(
+                                'Describe the home you need',
+                                style: TextStyle(
+                                  color: AppTheme.textMuted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
                     _PromptBox(
                       controller: _controller,
                       focusNode: _focusNode,
@@ -166,8 +180,11 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
 }
 
 class _SearchResults extends StatelessWidget {
-  const _SearchResults(
-      {required this.response, required this.searching, required this.error});
+  const _SearchResults({
+    required this.response,
+    required this.searching,
+    required this.error,
+  });
 
   final AiSearchResponse? response;
   final bool searching;
@@ -460,11 +477,10 @@ class _PromptBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 10, 10),
+      padding: const EdgeInsets.fromLTRB(18, 14, 12, 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        color: AppTheme.bgSurface,
+        borderRadius: BorderRadius.circular(28),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -472,23 +488,27 @@ class _PromptBox extends StatelessWidget {
           TextField(
             controller: controller,
             focusNode: focusNode,
-            minLines: 2,
+            minLines: 1,
             maxLines: 4,
             textInputAction: TextInputAction.search,
             cursorColor: _AiSearchScreenState._accent,
             style: TextStyle(
-              color: _AiSearchScreenState._text,
+              color: AppTheme.textPrimary,
               fontSize: 14,
               height: 1.4,
             ),
             decoration: InputDecoration(
               isDense: true,
               border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
               contentPadding: EdgeInsets.zero,
-              hintText:
-                  'Example: two bedrooms around \$450, quiet area, reliable water and parking',
+              hintText: 'Describe your ideal home...',
               hintStyle: TextStyle(
-                color: _AiSearchScreenState._muted,
+                color: AppTheme.textMuted,
                 fontSize: 14,
                 height: 1.4,
               ),
@@ -498,31 +518,18 @@ class _PromptBox extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Icon(
-                CupertinoIcons.lightbulb,
-                color: Theme.of(context).colorScheme.primary,
-                size: 17,
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  'Natural-language search across verified live listings',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-              ),
+              const Spacer(),
               if (hasText) ...[
                 IconButton(
                   tooltip: 'Clear search',
                   onPressed: onClear,
                   style: IconButton.styleFrom(
                     backgroundColor: AppTheme.bgSurface,
-                    foregroundColor: AppTheme.textSecondary,
+                    foregroundColor: AppTheme.textMuted,
                     fixedSize: const Size.square(38),
                     minimumSize: const Size.square(38),
                   ),
-                  icon: Icon(CupertinoIcons.xmark, size: 18),
+                  icon: const Icon(CupertinoIcons.xmark, size: 18),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -530,12 +537,10 @@ class _PromptBox extends StatelessWidget {
                 tooltip: 'Search',
                 onPressed: hasText && !searching ? () => onSubmit(null) : null,
                 style: IconButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                  disabledBackgroundColor:
-                      Theme.of(context).colorScheme.surfaceContainerHighest,
-                  disabledForegroundColor:
-                      Theme.of(context).colorScheme.onSurfaceVariant,
+                  backgroundColor: AppTheme.accent,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppTheme.border,
+                  disabledForegroundColor: AppTheme.textMuted,
                   fixedSize: const Size.square(42),
                   minimumSize: const Size.square(42),
                 ),

@@ -49,6 +49,7 @@ class MyApp extends StatelessWidget {
       create: (_) {
         final state = Property24State();
         if (bootState) state.boot();
+        if (!bootState) state.loading = false;
         return state;
       },
       child: Sizer(
@@ -57,7 +58,7 @@ class MyApp extends StatelessWidget {
             builder: (context, state, _) {
               AppTheme.setDarkMode(state.darkMode);
               return MaterialApp.router(
-                title: 'Property 24',
+                title: 'inprop',
                 theme: AppTheme.lightTheme,
                 darkTheme: AppTheme.darkTheme,
                 themeMode: state.darkMode ? ThemeMode.dark : ThemeMode.light,
