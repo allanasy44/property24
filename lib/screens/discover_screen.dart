@@ -260,10 +260,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 SliverToBoxAdapter(
                   child: _ComparisonTray(
                     properties: state.comparedProperties,
+                    suggestions: state.comparisonSuggestions,
                     onClear: () {
-                      for (final property in state.comparedProperties) {
-                        state.toggleComparison(property);
-                      }
+                      state.clearComparisons();
+                    },
+                    onAddSuggestion: (property) {
+                      state.toggleComparison(property);
                     },
                   ),
                 ),
@@ -772,10 +774,17 @@ class _MapLinesPainter extends CustomPainter {
 // Comparison tray (restyled)
 // ─────────────────────────────────────────────────────────────
 class _ComparisonTray extends StatelessWidget {
-  const _ComparisonTray({required this.properties, required this.onClear});
+  const _ComparisonTray({
+    required this.properties,
+    required this.suggestions,
+    required this.onClear,
+    required this.onAddSuggestion,
+  });
 
   final List<PropertyListing> properties;
+  final List<ComparisonSuggestion> suggestions;
   final VoidCallback onClear;
+  final ValueChanged<PropertyListing> onAddSuggestion;
 
   @override
   Widget build(BuildContext context) {
@@ -863,6 +872,50 @@ class _ComparisonTray extends StatelessWidget {
               ],
             ),
           ),
+          if (suggestions.isNotEmpty && properties.length < 3) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Suggested from live listings',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            for (final suggestion in suggestions.take(2))
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: Icon(
+                  CupertinoIcons.sparkles,
+                  size: 18,
+                  color: AppTheme.accent,
+                ),
+                title: Text(
+                  suggestion.property.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                subtitle: Text(
+                  '${suggestion.score}% match · ${suggestion.reasons.join(', ')}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                ),
+                trailing: IconButton(
+                  tooltip: 'Add to comparison',
+                  onPressed: () => onAddSuggestion(suggestion.property),
+                  icon: const Icon(CupertinoIcons.plus_circle_fill),
+                  color: AppTheme.accent,
+                ),
+              ),
+          ],
         ],
       ),
     );

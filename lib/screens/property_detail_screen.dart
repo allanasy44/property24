@@ -63,7 +63,11 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       const SizedBox(height: 14),
                       _MetaLine(property: property),
                       const SizedBox(height: 14),
-                      _TrustPassportCard(property: property),
+                      _AvailabilityCard(property: property),
+                      const SizedBox(height: 14),
+                      _NeighborhoodCard(property: property),
+                      const SizedBox(height: 14),
+                      _AffordabilityCard(property: property),
                       const SizedBox(height: 14),
                       _GuestChips(property: property),
                       const SizedBox(height: 18),
@@ -374,7 +378,7 @@ class _MetaLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${property.trustScore}% trust / ${property.isLand ? property.standSummary : '${property.moveInTotalLabel} move-in'}',
+          '${property.trustScore}% trust / ${property.isLand ? property.standSummary : '${property.moveInTotalLabel} rent + deposit'}',
           style: TextStyle(
             color: AppTheme.textPrimary,
             fontSize: 12,
@@ -404,8 +408,8 @@ class _MetaLine extends StatelessWidget {
   }
 }
 
-class _TrustPassportCard extends StatelessWidget {
-  const _TrustPassportCard({required this.property});
+class _AvailabilityCard extends StatelessWidget {
+  const _AvailabilityCard({required this.property});
 
   final PropertyListing property;
 
@@ -420,7 +424,6 @@ class _TrustPassportCard extends StatelessWidget {
                 ) ??
             property;
     final canConfirm = state.user?.id == liveProperty.owner?.id;
-    final signals = liveProperty.trustBreakdown;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -431,27 +434,6 @@ class _TrustPassportCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text('Property Passport',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    )),
-              ),
-              Text('${liveProperty.trustScore}/100',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w800,
-                  )),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(liveProperty.passportId,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
-          const SizedBox(height: 12),
           Row(
             children: [
               Icon(
@@ -465,11 +447,23 @@ class _TrustPassportCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  liveProperty.availabilityLabel,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Availability',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      liveProperty.availabilityLabel,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -478,30 +472,6 @@ class _TrustPassportCard extends StatelessWidget {
             const SizedBox(height: 3),
             Text('Last confirmed ${liveProperty.lastConfirmedAt}',
                 style: theme.textTheme.bodySmall),
-          ],
-          if (signals.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            for (final signal in signals)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 5),
-                child: Row(
-                  children: [
-                    Icon(
-                      signal.complete
-                          ? CupertinoIcons.checkmark_circle_fill
-                          : CupertinoIcons.minus_circle,
-                      size: 15,
-                      color: signal.complete
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 7),
-                    Expanded(child: Text(signal.label)),
-                    Text('${signal.score}/${signal.maxScore}',
-                        style: theme.textTheme.labelSmall),
-                  ],
-                ),
-              ),
           ],
           if (canConfirm) ...[
             const SizedBox(height: 8),
@@ -530,6 +500,205 @@ class _TrustPassportCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _NeighborhoodCard extends StatelessWidget {
+  const _NeighborhoodCard({required this.property});
+
+  final PropertyListing property;
+
+  @override
+  Widget build(BuildContext context) {
+    final neighborhood = property.neighborhood;
+    if (!neighborhood.available) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final details = <String>[
+      if (neighborhood.waterReliability != null)
+        'Water ${neighborhood.waterReliability}%',
+      if (neighborhood.safetyScore != null) 'Safety ${neighborhood.safetyScore}/100',
+      if (neighborhood.commuteToCbdMinutes != null)
+        '${neighborhood.commuteToCbdMinutes} min to CBD',
+    ];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Neighbourhood',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            details.join(' · '),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (neighborhood.amenities.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              neighborhood.amenities.join(' · '),
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+          if (neighborhood.sourceName.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Source: ${neighborhood.sourceName}${neighborhood.verifiedAt.isEmpty ? '' : ' · ${neighborhood.verifiedAt}'}',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AffordabilityCard extends StatefulWidget {
+  const _AffordabilityCard({required this.property});
+
+  final PropertyListing property;
+
+  @override
+  State<_AffordabilityCard> createState() => _AffordabilityCardState();
+}
+
+class _AffordabilityCardState extends State<_AffordabilityCard> {
+  final _income = TextEditingController();
+  final _commitments = TextEditingController();
+  final _savings = TextEditingController();
+  AffordabilityResult? _result;
+  String? _error;
+  bool _calculating = false;
+
+  @override
+  void dispose() {
+    _income.dispose();
+    _commitments.dispose();
+    _savings.dispose();
+    super.dispose();
+  }
+
+  Future<void> _calculate() async {
+    setState(() {
+      _calculating = true;
+      _error = null;
+    });
+    try {
+      final result = await context.read<Property24State>().calculateAffordability(
+            widget.property,
+            monthlyIncome: _income.text.trim(),
+            monthlyCommitments: _commitments.text.trim().isEmpty
+                ? '0'
+                : _commitments.text.trim(),
+            savingsAvailable:
+                _savings.text.trim().isEmpty ? '0' : _savings.text.trim(),
+          );
+      if (mounted) setState(() => _result = result);
+    } catch (error) {
+      if (mounted) setState(() => _error = userFacingError(error));
+    } finally {
+      if (mounted) setState(() => _calculating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (context.watch<Property24State>().user?.role != AccountRole.tenant) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Affordability',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Uses this listing’s current rent and deposit. Your figures remain on this device.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          _moneyField(_income, 'Monthly income'),
+          const SizedBox(height: 8),
+          _moneyField(_commitments, 'Monthly commitments'),
+          const SizedBox(height: 8),
+          _moneyField(_savings, 'Savings available for move-in'),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: _calculating ? null : _calculate,
+              icon: _calculating
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(CupertinoIcons.equal_circle, size: 17),
+              label: const Text('Calculate'),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+          ],
+          if (_result != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              '\$${_result!.moveInTotal} rent + deposit · ${_result!.rentToIncomePercent}% of income',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (_result!.rentToDisposablePercent.isNotEmpty)
+              Text(
+                '${_result!.rentToDisposablePercent}% of disposable income',
+                style: theme.textTheme.bodySmall,
+              ),
+            if (_result!.savingsShortfall != '0')
+              Text(
+                '\$${_result!.savingsShortfall} still needed for move-in',
+                style: theme.textTheme.bodySmall,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _moneyField(TextEditingController controller, String label) {
+    return TextField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixText: '\$',
+        isDense: true,
       ),
     );
   }

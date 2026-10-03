@@ -244,6 +244,7 @@ class PropertyListing {
     this.roadAccess = '',
     this.electricityAvailable = false,
     this.landWaterAvailable = false,
+    this.neighborhood = const NeighborhoodData.unavailable(),
   });
 
   factory PropertyListing.fromJson(Map<String, dynamic> json) {
@@ -307,6 +308,9 @@ class PropertyListing {
       roadAccess: textValue(json, 'road_access'),
       electricityAvailable: json['electricity_available'] == true,
       landWaterAvailable: json['land_water_available'] == true,
+      neighborhood: json['neighborhood'] is Map<String, dynamic>
+          ? NeighborhoodData.fromJson(json['neighborhood'] as Map<String, dynamic>)
+          : const NeighborhoodData.unavailable(),
     );
   }
 
@@ -360,6 +364,7 @@ class PropertyListing {
   final String roadAccess;
   final bool electricityAvailable;
   final bool landWaterAvailable;
+  final NeighborhoodData neighborhood;
 
   AccountUser? get supplier => agent ?? owner;
   String get rentLabel => listingIntent == 'sale'
@@ -402,7 +407,7 @@ class PropertyListing {
       num.tryParse(monthlyRent.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
   num get depositValue =>
       num.tryParse(depositRequired.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
-  num get estimatedFees => (monthlyRentValue * 0.08).round();
+  num get estimatedFees => 0;
   num get moveInTotal => monthlyRentValue + depositValue + estimatedFees;
   String get moveInTotalLabel => money(moveInTotal);
 
@@ -482,6 +487,129 @@ class PropertyListing {
       PropertyFact(iconName: 'parking', label: 'Parking', value: parking),
     ];
   }
+}
+
+class NeighborhoodData {
+  const NeighborhoodData({
+    required this.available,
+    required this.status,
+    required this.waterReliability,
+    required this.safetyScore,
+    required this.commuteToCbdMinutes,
+    required this.amenities,
+    required this.sourceName,
+    required this.verifiedAt,
+  });
+
+  const NeighborhoodData.unavailable()
+      : available = false,
+        status = 'not_available',
+        waterReliability = null,
+        safetyScore = null,
+        commuteToCbdMinutes = null,
+        amenities = const [],
+        sourceName = '',
+        verifiedAt = '';
+
+  factory NeighborhoodData.fromJson(Map<String, dynamic> json) {
+    return NeighborhoodData(
+      available: json['available'] == true,
+      status: textValue(json, 'status', 'not_available'),
+      waterReliability: int.tryParse('${json['water_reliability']}'),
+      safetyScore: int.tryParse('${json['safety_score']}'),
+      commuteToCbdMinutes: int.tryParse('${json['commute_to_cbd_minutes']}'),
+      amenities: List<String>.from(json['amenities'] ?? const []),
+      sourceName: textValue(json, 'source_name'),
+      verifiedAt: localDate(json['verified_at'], ''),
+    );
+  }
+
+  final bool available;
+  final String status;
+  final int? waterReliability;
+  final int? safetyScore;
+  final int? commuteToCbdMinutes;
+  final List<String> amenities;
+  final String sourceName;
+  final String verifiedAt;
+}
+
+class SavedSearchItem {
+  const SavedSearchItem({
+    required this.id,
+    required this.name,
+    required this.query,
+    required this.isActive,
+    required this.matchCount,
+    required this.latestMatchAt,
+  });
+
+  factory SavedSearchItem.fromJson(Map<String, dynamic> json) {
+    return SavedSearchItem(
+      id: textValue(json, 'id'),
+      name: textValue(json, 'name'),
+      query: textValue(json, 'query'),
+      isActive: json['is_active'] == true,
+      matchCount: int.tryParse('${json['match_count']}') ?? 0,
+      latestMatchAt: localDate(json['latest_match_at'], ''),
+    );
+  }
+
+  final String id;
+  final String name;
+  final String query;
+  final bool isActive;
+  final int matchCount;
+  final String latestMatchAt;
+}
+
+class ComparisonSuggestion {
+  const ComparisonSuggestion({
+    required this.property,
+    required this.score,
+    required this.reasons,
+  });
+
+  factory ComparisonSuggestion.fromJson(Map<String, dynamic> json) {
+    final property = json['property'] is Map<String, dynamic>
+        ? PropertyListing.fromJson(json['property'] as Map<String, dynamic>)
+        : PropertyListing.fromJson(json);
+    return ComparisonSuggestion(
+      property: property,
+      score: int.tryParse('${json['score']}') ?? 0,
+      reasons: List<String>.from(json['reasons'] ?? const []),
+    );
+  }
+
+  final PropertyListing property;
+  final int score;
+  final List<String> reasons;
+}
+
+class AffordabilityResult {
+  const AffordabilityResult({
+    required this.moveInTotal,
+    required this.rentToIncomePercent,
+    required this.rentToDisposablePercent,
+    required this.savingsShortfall,
+    required this.assessment,
+  });
+
+  factory AffordabilityResult.fromJson(Map<String, dynamic> json) {
+    return AffordabilityResult(
+      moveInTotal: textValue(json, 'move_in_total', '0'),
+      rentToIncomePercent: textValue(json, 'rent_to_income_percent', '0'),
+      rentToDisposablePercent: textValue(json, 'rent_to_disposable_percent'),
+      savingsShortfall: textValue(json, 'savings_shortfall', '0'),
+      assessment: textValue(json, 'assessment'),
+    );
+  }
+
+  final String moveInTotal;
+  final String rentToIncomePercent;
+  final String rentToDisposablePercent;
+  final String savingsShortfall;
+  final String assessment;
 }
 
 class TrustSignal {
@@ -879,6 +1007,9 @@ class PlatformSnapshot {
     required this.viewings,
     required this.calls,
     required this.savedProperties,
+    required this.comparisonProperties,
+    required this.comparisonSuggestions,
+    required this.savedSearches,
     required this.notifications,
   });
 
@@ -891,6 +1022,9 @@ class PlatformSnapshot {
       viewings: [],
       calls: [],
       savedProperties: [],
+      comparisonProperties: [],
+      comparisonSuggestions: [],
+      savedSearches: [],
       notifications: [],
     );
   }
@@ -902,6 +1036,9 @@ class PlatformSnapshot {
   final List<ViewingItem> viewings;
   final List<CallLogItem> calls;
   final List<PropertyListing> savedProperties;
+  final List<PropertyListing> comparisonProperties;
+  final List<ComparisonSuggestion> comparisonSuggestions;
+  final List<SavedSearchItem> savedSearches;
   final List<NotificationItem> notifications;
 
   PlatformSnapshot copyWith({
@@ -912,6 +1049,9 @@ class PlatformSnapshot {
     List<ViewingItem>? viewings,
     List<CallLogItem>? calls,
     List<PropertyListing>? savedProperties,
+    List<PropertyListing>? comparisonProperties,
+    List<ComparisonSuggestion>? comparisonSuggestions,
+    List<SavedSearchItem>? savedSearches,
     List<NotificationItem>? notifications,
   }) {
     return PlatformSnapshot(
@@ -922,6 +1062,10 @@ class PlatformSnapshot {
       viewings: viewings ?? this.viewings,
       calls: calls ?? this.calls,
       savedProperties: savedProperties ?? this.savedProperties,
+      comparisonProperties: comparisonProperties ?? this.comparisonProperties,
+      comparisonSuggestions:
+          comparisonSuggestions ?? this.comparisonSuggestions,
+      savedSearches: savedSearches ?? this.savedSearches,
       notifications: notifications ?? this.notifications,
     );
   }

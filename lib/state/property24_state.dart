@@ -63,9 +63,10 @@ class Property24State extends ChangeNotifier {
         (total, conversation) => total + conversation.unreadCount,
       );
 
-  List<PropertyListing> get comparedProperties => snapshot.properties
-      .where((property) => comparisonPropertyIds.contains(property.id))
-      .toList(growable: false);
+  List<PropertyListing> get comparedProperties => snapshot.comparisonProperties;
+  List<ComparisonSuggestion> get comparisonSuggestions =>
+      snapshot.comparisonSuggestions;
+  List<SavedSearchItem> get savedSearches => snapshot.savedSearches;
 
   Future<void> boot() async {
     loading = true;
@@ -89,19 +90,19 @@ class Property24State extends ChangeNotifier {
         }
         _applySession(session);
         try {
-          snapshot = await _api.snapshot(token: _token);
+          _replaceSnapshot(await _api.snapshot(token: _token));
         } catch (exception) {
           if (!_isVerificationGate(exception)) rethrow;
           await _loadVerificationSnapshot();
         }
       } else {
-        snapshot = await _api.snapshot();
+        _replaceSnapshot(await _api.snapshot());
       }
     } catch (exception) {
       await _clearToken();
       user = null;
       account = AccountContext.guest();
-      snapshot = await _api.snapshot();
+      _replaceSnapshot(await _api.snapshot());
       error = userFacingError(exception);
     } finally {
       loading = false;
@@ -118,18 +119,18 @@ class Property24State extends ChangeNotifier {
     try {
       try {
         if (_token == null || _token!.isEmpty) {
-          snapshot = await _api.snapshot();
+          _replaceSnapshot(await _api.snapshot());
         } else {
           final session = await _api.me(_token!);
           _applySession(session);
-          snapshot = await _api.snapshot(token: _token);
+          _replaceSnapshot(await _api.snapshot(token: _token));
         }
       } catch (exception) {
         if (_isUnauthorized(exception)) {
           final restored = await _restoreSession();
           if (restored == null) rethrow;
           _applySession(restored);
-          snapshot = await _api.snapshot(token: _token);
+          _replaceSnapshot(await _api.snapshot(token: _token));
         } else if (!_isVerificationGate(exception)) {
           rethrow;
         } else {
@@ -224,6 +225,7 @@ class Property24State extends ChangeNotifier {
         notifyListeners();
       }
       if (type == 'property.changed' ||
+          type == 'comparison.changed' ||
           type == 'notification.created' ||
           type == 'account.changed' ||
           type.startsWith('message.') ||
@@ -296,12 +298,12 @@ class Property24State extends ChangeNotifier {
     await _storeSession(session);
     _applySession(session);
     try {
-      snapshot = await _api.snapshot(token: session.token);
+      _replaceSnapshot(await _api.snapshot(token: session.token));
     } catch (_) {
       try {
         await _loadVerificationSnapshot();
       } catch (_) {
-        snapshot = PlatformSnapshot.empty();
+        _replaceSnapshot(PlatformSnapshot.empty());
       }
     }
     notifyListeners();
@@ -423,7 +425,7 @@ class Property24State extends ChangeNotifier {
     user = session.user;
 
     account = session.account;
-    snapshot = await _api.snapshot(token: activeToken);
+    _replaceSnapshot(await _api.snapshot(token: activeToken));
     notifyListeners();
     return verification;
   }
@@ -437,7 +439,7 @@ class Property24State extends ChangeNotifier {
       await _storeSession(session);
       _applySession(session);
       try {
-        snapshot = await _api.snapshot(token: session.token);
+        _replaceSnapshot(await _api.snapshot(token: session.token));
       } catch (exception) {
         if (!_isVerificationGate(exception)) rethrow;
         await _loadVerificationSnapshot();
@@ -458,9 +460,9 @@ class Property24State extends ChangeNotifier {
     user = null;
     account = AccountContext.guest();
     try {
-      snapshot = await _api.snapshot();
+      _replaceSnapshot(await _api.snapshot());
     } catch (_) {
-      snapshot = PlatformSnapshot.empty();
+      _replaceSnapshot(PlatformSnapshot.empty());
     }
     notifyListeners();
   }
@@ -486,7 +488,7 @@ class Property24State extends ChangeNotifier {
       final saved = propertyId == null
           ? await _api.createProperty(activeToken, draft)
           : await _api.updateProperty(activeToken, propertyId, draft);
-      snapshot = await _api.snapshot(token: activeToken);
+      _replaceSnapshot(await _api.snapshot(token: activeToken));
       return saved;
     } catch (exception) {
       error = userFacingError(exception);
@@ -500,7 +502,7 @@ class Property24State extends ChangeNotifier {
   Future<void> deleteProperty(String propertyId) async {
     final activeToken = _requireToken();
     await _api.deleteProperty(activeToken, propertyId);
-    snapshot = await _api.snapshot(token: activeToken);
+    _replaceSnapshot(await _api.snapshot(token: activeToken));
     notifyListeners();
   }
 
@@ -532,7 +534,7 @@ class Property24State extends ChangeNotifier {
   Future<ConversationItem> holdProperty(PropertyListing property) async {
     final activeToken = _requireToken();
     final conversation = await _api.holdProperty(activeToken, property.id);
-    snapshot = await _api.snapshot(token: activeToken);
+    _replaceSnapshot(await _api.snapshot(token: activeToken));
     notifyListeners();
     return conversation;
   }
@@ -585,7 +587,7 @@ class Property24State extends ChangeNotifier {
     final activeToken = _requireToken();
     final messages =
         await _api.conversationMessages(activeToken, conversationId);
-    snapshot = snapshot.copyWith(
+    _replaceSnapshot(snapshot.copyWith(
       conversations: snapshot.conversations
           .map(
             (conversation) => conversation.id == conversationId
@@ -593,7 +595,7 @@ class Property24State extends ChangeNotifier {
                 : conversation,
           )
           .toList(growable: false),
-    );
+    ));
     notifyListeners();
     return messages;
   }
@@ -659,23 +661,51 @@ class Property24State extends ChangeNotifier {
     await refresh();
   }
 
-  void toggleComparison(PropertyListing property) {
-    if (comparisonPropertyIds.contains(property.id)) {
-      comparisonPropertyIds.remove(property.id);
-    } else {
-      if (comparisonPropertyIds.length >= 3) {
-        comparisonPropertyIds.remove(comparisonPropertyIds.first);
-      }
-      comparisonPropertyIds.add(property.id);
-    }
-    notifyListeners();
+  Future<void> toggleComparison(PropertyListing property) async {
+    final activeToken = _requireToken();
+    await _api.toggleComparison(token: activeToken, propertyId: property.id);
+    await refresh();
+  }
+
+  Future<void> clearComparisons() async {
+    final activeToken = _requireToken();
+    await _api.clearComparisons(token: activeToken);
+    await refresh();
+  }
+
+  Future<void> saveSearch(String query, {String? name}) async {
+    final activeToken = _requireToken();
+    await _api.saveSearch(token: activeToken, query: query, name: name);
+    await refresh();
+  }
+
+  Future<void> deleteSavedSearch(String searchId) async {
+    final activeToken = _requireToken();
+    await _api.deleteSavedSearch(token: activeToken, searchId: searchId);
+    await refresh();
+  }
+
+  Future<AffordabilityResult> calculateAffordability(
+    PropertyListing property, {
+    required String monthlyIncome,
+    String monthlyCommitments = '0',
+    String savingsAvailable = '0',
+  }) {
+    final activeToken = _requireToken();
+    return _api.propertyAffordability(
+      token: activeToken,
+      propertyId: property.id,
+      monthlyIncome: monthlyIncome,
+      monthlyCommitments: monthlyCommitments,
+      savingsAvailable: savingsAvailable,
+    );
   }
 
   void addSmartAlert(String label) {
     if (!smartAlerts.contains(label)) {
       smartAlerts.add(label);
-      notifyListeners();
     }
+    notifyListeners();
   }
 
   void toggleThemeMode(bool value) {
@@ -701,9 +731,9 @@ class Property24State extends ChangeNotifier {
     if (snapshot.notifications.any((item) => item.id == notification.id)) {
       return;
     }
-    snapshot = snapshot.copyWith(
+    _replaceSnapshot(snapshot.copyWith(
       notifications: [notification, ...snapshot.notifications],
-    );
+    ));
     notifyListeners();
   }
 
@@ -713,23 +743,23 @@ class Property24State extends ChangeNotifier {
       token: activeToken,
       notificationId: notificationId,
     );
-    snapshot = snapshot.copyWith(
+    _replaceSnapshot(snapshot.copyWith(
       notifications: snapshot.notifications
           .map((item) =>
               item.id == notificationId ? item.copyWith(isRead: true) : item)
           .toList(growable: false),
-    );
+    ));
     notifyListeners();
   }
 
   Future<void> markAllNotificationsRead() async {
     final activeToken = _requireToken();
     await _api.markAllNotificationsRead(token: activeToken);
-    snapshot = snapshot.copyWith(
+    _replaceSnapshot(snapshot.copyWith(
       notifications: snapshot.notifications
           .map((item) => item.copyWith(isRead: true))
           .toList(growable: false),
-    );
+    ));
     notifyListeners();
   }
 
@@ -739,18 +769,18 @@ class Property24State extends ChangeNotifier {
       token: activeToken,
       notificationId: notificationId,
     );
-    snapshot = snapshot.copyWith(
+    _replaceSnapshot(snapshot.copyWith(
       notifications: snapshot.notifications
           .where((item) => item.id != notificationId)
           .toList(growable: false),
-    );
+    ));
     notifyListeners();
   }
 
   Future<void> clearAllNotifications() async {
     final activeToken = _requireToken();
     await _api.clearNotifications(token: activeToken);
-    snapshot = snapshot.copyWith(notifications: const []);
+    _replaceSnapshot(snapshot.copyWith(notifications: const []));
     notifyListeners();
   }
 
@@ -760,6 +790,21 @@ class Property24State extends ChangeNotifier {
       throw const ApiException('Sign in is required for this action.');
     }
     return activeToken;
+  }
+
+  void _replaceSnapshot(PlatformSnapshot value) {
+    snapshot = value;
+    savedPropertyIds
+      ..clear()
+      ..addAll(value.savedProperties.map((property) => property.id));
+    comparisonPropertyIds
+      ..clear()
+      ..addAll(value.comparisonProperties.map((property) => property.id));
+    smartAlerts
+      ..clear()
+      ..addAll(value.savedSearches.where((search) => search.isActive).map(
+            (search) => search.query,
+          ));
   }
 
   Future<void> _clearToken() async {
@@ -809,7 +854,7 @@ class Property24State extends ChangeNotifier {
   Future<void> _loadVerificationSnapshot() async {
     final publicSnapshot = await _api.snapshot();
     final properties = await _api.searchProperties(token: _token);
-    snapshot = PlatformSnapshot(
+    _replaceSnapshot(PlatformSnapshot(
       properties: properties,
       applications: publicSnapshot.applications,
       verifications: publicSnapshot.verifications,
@@ -817,8 +862,11 @@ class Property24State extends ChangeNotifier {
       viewings: publicSnapshot.viewings,
       calls: publicSnapshot.calls,
       savedProperties: publicSnapshot.savedProperties,
+      comparisonProperties: publicSnapshot.comparisonProperties,
+      comparisonSuggestions: publicSnapshot.comparisonSuggestions,
+      savedSearches: publicSnapshot.savedSearches,
       notifications: publicSnapshot.notifications,
-    );
+    ));
   }
 
   bool _isVerificationGate(Object exception) {

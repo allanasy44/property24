@@ -40,17 +40,21 @@ from .models import (
     DisputeReport,
     EmailVerificationOTP,
     MediaAsset,
+    NeighborhoodProfile,
     Message,
     MessageReceipt,
     PendingRegistrationOTP,
     PropertyHold,
     PhoneVerificationOTP,
     Property,
+    PropertyComparison,
     PropertyComment,
     PropertyPhoto,
     PropertyVideo,
     Review,
     SavedProperty,
+    SavedSearch,
+    SavedSearchMatch,
     SecurityAuditEvent,
     SupplierFollow,
     Notification,
@@ -1162,6 +1166,366 @@ def saved_reserved_properties_collection(request):
         payload["reserved"] = prop.id in held_ids
         results.append(payload)
     return JsonResponse({"results": results})
+
+
+def _require_tenant(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return None, auth_response
+    if acting_user.role != User.Roles.TENANT:
+        return None, forbidden()
+    return acting_user, None
+
+
+def _is_live_public_listing(prop):
+    return (
+        prop.is_active
+        and prop.listing_status == Property.ListingStatus.VERIFIED
+        and prop.owner.is_verified
+        and prop.availability_status == Property.AvailabilityStatus.AVAILABLE
+        and (prop.agent_id is None or prop.agent.is_verified)
+    )
+
+
+def _serialize_neighborhood(profile):
+    if profile is None:
+        return {
+            "available": False,
+            "status": "not_available",
+            "message": "No reviewed neighbourhood data is available yet.",
+        }
+    now = timezone.now()
+    current = bool(
+        profile.verified_at
+        and (profile.expires_at is None or profile.expires_at >= now)
+        and profile.source_name
+    )
+    return {
+        "available": current,
+        "status": "current" if current else "needs_refresh",
+        "water_reliability": profile.water_reliability,
+        "safety_score": profile.safety_score,
+        "commute_to_cbd_minutes": profile.commute_to_cbd_minutes,
+        "amenities": profile.amenities,
+        "source_name": profile.source_name,
+        "source_url": profile.source_url,
+        "verified_at": profile.verified_at.isoformat() if profile.verified_at else None,
+        "expires_at": profile.expires_at.isoformat() if profile.expires_at else None,
+    }
+
+
+def _neighborhood_for_property(prop):
+    return NeighborhoodProfile.objects.filter(
+        city__iexact=prop.city.strip(),
+        suburb__iexact=prop.suburb.strip(),
+    ).first()
+
+
+def _search_matches_property(query, prop):
+    """Use the same non-negotiable facts as AI search before generating an alert."""
+    intent = parse_search_intent(query)
+    if not _is_live_public_listing(prop):
+        return None
+    if prop.listing_intent != intent["intent"]:
+        return None
+    if intent.get("city") and prop.city.lower() != intent["city"].lower():
+        return None
+    if intent.get("property_type") and prop.property_type != intent["property_type"]:
+        return None
+    if intent.get("bedrooms_min") and prop.bedrooms < intent["bedrooms_min"]:
+        return None
+    if intent.get("budget_max"):
+        budget = as_decimal(intent["budget_max"])
+        if budget is not None and prop.monthly_rent > budget:
+            return None
+    intent, ranked = rank_property_candidates(query, [prop], limit=1)
+    if not ranked:
+        return None
+    candidate = ranked[0]
+    return candidate if candidate["score"] >= 55 else None
+
+
+def _record_saved_search_match(saved_search, prop):
+    candidate = _search_matches_property(saved_search.query, prop)
+    if candidate is None:
+        return None, False
+    match, created = SavedSearchMatch.objects.get_or_create(
+        saved_search=saved_search,
+        property=prop,
+        defaults={"match_score": candidate["score"]},
+    )
+    if not created and match.match_score != candidate["score"]:
+        match.match_score = candidate["score"]
+        match.save(update_fields=["match_score", "last_matched_at"])
+    return match, created
+
+
+def _notify_saved_search_matches(prop):
+    if not _is_live_public_listing(prop):
+        return
+    searches = SavedSearch.objects.filter(
+        tenant__role=User.Roles.TENANT,
+        is_active=True,
+    ).select_related("tenant")
+    for saved_search in searches.iterator():
+        match, created = _record_saved_search_match(saved_search, prop)
+        if created:
+            broadcast_to_user(
+                saved_search.tenant_id,
+                "notification.created",
+                {
+                    "kind": "saved_search.match",
+                    "saved_search_id": saved_search.id,
+                    "property_id": prop.id,
+                    "match_score": match.match_score,
+                    "message": f"New match for {saved_search.name}: {prop.title}",
+                },
+            )
+
+
+def _comparison_suggestions(properties, excluded_ids, limit=3):
+    if not properties:
+        return []
+    selected = list(properties)
+    anchor = selected[-1]
+    candidates = Property.objects.select_related("owner", "agent").prefetch_related("photos", "videos").filter(
+        is_active=True,
+        listing_status=Property.ListingStatus.VERIFIED,
+        owner__is_verified=True,
+        availability_status=Property.AvailabilityStatus.AVAILABLE,
+    ).filter(Q(agent__isnull=True) | Q(agent__is_verified=True)).exclude(pk__in=excluded_ids)
+    suggestions = []
+    for candidate in candidates.order_by("-updated_at")[:250]:
+        score = 0
+        reasons = []
+        if candidate.city.lower() == anchor.city.lower():
+            score += 28
+            reasons.append("same city")
+        if candidate.suburb.lower() == anchor.suburb.lower():
+            score += 18
+            reasons.append("same suburb")
+        if candidate.property_type == anchor.property_type:
+            score += 20
+            reasons.append("same property type")
+        if abs(candidate.bedrooms - anchor.bedrooms) <= 1:
+            score += 14
+            reasons.append("similar bedroom count")
+        anchor_rent = float(anchor.monthly_rent or 0)
+        candidate_rent = float(candidate.monthly_rent or 0)
+        if anchor_rent and abs(candidate_rent - anchor_rent) / anchor_rent <= 0.15:
+            score += 12
+            reasons.append("similar price")
+        if property_insights(candidate)["trust_score"] >= 75:
+            score += 8
+            reasons.append("strong trust signals")
+        if score >= 35:
+            suggestions.append({"property": candidate, "score": min(score, 100), "reasons": reasons[:3]})
+    return sorted(suggestions, key=lambda item: (-item["score"], -item["property"].updated_at.timestamp()))[:limit]
+
+
+def _serialize_saved_search(saved_search):
+    latest_match = saved_search.matches.select_related("property").order_by("-last_matched_at").first()
+    return {
+        "id": str(saved_search.id),
+        "name": saved_search.name,
+        "query": saved_search.query,
+        "criteria": saved_search.criteria,
+        "is_active": saved_search.is_active,
+        "match_count": saved_search.matches.count(),
+        "latest_match_at": latest_match.last_matched_at.isoformat() if latest_match else None,
+        "created_at": saved_search.created_at.isoformat(),
+        "updated_at": saved_search.updated_at.isoformat(),
+    }
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST", "DELETE", "OPTIONS"])
+def property_comparisons_collection(request):
+    tenant, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    if tenant.role != User.Roles.TENANT:
+        if request.method == "GET":
+            return JsonResponse({"results": [], "suggestions": []})
+        return forbidden()
+    comparisons = PropertyComparison.objects.filter(tenant=tenant).select_related(
+        "property__owner", "property__agent"
+    ).prefetch_related("property__photos", "property__videos")
+    if request.method == "DELETE":
+        comparisons.delete()
+        broadcast_to_user(tenant.id, "comparison.changed", {"action": "cleared"})
+        return JsonResponse({"cleared": True})
+    if request.method == "POST":
+        data = request_json(request)
+        if data is None:
+            return json_error("Invalid JSON body")
+        prop = get_object_or_404(Property.objects.select_related("owner", "agent"), pk=data.get("property_id"))
+        if not _is_live_public_listing(prop):
+            return json_error("Only live, verified listings can be compared", status=409)
+        comparison = comparisons.filter(property=prop).first()
+        if comparison:
+            comparison.delete()
+            action = "removed"
+        else:
+            if comparisons.count() >= 3:
+                return json_error("Choose up to three homes to compare", status=409)
+            PropertyComparison.objects.create(tenant=tenant, property=prop)
+            action = "added"
+        broadcast_to_user(
+            tenant.id,
+            "comparison.changed",
+            {"action": action, "property_id": prop.id},
+        )
+        comparisons = PropertyComparison.objects.filter(tenant=tenant).select_related(
+            "property__owner", "property__agent"
+        ).prefetch_related("property__photos", "property__videos")
+    selected = [entry.property for entry in comparisons]
+    suggestions = _comparison_suggestions(selected, {prop.id for prop in selected})
+    return JsonResponse({
+        "results": [serialize_property(prop) for prop in selected],
+        "suggestions": [
+            {
+                "property": serialize_property(item["property"]),
+                "score": item["score"],
+                "reasons": item["reasons"],
+            }
+            for item in suggestions
+        ],
+    })
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST", "OPTIONS"])
+def saved_searches_collection(request):
+    tenant, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    if tenant.role != User.Roles.TENANT:
+        if request.method == "GET":
+            return JsonResponse({"results": []})
+        return forbidden()
+    if request.method == "GET":
+        searches = SavedSearch.objects.filter(tenant=tenant).prefetch_related("matches")
+        return JsonResponse({"results": [_serialize_saved_search(item) for item in searches]})
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
+    query = str(data.get("query") or "").strip()
+    if not query:
+        return json_error("query is required")
+    if len(query) > 500:
+        return json_error("query must be 500 characters or fewer")
+    name = str(data.get("name") or query).strip()[:80]
+    saved_search, created = SavedSearch.objects.get_or_create(
+        tenant=tenant,
+        query=query,
+        defaults={"name": name, "criteria": parse_search_intent(query)},
+    )
+    if not created:
+        saved_search.name = name
+        saved_search.criteria = parse_search_intent(query)
+        saved_search.is_active = True
+        saved_search.save(update_fields=["name", "criteria", "is_active", "updated_at"])
+    live_properties = Property.objects.select_related("owner", "agent").prefetch_related("photos", "videos").filter(
+        is_active=True,
+        listing_status=Property.ListingStatus.VERIFIED,
+        owner__is_verified=True,
+        availability_status=Property.AvailabilityStatus.AVAILABLE,
+    ).filter(Q(agent__isnull=True) | Q(agent__is_verified=True))
+    for prop in live_properties.iterator():
+        _record_saved_search_match(saved_search, prop)
+    return JsonResponse(_serialize_saved_search(saved_search), status=201 if created else 200)
+
+
+@csrf_exempt
+@require_http_methods(["PATCH", "DELETE", "OPTIONS"])
+def saved_search_detail(request, search_id):
+    tenant, auth_response = _require_tenant(request)
+    if auth_response:
+        return auth_response
+    saved_search = get_object_or_404(SavedSearch, pk=search_id, tenant=tenant)
+    if request.method == "DELETE":
+        saved_search.delete()
+        return JsonResponse({"deleted": True, "id": str(search_id)})
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
+    if "name" in data:
+        saved_search.name = str(data["name"] or "").strip()[:80] or saved_search.name
+    if "is_active" in data:
+        saved_search.is_active = to_bool(data["is_active"])
+    saved_search.save(update_fields=["name", "is_active", "updated_at"])
+    return JsonResponse(_serialize_saved_search(saved_search))
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def property_comparison_suggestions(request, property_id):
+    tenant, auth_response = _require_tenant(request)
+    if auth_response:
+        return auth_response
+    prop = get_object_or_404(Property.objects.select_related("owner", "agent"), pk=property_id)
+    if not _is_live_public_listing(prop):
+        return json_error("This listing is not available for comparison", status=409)
+    selected_ids = set(
+        PropertyComparison.objects.filter(tenant=tenant).values_list("property_id", flat=True)
+    )
+    selected_ids.add(prop.id)
+    suggestions = _comparison_suggestions([prop], selected_ids)
+    return JsonResponse({"results": [
+        {"property": serialize_property(item["property"]), "score": item["score"], "reasons": item["reasons"]}
+        for item in suggestions
+    ]})
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def property_affordability(request, property_id):
+    tenant, auth_response = _require_tenant(request)
+    if auth_response:
+        return auth_response
+    prop = get_object_or_404(Property, pk=property_id)
+    if not _is_live_public_listing(prop):
+        return json_error("This listing is no longer available", status=409)
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
+    monthly_income = parse_decimal(data.get("monthly_income"), "monthly_income")
+    monthly_commitments = parse_decimal(data.get("monthly_commitments") or 0, "monthly_commitments")
+    savings_available = parse_decimal(data.get("savings_available") or 0, "savings_available")
+    if monthly_income <= 0:
+        return json_error("monthly_income must be greater than zero")
+    if monthly_commitments < 0 or savings_available < 0:
+        return json_error("Commitments and savings cannot be negative")
+    monthly_housing_cost = prop.monthly_rent
+    disposable_income = max(Decimal("0"), monthly_income - monthly_commitments)
+    move_in_total = prop.monthly_rent + prop.deposit_required
+    rent_to_income = (monthly_housing_cost / monthly_income * 100).quantize(Decimal("0.1"))
+    rent_to_disposable = (
+        (monthly_housing_cost / disposable_income * 100).quantize(Decimal("0.1"))
+        if disposable_income > 0 else None
+    )
+    savings_shortfall = max(Decimal("0"), move_in_total - savings_available)
+    return JsonResponse({
+        "property_id": str(prop.id),
+        "monthly_rent": str(prop.monthly_rent),
+        "deposit_required": str(prop.deposit_required),
+        "other_move_in_fees": "0.00",
+        "other_move_in_fees_status": "not_provided",
+        "move_in_total": str(move_in_total),
+        "monthly_income": str(monthly_income),
+        "monthly_commitments": str(monthly_commitments),
+        "disposable_income": str(disposable_income),
+        "rent_to_income_percent": str(rent_to_income),
+        "rent_to_disposable_percent": str(rent_to_disposable) if rent_to_disposable is not None else None,
+        "savings_shortfall": str(savings_shortfall),
+        "assessment": "comfortable" if rent_to_income <= 30 and savings_shortfall == 0 else "stretched" if rent_to_income <= 40 else "high_risk",
+    })
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def property_neighborhood(request, property_id):
+    prop = get_object_or_404(Property, pk=property_id)
+    return JsonResponse({"property_id": str(prop.id), "neighborhood": _serialize_neighborhood(_neighborhood_for_property(prop))})
 
 
 @csrf_exempt
@@ -3397,9 +3761,11 @@ def broadcast_property_change(prop, action):
         recipient_ids.add(prop.agent_id)
     for recipient_id in recipient_ids:
         broadcast_to_user(recipient_id, "property.changed", payload)
+    _notify_saved_search_matches(prop)
 
 def serialize_property(prop):
     insights = property_insights(prop)
+    neighborhood = _serialize_neighborhood(_neighborhood_for_property(prop))
     return {
         "id": prop.id,
         "owner": serialize_user(prop.owner),
@@ -3454,6 +3820,7 @@ def serialize_property(prop):
         "last_confirmed_at": insights["last_confirmed_at"],
         "availability_needs_confirmation": insights["availability_needs_confirmation"],
         "availability_temporarily_hidden": insights["availability_temporarily_hidden"],
+        "neighborhood": neighborhood,
         "comments_count": getattr(prop, "comment_total", prop.comments.count()),
     }
 

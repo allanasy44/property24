@@ -401,6 +401,124 @@ class SavedProperty(models.Model):
         unique_together = ("property", "tenant")
 
 
+class PropertyComparison(models.Model):
+    """A tenant's persisted, live comparison shortlist."""
+
+    tenant = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="property_comparisons",
+    )
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        related_name="comparison_entries",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "property"],
+                name="unique_tenant_property_comparison",
+            ),
+        ]
+        indexes = [models.Index(fields=["tenant", "created_at"])]
+
+
+class SavedSearch(models.Model):
+    """A tenant-owned natural-language search that can generate live alerts."""
+
+    tenant = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="saved_searches",
+    )
+    name = models.CharField(max_length=80)
+    query = models.CharField(max_length=500)
+    criteria = models.JSONField(default=dict, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "query"],
+                name="unique_tenant_saved_search_query",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "is_active", "-updated_at"]),
+        ]
+
+
+class SavedSearchMatch(models.Model):
+    saved_search = models.ForeignKey(
+        SavedSearch,
+        on_delete=models.CASCADE,
+        related_name="matches",
+    )
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        related_name="saved_search_matches",
+    )
+    match_score = models.PositiveSmallIntegerField(default=0)
+    first_matched_at = models.DateTimeField(auto_now_add=True)
+    last_matched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["saved_search", "property"],
+                name="unique_saved_search_property_match",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["saved_search", "-match_score"]),
+            models.Index(fields=["property", "-last_matched_at"]),
+        ]
+
+
+class NeighborhoodProfile(models.Model):
+    """Reviewed neighbourhood facts with a source and expiry, never generated data."""
+
+    city = models.CharField(max_length=100)
+    suburb = models.CharField(max_length=100)
+    water_reliability = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    safety_score = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    commute_to_cbd_minutes = models.PositiveSmallIntegerField(null=True, blank=True)
+    amenities = models.JSONField(default=list, blank=True)
+    source_name = models.CharField(max_length=120, blank=True)
+    source_url = models.URLField(blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["city", "suburb"],
+                name="unique_neighborhood_city_suburb",
+            ),
+        ]
+        indexes = [models.Index(fields=["city", "suburb"])]
+
+    def __str__(self):
+        return ", ".join(value for value in [self.suburb, self.city] if value)
+
+
 class PropertyComment(models.Model):
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="comments")
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="property_comments")

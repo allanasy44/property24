@@ -140,6 +140,7 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
                         response: _response,
                         searching: _searching,
                         error: _error,
+                        onSaveSearch: _response == null ? null : _saveSearch,
                       ),
                     ),
                   ],
@@ -177,6 +178,26 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
       if (mounted) setState(() => _searching = false);
     }
   }
+
+  Future<void> _saveSearch() async {
+    final query = _response?.query.trim() ?? '';
+    if (query.isEmpty) return;
+    try {
+      await context.read<Property24State>().saveSearch(query);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Search saved. New live matches will alert you.')),
+        );
+      }
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
 }
 
 class _SearchResults extends StatelessWidget {
@@ -184,11 +205,13 @@ class _SearchResults extends StatelessWidget {
     required this.response,
     required this.searching,
     required this.error,
+    required this.onSaveSearch,
   });
 
   final AiSearchResponse? response;
   final bool searching;
   final String? error;
+  final VoidCallback? onSaveSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -283,6 +306,12 @@ class _SearchResults extends StatelessWidget {
               style: theme.textTheme.labelMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: 'Save search alerts',
+              onPressed: onSaveSearch,
+              icon: const Icon(CupertinoIcons.bell),
             ),
           ],
         ),

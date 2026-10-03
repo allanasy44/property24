@@ -9,13 +9,17 @@ from .models import (
     DisputeReport,
     EmailVerificationOTP,
     Message,
+    NeighborhoodProfile,
     PendingRegistrationOTP,
     PhoneVerificationOTP,
     Property,
+    PropertyComparison,
     PropertyPhoto,
     PropertyVideo,
     Review,
     SavedProperty,
+    SavedSearch,
+    SavedSearchMatch,
     User,
     VerificationRequest,
     Viewing,
@@ -86,6 +90,9 @@ admin.site.register(Viewing)
 admin.site.register(Conversation)
 admin.site.register(Message)
 admin.site.register(SavedProperty)
+admin.site.register(PropertyComparison)
+admin.site.register(SavedSearch)
+admin.site.register(SavedSearchMatch)
 admin.site.register(Review)
 admin.site.register(Commission)
 admin.site.register(DisputeReport)
@@ -96,3 +103,19 @@ class AIAnalysisAdmin(admin.ModelAdmin):
     list_display = ("analysis_type", "target_type", "target_id", "provider", "score", "recommendation", "created_at")
     list_filter = ("analysis_type", "provider", "recommendation")
     search_fields = ("target_type", "recommendation", "summary")
+
+
+@admin.register(NeighborhoodProfile)
+class NeighborhoodProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "suburb",
+        "city",
+        "water_reliability",
+        "safety_score",
+        "commute_to_cbd_minutes",
+        "source_name",
+        "verified_at",
+        "expires_at",
+    )
+    search_fields = ("city", "suburb", "source_name")
+    list_filter = ("city",)

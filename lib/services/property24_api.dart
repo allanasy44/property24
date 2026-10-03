@@ -459,6 +459,8 @@ class Property24Api {
       _get('viewings/', token: token),
       _get('saved-properties/', token: token),
       _get('notifications/', token: token),
+      _get('tenant/comparisons/', token: token),
+      _get('tenant/saved-searches/', token: token),
     ]);
 
     return PlatformSnapshot(
@@ -475,7 +477,82 @@ class Property24Api {
           _results(responses[5]).map(PropertyListing.fromJson).toList(),
       notifications:
           _results(responses[6]).map(NotificationItem.fromJson).toList(),
+      comparisonProperties:
+          _results(responses[7]).map(PropertyListing.fromJson).toList(),
+      comparisonSuggestions:
+          (responses[7]['suggestions'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(ComparisonSuggestion.fromJson)
+              .toList(),
+      savedSearches:
+          _results(responses[8]).map(SavedSearchItem.fromJson).toList(),
     );
+  }
+
+  Future<PlatformSnapshot> comparisonsSnapshot(String token) async {
+    final body = await _get('tenant/comparisons/', token: token);
+    return PlatformSnapshot.empty().copyWith(
+      comparisonProperties: _results(body).map(PropertyListing.fromJson).toList(),
+      comparisonSuggestions:
+          (body['suggestions'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(ComparisonSuggestion.fromJson)
+              .toList(),
+    );
+  }
+
+  Future<void> toggleComparison({
+    required String token,
+    required String propertyId,
+  }) async {
+    await _post(
+      'tenant/comparisons/',
+      token: token,
+      body: {'property_id': propertyId},
+    );
+  }
+
+  Future<void> clearComparisons({required String token}) {
+    return _delete('tenant/comparisons/', token: token);
+  }
+
+  Future<SavedSearchItem> saveSearch({
+    required String token,
+    required String query,
+    String? name,
+  }) async {
+    final body = await _post(
+      'tenant/saved-searches/',
+      token: token,
+      body: {'query': query, if (name != null) 'name': name},
+    );
+    return SavedSearchItem.fromJson(body);
+  }
+
+  Future<void> deleteSavedSearch({
+    required String token,
+    required String searchId,
+  }) {
+    return _delete('tenant/saved-searches/$searchId/', token: token);
+  }
+
+  Future<AffordabilityResult> propertyAffordability({
+    required String token,
+    required String propertyId,
+    required String monthlyIncome,
+    String monthlyCommitments = '0',
+    String savingsAvailable = '0',
+  }) async {
+    final body = await _post(
+      'properties/$propertyId/affordability/',
+      token: token,
+      body: {
+        'monthly_income': monthlyIncome,
+        'monthly_commitments': monthlyCommitments,
+        'savings_available': savingsAvailable,
+      },
+    );
+    return AffordabilityResult.fromJson(body);
   }
 
   Future<void> markNotificationRead({

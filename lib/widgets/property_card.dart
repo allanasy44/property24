@@ -158,7 +158,7 @@ class PropertyCard extends StatelessWidget {
                               : CupertinoIcons.money_dollar_circle,
                           label: property.isLand
                               ? property.standSummary
-                              : '${property.moveInTotalLabel} move-in',
+                              : '${property.moveInTotalLabel} rent + deposit',
                         ),
                       ),
                     ],
