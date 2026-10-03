@@ -26,6 +26,8 @@ class Property24State extends ChangeNotifier {
   Timer? _liveReconnectTimer;
   Timer? _syncTimer;
   final Map<String, int> _conversationRevisions = <String, int>{};
+  final Map<String, String> _typingUsers = <String, String>{};
+  final Map<String, CallLogItem> _activeCalls = <String, CallLogItem>{};
   bool _refreshing = false;
 
   PlatformSnapshot snapshot = PlatformSnapshot.empty();
@@ -45,6 +47,10 @@ class Property24State extends ChangeNotifier {
 
   int conversationRevision(String conversationId) =>
       _conversationRevisions[conversationId] ?? 0;
+  String? typingUserForConversation(String conversationId) =>
+      _typingUsers[conversationId];
+  CallLogItem? activeCallForConversation(String conversationId) =>
+      _activeCalls[conversationId];
   List<CallLogItem> get callHistory => snapshot.calls;
 
   String? get token => _token;
@@ -188,6 +194,27 @@ class Property24State extends ChangeNotifier {
       if (event is! Map<String, dynamic>) return;
       final type = '${event['type'] ?? ''}';
       final payload = event['payload'];
+      final conversationId =
+          payload is Map ? '${payload['conversation_id'] ?? ''}' : '';
+      if (type == 'typing' && conversationId.isNotEmpty && payload is Map) {
+        final isTyping = payload['is_typing'] == true;
+        if (isTyping) {
+          _typingUsers[conversationId] =
+              '${payload['name'] ?? 'Someone'} is typing...';
+        } else {
+          _typingUsers.remove(conversationId);
+        }
+        notifyListeners();
+      }
+      if (conversationId.isNotEmpty &&
+          type == 'call.started' &&
+          payload is Map<String, dynamic>) {
+        _activeCalls[conversationId] = CallLogItem.fromJson(payload);
+        notifyListeners();
+      } else if (conversationId.isNotEmpty && type == 'call.ended') {
+        _activeCalls.remove(conversationId);
+        notifyListeners();
+      }
       if (type == 'notification.created' && payload is Map) {
         final message = '${payload['message'] ?? ''}'.trim();
         final kind = '${payload['kind'] ?? ''}';
@@ -214,8 +241,6 @@ class Property24State extends ChangeNotifier {
           );
         }
       }
-      final conversationId =
-          payload is Map ? '${payload['conversation_id'] ?? ''}' : '';
       if (conversationId.isNotEmpty &&
           (type.startsWith('message.') ||
               type.startsWith('messages.') ||
@@ -237,6 +262,20 @@ class Property24State extends ChangeNotifier {
     } catch (_) {
       // Polling remains the fallback for malformed or unsupported frames.
     }
+  }
+
+  void sendLiveEvent(
+    String type,
+    String conversationId, {
+    Map<String, dynamic> payload = const {},
+  }) {
+    final channel = _liveChannel;
+    if (channel == null) return;
+    channel.sink.add(jsonEncode({
+      'type': type,
+      'conversation_id': conversationId,
+      ...payload,
+    }));
   }
 
   @override
@@ -647,6 +686,59 @@ class Property24State extends ChangeNotifier {
     final activeToken = _requireToken();
     await _api.sendMessage(activeToken, conversationId, body);
     await refresh();
+  }
+
+  Future<void> deleteConversationMessage(
+    String conversationId,
+    String messageId,
+  ) async {
+    final activeToken = _requireToken();
+    await _api.deleteConversationMessage(
+      activeToken,
+      conversationId,
+      messageId,
+    );
+    await refresh();
+  }
+
+  Future<void> editConversationMessage(
+    String conversationId,
+    String messageId,
+    String body,
+  ) async {
+    final activeToken = _requireToken();
+    await _api.editConversationMessage(
+      activeToken,
+      conversationId,
+      messageId,
+      body,
+    );
+    await refresh();
+  }
+
+  Future<void> blockConversationUser(
+    String conversationId,
+    String blockedUserId,
+  ) async {
+    final activeToken = _requireToken();
+    await _api.blockConversationUser(
+      activeToken,
+      conversationId,
+      blockedUserId,
+    );
+    await refresh();
+  }
+
+  Future<void> reportConversationMessage(
+    String conversationId,
+    String messageId,
+  ) async {
+    final activeToken = _requireToken();
+    await _api.reportConversationMessage(
+      activeToken,
+      conversationId,
+      messageId,
+    );
   }
 
   Future<void> toggleSaved(PropertyListing property) async {

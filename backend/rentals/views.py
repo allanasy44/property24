@@ -1718,22 +1718,27 @@ def verification_email_otp_verify(request):
         challenge.save(update_fields=["status"])
         return json_error("Too many OTP attempts")
     if challenge.code_hash != hash_otp(code):
-            message = "OTP sent to your phone"
-    if not delivered:
-        challenge.status = PhoneVerificationOTP.Status.EXPIRED
-        challenge.save(update_fields=["status", "updated_at"])
-        return json_error("Phone OTP delivery is not configured", status=503)
-    return JsonResponse(
-        {
-            "otp_required": True,
-            "challenge_id": str(challenge.id),
-            "phone": phone,
-            "delivery_channel": delivery_channel,
-            "expires_in_seconds": 30,
-            "message": message,
-        },
-        status=201,
-    )
+        challenge.attempts += 1
+        challenge.save(update_fields=["attempts", "updated_at"])
+        return json_error("Invalid OTP")
+    challenge.status = EmailVerificationOTP.Status.VERIFIED
+    challenge.verified_at = timezone.now()
+    challenge.save(update_fields=["status", "verified_at", "updated_at"])
+    update_fields = []
+    if acting_user.email.lower() != challenge.email.lower():
+        acting_user.email = challenge.email
+        update_fields.append("email")
+    if not acting_user.email_verified:
+        acting_user.email_verified = True
+        update_fields.append("email_verified")
+    if update_fields:
+        acting_user.save(update_fields=update_fields)
+    return JsonResponse({
+        "email_verified": True,
+        "email": challenge.email,
+        "user": serialize_user(acting_user),
+        "account": serialize_account_context(acting_user),
+    })
 
 
 @csrf_exempt
@@ -3298,7 +3303,7 @@ def mask_email(email):
 def validate_public_registration_payload(data):
     username = str(data.get("username") or data.get("email") or "").strip()
     email = normalize_email(data.get("email"))
-    phone = ""
+    phone = normalize_phone(data.get("phone")) if data.get("phone") is not None else ""
     password = data.get("password") or ""
     role = data.get("account_type") or data.get("role") or User.Roles.TENANT
     role = normalise_choice(role, User.Roles, role)
@@ -3309,6 +3314,7 @@ def validate_public_registration_payload(data):
         validate_text_field(username, "Username", USERNAME_MAX_LENGTH, required=True),
         validate_email_field(email, required=True),
         validate_text_field(data.get("name") or data.get("full_name", ""), "Full name", NAME_MAX_LENGTH),
+        validate_phone_field(phone, required=False),
     ):
         if error:
             return None, error
@@ -3319,6 +3325,10 @@ def validate_public_registration_payload(data):
         return None, "An account with this email already exists"
     if User.objects.filter(username__iexact=username).exists():
         return None, "An account with this username already exists"
+    if validate_phone_field(normalize_phone(username), required=False) == "":
+        return None, "Phone numbers cannot be used as usernames"
+    if phone and User.objects.filter(phone_identity_query(phone)).exists():
+        return None, "An account with this phone number already exists"
 
     return {
         "username": username,

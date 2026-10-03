@@ -492,12 +492,12 @@ class Property24Api {
   Future<PlatformSnapshot> comparisonsSnapshot(String token) async {
     final body = await _get('tenant/comparisons/', token: token);
     return PlatformSnapshot.empty().copyWith(
-      comparisonProperties: _results(body).map(PropertyListing.fromJson).toList(),
-      comparisonSuggestions:
-          (body['suggestions'] as List<dynamic>? ?? const [])
-              .whereType<Map<String, dynamic>>()
-              .map(ComparisonSuggestion.fromJson)
-              .toList(),
+      comparisonProperties:
+          _results(body).map(PropertyListing.fromJson).toList(),
+      comparisonSuggestions: (body['suggestions'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ComparisonSuggestion.fromJson)
+          .toList(),
     );
   }
 
@@ -828,6 +828,60 @@ class Property24Api {
     );
   }
 
+  Future<void> deleteConversationMessage(
+    String token,
+    String conversationId,
+    String messageId,
+  ) async {
+    await _delete(
+      'conversations/$conversationId/messages/$messageId/',
+      token: token,
+    );
+  }
+
+  Future<void> editConversationMessage(
+    String token,
+    String conversationId,
+    String messageId,
+    String body,
+  ) async {
+    await _patch(
+      'conversations/$conversationId/messages/$messageId/',
+      token: token,
+      body: {'body': body},
+    );
+  }
+
+  Future<void> blockConversationUser(
+    String token,
+    String conversationId,
+    String blockedUserId,
+  ) async {
+    await _post(
+      'conversations/$conversationId/block/',
+      token: token,
+      body: {'blocked_user_id': blockedUserId},
+    );
+  }
+
+  Future<void> reportConversationMessage(
+    String token,
+    String conversationId,
+    String messageId, {
+    String reason = 'inappropriate',
+    String details = '',
+  }) async {
+    await _post(
+      'conversations/$conversationId/report/',
+      token: token,
+      body: {
+        'message_id': messageId,
+        'reason': reason,
+        'details': details,
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> _get(
     String path, {
     String? token,
@@ -967,8 +1021,11 @@ class Property24Api {
   }
 
   List<Map<String, dynamic>> _results(Map<String, dynamic> response) {
-    return (response['results'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
+    final rawResults = response['results'];
+    if (rawResults is! List) return const [];
+    return rawResults
+        .whereType<Map>()
+        .map((result) => Map<String, dynamic>.from(result))
         .toList();
   }
 }

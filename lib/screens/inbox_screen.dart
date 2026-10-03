@@ -303,6 +303,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   bool _recording = false;
   bool _uploading = false;
   int _revision = -1;
+  Property24State? _observedState;
 
   @override
   void initState() {
@@ -313,6 +314,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final state = context.read<Property24State>();
+    if (_observedState != state) {
+      _observedState?.removeListener(_onStateChanged);
+      _observedState = state..addListener(_onStateChanged);
+    }
     final next = context
         .read<Property24State>()
         .conversationRevision(widget.conversation.id);
@@ -324,9 +330,20 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   @override
   void dispose() {
+    _observedState?.removeListener(_onStateChanged);
     _message.dispose();
     _audioRecorder.dispose();
     super.dispose();
+  }
+
+  void _onStateChanged() {
+    final state = _observedState;
+    if (!mounted || state == null) return;
+    final next = state.conversationRevision(widget.conversation.id);
+    if (next != _revision) {
+      _revision = next;
+      _loadMessages();
+    }
   }
 
   Future<void> _loadMessages() async {
@@ -336,7 +353,15 @@ class _ConversationScreenState extends State<ConversationScreen> {
     try {
       final messages =
           await state.loadConversationMessages(widget.conversation.id);
+        state.sendLiveEvent('delivered', widget.conversation.id);
+        state.sendLiveEvent('read', widget.conversation.id);
       if (mounted) setState(() => _messages = messages);
+      } catch (exception) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(userFacingError(exception))),
+          );
+        }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -348,11 +373,105 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final property = widget.property;
     final canShareLocation =
         property?.hasCoordinates == true && property?.showExactLocation == true;
+    final participant = _participant(state);
+    final contactName = participant?.name.isNotEmpty == true
+        ? participant!.name
+        : widget.conversation.title;
+    final activeCall =
+      state.activeCallForConversation(widget.conversation.id);
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      appBar: AppBar(title: Text(property?.title ?? widget.conversation.title)),
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            _ChatAvatar(participant: participant),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    contactName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    state.typingUserForConversation(widget.conversation.id) ??
+                        (property?.title ?? 'Property24 chat'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Voice call',
+            onPressed: () => _startCall(CallMode.voice),
+            icon: const Icon(CupertinoIcons.phone, size: 20),
+          ),
+          IconButton(
+            tooltip: 'Video call',
+            onPressed: () => _startCall(CallMode.video),
+            icon: const Icon(CupertinoIcons.videocam, size: 21),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Chat options',
+            onSelected: _handleChatOption,
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'contact', child: Text('Contact info')),
+              PopupMenuItem(value: 'mute', child: Text('Mute notifications')),
+              PopupMenuItem(value: 'block', child: Text('Block contact')),
+            ],
+          ),
+        ],
+      ),
       body: Column(
         children: [
+          if (activeCall != null)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withAlpha(24),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.accent.withAlpha(90)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    activeCall.mode == CallMode.video
+                        ? CupertinoIcons.videocam_fill
+                        : CupertinoIcons.phone_fill,
+                    color: AppTheme.accent,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '${activeCall.mode == CallMode.video ? 'Video' : 'Voice'} call in progress',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: activeCall.id.isEmpty
+                        ? null
+                        : () => _endCall(activeCall.id),
+                    child: const Text('End'),
+                  ),
+                ],
+              ),
+            ),
           if (property != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -373,7 +492,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
                   Center(child: CircularProgressIndicator()),
                 for (final item in _messages)
                   _PersistedMessageBubble(
-                      item: item, mine: item.senderId == state.user?.id),
+                    item: item,
+                    mine: item.senderId == state.user?.id,
+                    onLongPress: () => _showMessageActions(item),
+                  ),
               ],
             ),
           ),
@@ -417,6 +539,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
                       controller: _message,
                       minLines: 1,
                       maxLines: 4,
+                      onChanged: (value) => state.sendLiveEvent(
+                        'typing',
+                        widget.conversation.id,
+                        payload: {'is_typing': value.trim().isNotEmpty},
+                      ),
                       decoration: InputDecoration(
                           hintText: 'Write a message',
                           border: InputBorder.none),
@@ -434,6 +561,181 @@ class _ConversationScreenState extends State<ConversationScreen> {
         ],
       ),
     );
+  }
+
+  AccountUser? _participant(Property24State state) {
+    for (final participant in widget.conversation.participants) {
+      if (participant.id != state.user?.id) return participant;
+    }
+    return widget.conversation.participants.isEmpty
+        ? null
+        : widget.conversation.participants.first;
+  }
+
+  Future<void> _showMessageActions(ChatMessageItem item) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            if (item.senderId == context.read<Property24State>().user?.id &&
+                !item.deleted)
+              ListTile(
+                leading: const Icon(CupertinoIcons.pencil),
+                title: const Text('Edit message'),
+                onTap: () => Navigator.pop(context, 'edit'),
+              ),
+            if (item.senderId == context.read<Property24State>().user?.id &&
+                !item.deleted)
+              ListTile(
+                leading: const Icon(CupertinoIcons.delete),
+                title: const Text('Delete message'),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            if (item.senderId != context.read<Property24State>().user?.id)
+              ListTile(
+                leading: const Icon(CupertinoIcons.exclamationmark_triangle),
+                title: const Text('Report message'),
+                onTap: () => Navigator.pop(context, 'report'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    final state = context.read<Property24State>();
+    try {
+      if (action == 'delete') {
+        await state.deleteConversationMessage(widget.conversation.id, item.id);
+      } else if (action == 'report') {
+        await state.reportConversationMessage(widget.conversation.id, item.id);
+      } else if (action == 'edit') {
+        final controller = TextEditingController(text: item.body);
+        final body = await showDialog<String>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Edit message'),
+            content: TextField(controller: controller, autofocus: true),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, controller.text.trim()),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        );
+        controller.dispose();
+        if (body != null && body.isNotEmpty) {
+          await state.editConversationMessage(
+            widget.conversation.id,
+            item.id,
+            body,
+          );
+        }
+      }
+      await _loadMessages();
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _startCall(CallMode mode) async {
+    try {
+      await context
+          .read<Property24State>()
+          .startCall(widget.conversation.id, mode: mode);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${mode == CallMode.video ? 'Video' : 'Voice'} call request sent',
+          ),
+        ),
+      );
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _endCall(String callId) async {
+    try {
+      await context.read<Property24State>().endCall(
+            widget.conversation.id,
+            callId,
+          );
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleChatOption(String option) async {
+    if (option == 'contact') {
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ChatAvatar(
+                  participant: _participant(context.read<Property24State>()),
+                  large: true,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  widget.conversation.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (widget.property != null)
+                  Text(widget.property!.title,
+                      style: TextStyle(color: AppTheme.textMuted)),
+              ],
+            ),
+          ),
+        ),
+      );
+    } else if (option == 'block') {
+      final participant = _participant(context.read<Property24State>());
+      if (participant == null) return;
+      try {
+        await context
+            .read<Property24State>()
+            .blockConversationUser(widget.conversation.id, participant.id);
+        if (mounted) Navigator.of(context).pop();
+      } catch (exception) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(userFacingError(exception))),
+          );
+        }
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notifications muted for this chat')),
+      );
+    }
   }
 
   Future<void> _showAttachmentSheet() async {
@@ -550,29 +852,66 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 }
 
+class _ChatAvatar extends StatelessWidget {
+  const _ChatAvatar({required this.participant, this.large = false});
+
+  final AccountUser? participant;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = large ? 38.0 : 19.0;
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppTheme.bgSurface,
+      backgroundImage: participant?.profilePicture.isNotEmpty == true
+          ? NetworkImage(participant!.profilePicture)
+          : null,
+      child: participant?.profilePicture.isNotEmpty == true
+          ? null
+          : Icon(
+              CupertinoIcons.person_fill,
+              size: large ? 32 : 17,
+              color: AppTheme.textMuted,
+            ),
+    );
+  }
+}
+
 class _PersistedMessageBubble extends StatelessWidget {
-  const _PersistedMessageBubble({required this.item, required this.mine});
+  const _PersistedMessageBubble({
+    required this.item,
+    required this.mine,
+    required this.onLongPress,
+  });
+
+  final ChatMessageItem item;
+  final bool mine;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: _MessageBubble(item: item, mine: mine),
+    );
+  }
+}
+
+class _MessageBubble extends StatelessWidget {
+  const _MessageBubble({required this.item, required this.mine});
 
   final ChatMessageItem item;
   final bool mine;
 
   @override
   Widget build(BuildContext context) {
-    final body = item.attachmentType.isEmpty
-        ? item.body
-        : '${item.body.isEmpty ? 'Shared attachment' : item.body} · ${item.attachmentType}';
-    return _TextBubble(text: body, mine: mine);
-  }
-}
-
-class _TextBubble extends StatelessWidget {
-  const _TextBubble({required this.text, required this.mine});
-
-  final String text;
-  final bool mine;
-
-  @override
-  Widget build(BuildContext context) {
+    final attachmentType = item.attachmentType.toLowerCase();
+    final hasAttachment = item.attachmentUrl.isNotEmpty;
+    final isLocation = item.body.startsWith('Location:') ||
+        item.body.startsWith('Live location:');
+    final foreground = mine ? Colors.white : AppTheme.textPrimary;
+    final muted = mine ? Colors.white70 : AppTheme.textMuted;
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -583,16 +922,143 @@ class _TextBubble extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: mine ? AppTheme.accent : AppTheme.bgCard,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: mine ? Colors.white : AppTheme.textPrimary,
-            fontSize: 13,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(mine ? 16 : 4),
+            bottomRight: Radius.circular(mine ? 4 : 16),
           ),
         ),
+        child: Column(
+          crossAxisAlignment:
+              mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (isLocation)
+              _LocationMessage(
+                text: item.body,
+                foreground: foreground,
+                muted: muted,
+              )
+            else if (hasAttachment && attachmentType == 'image')
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  item.attachmentUrl,
+                  width: 220,
+                  height: 180,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _AttachmentTile(
+                    icon: CupertinoIcons.photo,
+                    label: item.attachmentName.isEmpty
+                        ? 'Photo unavailable'
+                        : item.attachmentName,
+                    foreground: foreground,
+                  ),
+                ),
+              )
+            else if (hasAttachment)
+              _AttachmentTile(
+                icon: attachmentType == 'video'
+                    ? CupertinoIcons.play_circle_fill
+                    : attachmentType == 'audio'
+                        ? CupertinoIcons.waveform
+                        : CupertinoIcons.doc,
+                label: item.attachmentName.isEmpty
+                    ? 'Shared $attachmentType'
+                    : item.attachmentName,
+                foreground: foreground,
+              ),
+            if (item.body.isNotEmpty && !isLocation) ...[
+              if (hasAttachment) const SizedBox(height: 6),
+              Text(
+                item.body,
+                style: TextStyle(color: foreground, fontSize: 13, height: 1.3),
+              ),
+            ],
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(item.createdAt, style: TextStyle(color: muted, fontSize: 9)),
+                if (mine) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    item.deliveryStatus == 'read'
+                        ? CupertinoIcons.checkmark_alt
+                        : item.deliveryStatus == 'delivered'
+                            ? CupertinoIcons.checkmark_alt
+                            : CupertinoIcons.checkmark,
+                    size: 12,
+                    color: muted,
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _AttachmentTile extends StatelessWidget {
+  const _AttachmentTile({
+    required this.icon,
+    required this.label,
+    required this.foreground,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: foreground, size: 25),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: foreground, fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LocationMessage extends StatelessWidget {
+  const _LocationMessage({
+    required this.text,
+    required this.foreground,
+    required this.muted,
+  });
+
+  final String text;
+  final Color foreground;
+  final Color muted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(CupertinoIcons.location_solid, color: foreground, size: 24),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: foreground, fontSize: 12),
+          ),
+        ),
+      ],
     );
   }
 }

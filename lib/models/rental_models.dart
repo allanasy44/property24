@@ -309,7 +309,8 @@ class PropertyListing {
       electricityAvailable: json['electricity_available'] == true,
       landWaterAvailable: json['land_water_available'] == true,
       neighborhood: json['neighborhood'] is Map<String, dynamic>
-          ? NeighborhoodData.fromJson(json['neighborhood'] as Map<String, dynamic>)
+          ? NeighborhoodData.fromJson(
+              json['neighborhood'] as Map<String, dynamic>)
           : const NeighborhoodData.unavailable(),
     );
   }
@@ -878,12 +879,16 @@ class ConversationItem {
   });
 
   factory ConversationItem.fromJson(Map<String, dynamic> json) {
-    final participants = (json['participants'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(AccountUser.fromJson)
+    final rawParticipants = json['participants'];
+    final participants = (rawParticipants is List ? rawParticipants : const [])
+        .whereType<Map>()
+        .map((participant) => AccountUser.fromJson(
+              Map<String, dynamic>.from(participant),
+            ))
         .toList();
-    final lastMessage = json['last_message'] is Map<String, dynamic>
-        ? json['last_message'] as Map<String, dynamic>
+    final rawLastMessage = json['last_message'];
+    final lastMessage = rawLastMessage is Map
+        ? Map<String, dynamic>.from(rawLastMessage)
         : null;
     return ConversationItem(
       id: textValue(json, 'id'),
