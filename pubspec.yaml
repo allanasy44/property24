@@ -33,9 +33,12 @@ dependencies:
   # Maps
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
+  flutter_webrtc: ^1.6.2+hotfix.3
 
 dev_dependencies:
   flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
+  assets:
+    - web/favicon.jpg

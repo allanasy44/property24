@@ -222,6 +222,7 @@ class PropertyListing {
     required this.videos,
     required this.listingViews,
     required this.savedCount,
+    this.likesCount = 0,
     required this.applicationsCount,
     required this.owner,
     required this.agent,
@@ -277,6 +278,7 @@ class PropertyListing {
       videos: List<String>.from(json['videos'] ?? const []),
       listingViews: int.tryParse('${json['listing_views']}') ?? 0,
       savedCount: int.tryParse('${json['saved_count']}') ?? 0,
+      likesCount: int.tryParse('${json['likes_count']}') ?? 0,
       applicationsCount: int.tryParse('${json['applications_count']}') ?? 0,
       owner: json['owner'] is Map<String, dynamic>
           ? AccountUser.fromJson(json['owner'] as Map<String, dynamic>)
@@ -343,6 +345,7 @@ class PropertyListing {
   final List<String> videos;
   final int listingViews;
   final int savedCount;
+  final int likesCount;
   final int applicationsCount;
   final AccountUser? owner;
   final AccountUser? agent;
@@ -864,6 +867,50 @@ class ChatMessageItem {
   final String attachmentName;
   final bool deleted;
   final String deliveryStatus;
+}
+
+class PropertyCommentItem {
+  const PropertyCommentItem({
+    required this.id,
+    required this.propertyId,
+    required this.author,
+    required this.authorId,
+    required this.parentId,
+    required this.body,
+    required this.mediaUrl,
+    required this.likesCount,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory PropertyCommentItem.fromJson(Map<String, dynamic> json) {
+    final rawAuthor = json['author'];
+    return PropertyCommentItem(
+      id: textValue(json, 'id'),
+      propertyId: textValue(json, 'property_id'),
+      author: rawAuthor is Map
+          ? AccountUser.fromJson(Map<String, dynamic>.from(rawAuthor))
+          : AccountUser.fromJson(const {}),
+      authorId: textValue(json, 'author_id'),
+      parentId: textValue(json, 'parent_id'),
+      body: textValue(json, 'body'),
+      mediaUrl: textValue(json, 'media_url'),
+      likesCount: int.tryParse('${json['likes_count'] ?? 0}') ?? 0,
+      createdAt: localDate(json['created_at'], 'Just now'),
+      updatedAt: localDate(json['updated_at'], 'Just now'),
+    );
+  }
+
+  final String id;
+  final String propertyId;
+  final AccountUser author;
+  final String authorId;
+  final String parentId;
+  final String body;
+  final String mediaUrl;
+  final int likesCount;
+  final String createdAt;
+  final String updatedAt;
 }
 
 class ConversationItem {

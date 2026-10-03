@@ -23,6 +23,147 @@ class PropertyDetailScreen extends StatefulWidget {
 class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   int _page = 0;
   bool _saved = false;
+  bool _liked = false;
+  int _likesCount = 0;
+  bool _commentsLoading = false;
+  final TextEditingController _commentController = TextEditingController();
+  List<PropertyCommentItem> _comments = <PropertyCommentItem>[];
+  PropertyCommentItem? _replyTo;
+
+  @override
+  void initState() {
+    super.initState();
+    _likesCount = widget.property.likesCount;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadComments();
+      _loadLikeStatus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadComments() async {
+    final state = context.read<Property24State>();
+    if (!state.signedIn) return;
+    if (mounted) setState(() => _commentsLoading = true);
+    try {
+      final comments = await state.loadPropertyComments(widget.property.id);
+      if (mounted) setState(() => _comments = comments);
+    } finally {
+      if (mounted) setState(() => _commentsLoading = false);
+    }
+  }
+
+  Future<void> _loadLikeStatus() async {
+    final state = context.read<Property24State>();
+    if (!state.signedIn) return;
+    try {
+      final result = await state.propertyLikeStatus(widget.property.id);
+      if (mounted) {
+        setState(() {
+          _liked = result['liked'] == true;
+          _likesCount = int.tryParse('${result['likes_count'] ?? 0}') ?? 0;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleLike() async {
+    try {
+      final result = await context.read<Property24State>().togglePropertyLike(
+            widget.property.id,
+            liked: !_liked,
+          );
+      if (mounted) {
+        setState(() {
+          _liked = result['liked'] == true;
+          _likesCount = int.tryParse('${result['likes_count'] ?? 0}') ?? 0;
+        });
+      }
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _postComment() async {
+    final body = _commentController.text.trim();
+    if (body.isEmpty) return;
+    try {
+      final comment =
+          await context.read<Property24State>().createPropertyComment(
+                widget.property.id,
+                body,
+                parentId: _replyTo?.id,
+              );
+      _commentController.clear();
+      if (mounted) {
+        setState(() {
+          _comments = [comment, ..._comments];
+          _replyTo = null;
+        });
+      }
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _editComment(PropertyCommentItem comment) async {
+    final controller = TextEditingController(text: comment.body);
+    final body = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit comment'),
+        content: TextField(controller: controller, autofocus: true),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (body == null || body.isEmpty) return;
+    final updated = await context.read<Property24State>().editPropertyComment(
+          widget.property.id,
+          comment.id,
+          body,
+        );
+    if (mounted) {
+      setState(() {
+        _comments = _comments
+            .map((item) => item.id == updated.id ? updated : item)
+            .toList(growable: false);
+      });
+    }
+  }
+
+  Future<void> _deleteComment(PropertyCommentItem comment) async {
+    await context
+        .read<Property24State>()
+        .deletePropertyComment(widget.property.id, comment.id);
+    if (mounted) {
+      setState(() => _comments = _comments
+          .where((item) => item.id != comment.id && item.parentId != comment.id)
+          .toList());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +219,33 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         approximate: !property.showExactLocation,
                         zoom: property.showExactLocation ? 15 : 12,
                       ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          IconButton(
+                            tooltip: _liked ? 'Unlike listing' : 'Like listing',
+                            onPressed: _toggleLike,
+                            icon: Icon(_liked
+                                ? CupertinoIcons.heart_fill
+                                : CupertinoIcons.heart),
+                            color: _liked
+                                ? Colors.redAccent
+                                : AppTheme.textSecondary,
+                          ),
+                          Text('$_likesCount likes',
+                              style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w700)),
+                          const SizedBox(width: 18),
+                          Icon(CupertinoIcons.chat_bubble,
+                              size: 19, color: AppTheme.textSecondary),
+                          const SizedBox(width: 6),
+                          Text('${_comments.length} comments',
+                              style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w700)),
+                        ],
+                      ),
                       const SizedBox(height: 18),
                       const _DetailTabs(),
                       const SizedBox(height: 14),
@@ -111,6 +279,85 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         const SizedBox(height: 20),
                       ],
                       _HostCard(property: property),
+                      const SizedBox(height: 22),
+                      Text(
+                        'Comments',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (_replyTo != null)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Replying to ${_replyTo!.author.name}',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Cancel reply',
+                              onPressed: () => setState(() => _replyTo = null),
+                              icon: const Icon(CupertinoIcons.xmark, size: 16),
+                            ),
+                          ],
+                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _commentController,
+                              minLines: 1,
+                              maxLines: 3,
+                              decoration: const InputDecoration(
+                                hintText: 'Write a comment...',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            tooltip: 'Post comment',
+                            onPressed: _postComment,
+                            icon: const Icon(CupertinoIcons.arrow_up),
+                          ),
+                        ],
+                      ),
+                      if (_commentsLoading)
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      for (final comment in _comments.where(
+                        (item) => item.parentId.isEmpty,
+                      )) ...[
+                        _CommentTile(
+                          comment: comment,
+                          currentUserId:
+                              context.read<Property24State>().user?.id,
+                          onReply: () => setState(() => _replyTo = comment),
+                          onEdit: () => _editComment(comment),
+                          onDelete: () => _deleteComment(comment),
+                        ),
+                        for (final reply in _comments.where(
+                          (item) => item.parentId == comment.id,
+                        ))
+                          _CommentTile(
+                            comment: reply,
+                            currentUserId:
+                                context.read<Property24State>().user?.id,
+                            isReply: true,
+                            onReply: () => setState(() => _replyTo = comment),
+                            onEdit: () => _editComment(reply),
+                            onDelete: () => _deleteComment(reply),
+                          ),
+                      ],
                     ],
                   ),
                 ),
@@ -157,6 +404,111 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
         .where((item) => item.trim().isNotEmpty)
         .toSet()
         .toList(growable: false);
+  }
+}
+
+class _CommentTile extends StatelessWidget {
+  const _CommentTile({
+    required this.comment,
+    required this.currentUserId,
+    required this.onReply,
+    required this.onEdit,
+    required this.onDelete,
+    this.isReply = false,
+  });
+
+  final PropertyCommentItem comment;
+  final String? currentUserId;
+  final VoidCallback onReply;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final bool isReply;
+
+  @override
+  Widget build(BuildContext context) {
+    final canEdit = currentUserId == comment.authorId;
+    return Padding(
+      padding: EdgeInsets.only(left: isReply ? 34 : 0, bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 17,
+            backgroundImage: comment.author.profilePicture.isEmpty
+                ? null
+                : NetworkImage(comment.author.profilePicture),
+            child: comment.author.profilePicture.isEmpty
+                ? Text(comment.author.name.isEmpty
+                    ? '?'
+                    : comment.author.name[0].toUpperCase())
+                : null,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgSurface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        comment.author.name,
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        comment.body,
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: [
+                    TextButton(onPressed: onReply, child: const Text('Reply')),
+                    if (canEdit)
+                      PopupMenuButton<String>(
+                        tooltip: 'Comment options',
+                        onSelected: (value) {
+                          if (value == 'edit') onEdit();
+                          if (value == 'delete') onDelete();
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 'edit', child: Text('Edit')),
+                          PopupMenuItem(value: 'delete', child: Text('Delete')),
+                        ],
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Icon(
+                            CupertinoIcons.ellipsis,
+                            size: 16,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -518,7 +870,8 @@ class _NeighborhoodCard extends StatelessWidget {
     final details = <String>[
       if (neighborhood.waterReliability != null)
         'Water ${neighborhood.waterReliability}%',
-      if (neighborhood.safetyScore != null) 'Safety ${neighborhood.safetyScore}/100',
+      if (neighborhood.safetyScore != null)
+        'Safety ${neighborhood.safetyScore}/100',
       if (neighborhood.commuteToCbdMinutes != null)
         '${neighborhood.commuteToCbdMinutes} min to CBD',
     ];
@@ -598,15 +951,16 @@ class _AffordabilityCardState extends State<_AffordabilityCard> {
       _error = null;
     });
     try {
-      final result = await context.read<Property24State>().calculateAffordability(
-            widget.property,
-            monthlyIncome: _income.text.trim(),
-            monthlyCommitments: _commitments.text.trim().isEmpty
-                ? '0'
-                : _commitments.text.trim(),
-            savingsAvailable:
-                _savings.text.trim().isEmpty ? '0' : _savings.text.trim(),
-          );
+      final result =
+          await context.read<Property24State>().calculateAffordability(
+                widget.property,
+                monthlyIncome: _income.text.trim(),
+                monthlyCommitments: _commitments.text.trim().isEmpty
+                    ? '0'
+                    : _commitments.text.trim(),
+                savingsAvailable:
+                    _savings.text.trim().isEmpty ? '0' : _savings.text.trim(),
+              );
       if (mounted) setState(() => _result = result);
     } catch (error) {
       if (mounted) setState(() => _error = userFacingError(error));

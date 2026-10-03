@@ -27,12 +27,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _mapMode = false;
 
   static const _primary = AppTheme.accent;
-  static Color get _primarySoft => AppTheme.bgSurface;
   static Color get _searchFill => AppTheme.bgSurface;
   static Color get _textDark => AppTheme.textPrimary;
   static Color get _textMuted => AppTheme.textMuted;
 
-  static const _types = ['Popular', 'Nearby', 'Recommended'];
+  static const _types = ['Popular', 'Nearby', 'Recommended', 'Following'];
 
   @override
   void dispose() {
@@ -47,7 +46,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       return const ActivityScreen();
     }
     final displayName = state.user?.name.trim() ?? '';
-    final properties = state.snapshot.properties.where((property) {
+    final sourceProperties = _type == 'Following'
+        ? state.followedProperties
+        : state.snapshot.properties;
+    final properties = sourceProperties.where((property) {
       final haystack = [
         property.title,
         property.address,
@@ -81,17 +83,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     // ─── Top bar: avatar + greeting + bell ───
                     Row(
                       children: [
-                        Container(
-                          height: 44,
-                          width: 44,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _primarySoft,
-                          ),
-                          child: Icon(CupertinoIcons.person,
-                              color: _primary, size: 22),
-                        ),
-                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -241,8 +232,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               SliverFillRemaining(
                 child: EmptyState(
                   icon: CupertinoIcons.search,
-                  title: 'No matching listings',
-                  body: 'Try another suburb, city, or property type.',
+                  title: _type == 'Following'
+                      ? 'No followed listings yet'
+                      : 'No matching listings',
+                  body: _type == 'Following'
+                      ? 'Follow a landlord or agent to see their listings here.'
+                      : 'Try another suburb, city, or property type.',
                 ),
               )
             else if (_mapMode)

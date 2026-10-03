@@ -45,6 +45,7 @@ from .models import (
     MessageReceipt,
     PendingRegistrationOTP,
     PropertyHold,
+    PropertyLike,
     PhoneVerificationOTP,
     Property,
     PropertyComparison,
@@ -1015,6 +1016,32 @@ def property_view(request, property_id):
 
 
 @csrf_exempt
+@require_http_methods(["GET", "POST", "DELETE", "OPTIONS"])
+def property_like(request, property_id):
+    prop = get_object_or_404(Property, pk=property_id)
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    if request.method == "GET":
+        return JsonResponse({
+            "property_id": prop.id,
+            "liked": PropertyLike.objects.filter(property=prop, user=acting_user).exists(),
+            "likes_count": prop.likes.count(),
+        })
+    if request.method == "DELETE":
+        PropertyLike.objects.filter(property=prop, user=acting_user).delete()
+        liked = False
+    else:
+        PropertyLike.objects.get_or_create(property=prop, user=acting_user)
+        liked = True
+    return JsonResponse({
+        "property_id": prop.id,
+        "liked": liked,
+        "likes_count": prop.likes.count(),
+    }, status=201 if request.method == "POST" else 200)
+
+
+@csrf_exempt
 @require_http_methods(["GET", "POST", "OPTIONS"])
 def property_comments_collection(request, property_id):
     prop = get_object_or_404(Property.objects.select_related("owner", "agent"), pk=property_id)
@@ -1025,7 +1052,7 @@ def property_comments_collection(request, property_id):
         return forbidden()
 
     if request.method == "GET":
-        comments = PropertyComment.objects.filter(property=prop, parent__isnull=True).select_related("author").order_by("-created_at")[:100]
+        comments = PropertyComment.objects.filter(property=prop).select_related("author").order_by("-created_at")[:200]
         return JsonResponse({"results": [serialize_property_comment(comment) for comment in comments]})
 
     data = request_json(request)
@@ -1051,6 +1078,33 @@ def property_comments_collection(request, property_id):
         media_url=str(data.get("media_url") or data.get("mediaUri") or "").strip()[:500],
     )
     return JsonResponse(serialize_property_comment(comment), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["PATCH", "DELETE", "OPTIONS"])
+def property_comment_detail(request, property_id, comment_id):
+    prop = get_object_or_404(Property, pk=property_id)
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    comment = get_object_or_404(PropertyComment, pk=comment_id, property=prop)
+    can_manage = can_manage_property(acting_user, prop)
+    if comment.author_id != acting_user.id and not can_manage and not is_admin(acting_user):
+        return forbidden()
+    if request.method == "DELETE":
+        comment.delete()
+        return JsonResponse({"deleted": True, "comment_id": comment_id})
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
+    body = str(data.get("body") or "").strip()
+    if not body:
+        return json_error("Comment body is required")
+    if len(body) > 1200:
+        return json_error("Comment body must be 1200 characters or fewer")
+    comment.body = body
+    comment.save(update_fields=["body", "updated_at"])
+    return JsonResponse(serialize_property_comment(comment))
 
 
 @csrf_exempt
@@ -2515,7 +2569,7 @@ def media_asset_detail(request, media_id):
 
 
 @csrf_exempt
-@require_http_methods(["POST", "DELETE", "OPTIONS"])
+@require_http_methods(["GET", "POST", "DELETE", "OPTIONS"])
 def supplier_follow(request, supplier_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
@@ -2526,12 +2580,39 @@ def supplier_follow(request, supplier_id):
     if supplier.id == acting_user.id:
         return json_error("You cannot follow your own supplier account", status=400)
 
+    if request.method == "GET":
+        return JsonResponse(serialize_supplier_follow(
+            supplier,
+            SupplierFollow.objects.filter(
+                follower=acting_user,
+                supplier=supplier,
+            ).exists(),
+        ))
+
     if request.method == "DELETE":
         SupplierFollow.objects.filter(follower=acting_user, supplier=supplier).delete()
         return JsonResponse(serialize_supplier_follow(supplier, False))
 
     SupplierFollow.objects.get_or_create(follower=acting_user, supplier=supplier)
     return JsonResponse(serialize_supplier_follow(supplier, True), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "OPTIONS"])
+def followed_properties(request):
+    acting_user, auth_response = require_authenticated(request)
+    if auth_response:
+        return auth_response
+    followed_ids = SupplierFollow.objects.filter(
+        follower=acting_user,
+    ).values_list("supplier_id", flat=True)
+    properties = Property.objects.filter(
+        Q(owner_id__in=followed_ids) | Q(agent_id__in=followed_ids),
+    ).select_related("owner", "agent").prefetch_related("photos", "videos").distinct()
+    properties = public_listings(properties)
+    return JsonResponse({
+        "results": [serialize_property(prop) for prop in properties.order_by("-updated_at")],
+    })
 
 
 @csrf_exempt
@@ -3819,6 +3900,7 @@ def serialize_property(prop):
         "videos": [video.external_url or (signed_media_url(video.video) if video.video else video.caption) for video in prop.videos.all()],
         "listing_views": prop.views_count,
         "saved_count": prop.saved_count or prop.saved_by.count(),
+        "likes_count": prop.likes.count(),
         "applications_count": getattr(prop, "application_total", prop.applications.count()),
         "passport_id": insights["passport_id"],
         "trust_score": insights["trust_score"],

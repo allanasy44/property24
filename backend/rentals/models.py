@@ -372,6 +372,21 @@ class PropertyHold(models.Model):
         return self.released_at is None and timezone.now() < self.expires_at
 
 
+class PropertyLike(models.Model):
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="likes")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="property_likes")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["property", "user"],
+                name="unique_property_like_per_user",
+            ),
+        ]
+        indexes = [models.Index(fields=["property", "created_at"])]
+
+
 class PropertyPhoto(models.Model):
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="photos")
     image = models.ImageField(upload_to="properties/photos/", blank=True)

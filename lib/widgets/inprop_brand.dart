@@ -35,10 +35,14 @@ class InPropBrand extends StatelessWidget {
                     ]
                   : null,
             ),
-            child: Icon(
-              CupertinoIcons.house_fill,
-              size: compact ? 17 : 20,
-              color: onImage ? AppTheme.accent : Colors.white,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(compact ? 10 : 12),
+              child: Image.asset(
+                'web/favicon.jpg',
+                width: markSize,
+                height: markSize,
+                fit: BoxFit.cover,
+              ),
             ),
           ),
           SizedBox(width: compact ? 8 : 10),

@@ -31,6 +31,7 @@ class Property24State extends ChangeNotifier {
   bool _refreshing = false;
 
   PlatformSnapshot snapshot = PlatformSnapshot.empty();
+  List<PropertyListing> followedProperties = <PropertyListing>[];
   AccountUser? user;
   AccountContext account = AccountContext.guest();
   String? _refreshToken;
@@ -101,6 +102,7 @@ class Property24State extends ChangeNotifier {
           if (!_isVerificationGate(exception)) rethrow;
           await _loadVerificationSnapshot();
         }
+        await _refreshFollowedProperties();
       } else {
         _replaceSnapshot(await _api.snapshot());
       }
@@ -143,6 +145,7 @@ class Property24State extends ChangeNotifier {
           await _loadVerificationSnapshot();
         }
       }
+      await _refreshFollowedProperties();
     } catch (exception) {
       error = userFacingError(exception);
     } finally {
@@ -483,6 +486,7 @@ class Property24State extends ChangeNotifier {
         if (!_isVerificationGate(exception)) rethrow;
         await _loadVerificationSnapshot();
       }
+      await _refreshFollowedProperties();
     } catch (exception) {
       error = userFacingError(exception);
       rethrow;
@@ -498,6 +502,7 @@ class Property24State extends ChangeNotifier {
     await _clearToken();
     user = null;
     account = AccountContext.guest();
+    followedProperties = <PropertyListing>[];
     try {
       _replaceSnapshot(await _api.snapshot());
     } catch (_) {
@@ -751,6 +756,102 @@ class Property24State extends ChangeNotifier {
       savedPropertyIds.remove(property.id);
     }
     await refresh();
+  }
+
+  Future<Map<String, dynamic>> togglePropertyLike(
+    String propertyId, {
+    required bool liked,
+  }) async {
+    final activeToken = _requireToken();
+    final result = await _api.togglePropertyLike(
+      activeToken,
+      propertyId,
+      liked: liked,
+    );
+    await refresh(silent: true);
+    return result;
+  }
+
+  Future<Map<String, dynamic>> propertyLikeStatus(String propertyId) async {
+    return _api.propertyLikeStatus(_requireToken(), propertyId);
+  }
+
+  Future<List<PropertyCommentItem>> loadPropertyComments(
+    String propertyId,
+  ) async {
+    return _api.propertyComments(_requireToken(), propertyId);
+  }
+
+  Future<PropertyCommentItem> createPropertyComment(
+    String propertyId,
+    String body, {
+    String? parentId,
+  }) async {
+    return _api.createPropertyComment(
+      _requireToken(),
+      propertyId,
+      body,
+      parentId: parentId,
+    );
+  }
+
+  Future<PropertyCommentItem> editPropertyComment(
+    String propertyId,
+    String commentId,
+    String body,
+  ) async {
+    final result = await _api.editPropertyComment(
+      _requireToken(),
+      propertyId,
+      commentId,
+      body,
+    );
+    return result;
+  }
+
+  Future<void> deletePropertyComment(
+    String propertyId,
+    String commentId,
+  ) async {
+    await _api.deletePropertyComment(
+      _requireToken(),
+      propertyId,
+      commentId,
+    );
+  }
+
+  Future<Map<String, dynamic>> toggleSupplierFollow(
+    String supplierId, {
+    required bool following,
+  }) async {
+    final result = await _api.toggleSupplierFollow(
+      _requireToken(),
+      supplierId,
+      following: following,
+    );
+    await _refreshFollowedProperties();
+    notifyListeners();
+    return result;
+  }
+
+  Future<void> _refreshFollowedProperties() async {
+    if (!signedIn) {
+      followedProperties = <PropertyListing>[];
+      return;
+    }
+    try {
+      followedProperties = await _api.followedProperties(_requireToken());
+    } catch (_) {
+      followedProperties = <PropertyListing>[];
+    }
+  }
+
+  Future<Map<String, dynamic>> supplierFollowStatus(String supplierId) async {
+    return _api.supplierFollowStatus(_requireToken(), supplierId);
+  }
+
+  Future<List<PropertyListing>> loadFollowedProperties() async {
+    return _api.followedProperties(_requireToken());
   }
 
   Future<void> toggleComparison(PropertyListing property) async {

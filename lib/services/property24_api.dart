@@ -664,6 +664,105 @@ class Property24Api {
     }
   }
 
+  Future<Map<String, dynamic>> togglePropertyLike(
+    String token,
+    String propertyId, {
+    required bool liked,
+  }) async {
+    final path = 'properties/$propertyId/like/';
+    if (liked) {
+      return _post(path, token: token, body: const {});
+    }
+    final response = await _client.delete(
+      AppConfig.apiUri(path),
+      headers: _headers(token),
+    );
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> propertyLikeStatus(
+    String token,
+    String propertyId,
+  ) async {
+    return _get('properties/$propertyId/like/', token: token);
+  }
+
+  Future<List<PropertyCommentItem>> propertyComments(
+    String token,
+    String propertyId,
+  ) async {
+    final body = await _get('properties/$propertyId/comments/', token: token);
+    return _results(body).map(PropertyCommentItem.fromJson).toList();
+  }
+
+  Future<PropertyCommentItem> createPropertyComment(
+    String token,
+    String propertyId,
+    String body, {
+    String? parentId,
+  }) async {
+    final response = await _post(
+      'properties/$propertyId/comments/',
+      token: token,
+      body: {
+        'body': body,
+        if (parentId != null) 'parent_id': parentId,
+      },
+    );
+    return PropertyCommentItem.fromJson(response);
+  }
+
+  Future<PropertyCommentItem> editPropertyComment(
+    String token,
+    String propertyId,
+    String commentId,
+    String body,
+  ) async {
+    final response = await _patch(
+      'properties/$propertyId/comments/$commentId/',
+      token: token,
+      body: {'body': body},
+    );
+    return PropertyCommentItem.fromJson(response);
+  }
+
+  Future<void> deletePropertyComment(
+    String token,
+    String propertyId,
+    String commentId,
+  ) async {
+    await _delete(
+      'properties/$propertyId/comments/$commentId/',
+      token: token,
+    );
+  }
+
+  Future<Map<String, dynamic>> toggleSupplierFollow(
+    String token,
+    String supplierId, {
+    required bool following,
+  }) async {
+    final path = 'users/$supplierId/follow/';
+    if (following) return _post(path, token: token, body: const {});
+    final response = await _client.delete(
+      AppConfig.apiUri(path),
+      headers: _headers(token),
+    );
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> supplierFollowStatus(
+    String token,
+    String supplierId,
+  ) async {
+    return _get('users/$supplierId/follow/', token: token);
+  }
+
+  Future<List<PropertyListing>> followedProperties(String token) async {
+    final body = await _get('followed-properties/', token: token);
+    return _results(body).map(PropertyListing.fromJson).toList();
+  }
+
   Future<void> requestViewing(String token, String propertyId) async {
     await _post(
       'viewings/',

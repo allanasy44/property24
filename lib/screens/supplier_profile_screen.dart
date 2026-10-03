@@ -3,16 +3,81 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
+import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 
-class SupplierProfileScreen extends StatelessWidget {
+class SupplierProfileScreen extends StatefulWidget {
   const SupplierProfileScreen({
     required this.supplier,
     super.key,
   });
 
   final AccountUser supplier;
+
+  @override
+  State<SupplierProfileScreen> createState() => _SupplierProfileScreenState();
+}
+
+class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
+  bool _following = false;
+  int _followersCount = 0;
+  bool _loadingFollow = true;
+
+  AccountUser get supplier => widget.supplier;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFollowStatus();
+  }
+
+  Future<void> _loadFollowStatus() async {
+    final state = context.read<Property24State>();
+    if (!state.signedIn) {
+      if (mounted) setState(() => _loadingFollow = false);
+      return;
+    }
+    try {
+      final result = await state.supplierFollowStatus(supplier.id);
+      if (mounted) {
+        setState(() {
+          _following = result['following'] == true;
+          _followersCount =
+              int.tryParse('${result['followers_count'] ?? 0}') ?? 0;
+          _loadingFollow = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingFollow = false);
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_loadingFollow) return;
+    setState(() => _loadingFollow = true);
+    try {
+      final result = await context.read<Property24State>().toggleSupplierFollow(
+            supplier.id,
+            following: !_following,
+          );
+      if (mounted) {
+        setState(() {
+          _following = result['following'] == true;
+          _followersCount =
+              int.tryParse('${result['followers_count'] ?? 0}') ?? 0;
+          _loadingFollow = false;
+        });
+      }
+    } catch (exception) {
+      if (mounted) {
+        setState(() => _loadingFollow = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -124,9 +189,8 @@ class SupplierProfileScreen extends StatelessWidget {
                       ),
                       const _StatDivider(),
                       _Stat(
-                        value:
-                            '${listings.fold<int>(0, (total, item) => total + item.savedCount)}',
-                        label: 'Saved',
+                        value: '$_followersCount',
+                        label: 'Followers',
                       ),
                     ],
                   ),
@@ -157,14 +221,21 @@ class SupplierProfileScreen extends StatelessWidget {
                     children: [
                       Expanded(
                         child: FilledButton(
-                          onPressed: () {},
+                          onPressed: _toggleFollow,
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 13),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(7),
                             ),
                           ),
-                          child: Text('Follow'),
+                          child: _loadingFollow
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Text(_following ? 'Unfollow' : 'Follow'),
                         ),
                       ),
                       const SizedBox(width: 8),
