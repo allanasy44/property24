@@ -10,7 +10,6 @@ import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
-import '../widgets/osm_map_preview.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -21,6 +20,7 @@ class InboxScreen extends StatefulWidget {
 
 class _InboxScreenState extends State<InboxScreen> {
   String _query = '';
+  String _filter = 'All';
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -40,32 +40,46 @@ class _InboxScreenState extends State<InboxScreen> {
         property?.title ?? '',
         property?.heroLocation ?? '',
       ].join(' ').toLowerCase();
-      return _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
+      final matchesQuery =
+          _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
+      final matchesFilter = _filter == 'All' ||
+          (_filter == 'Unread' && conversation.unreadCount > 0);
+      return matchesQuery && matchesFilter;
     }).toList(growable: false);
 
     return LoadingOverlay(
       child: RefreshIndicator(
         onRefresh: state.refresh,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
           children: [
             Row(
               children: [
                 Expanded(
                   child: Text(
-                    'Inbox',
+                    'Chats',
                     style: TextStyle(
                       color: AppTheme.textPrimary,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
+                IconButton(
+                  tooltip: 'Camera',
+                  onPressed: () => _showUnavailable('Camera'),
+                  icon: const Icon(CupertinoIcons.camera),
+                ),
+                IconButton(
+                  tooltip: 'New chat',
+                  onPressed: () => _showUnavailable('New chat'),
+                  icon: const Icon(CupertinoIcons.square_pencil),
+                ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
             Container(
-              height: 50,
+              height: 44,
               decoration: BoxDecoration(
                 color: AppTheme.bgSurface,
                 borderRadius: BorderRadius.circular(28),
@@ -79,7 +93,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   fontSize: 13.5,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Search people, properties, or messages',
+                  hintText: 'Search',
                   hintStyle: TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 13.5,
@@ -101,8 +115,26 @@ class _InboxScreenState extends State<InboxScreen> {
                           ),
                         ),
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 34,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final filter in const ['All', 'Unread'])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _ChatFilter(
+                        label: filter,
+                        selected: _filter == filter,
+                        onTap: () => setState(() => _filter = filter),
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
@@ -133,6 +165,12 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
+  void _showUnavailable(String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$feature is available from a conversation')),
+    );
+  }
+
   PropertyListing? _propertyFor(
     Property24State state,
     ConversationItem conversation,
@@ -141,6 +179,43 @@ class _InboxScreenState extends State<InboxScreen> {
       if (property.id == conversation.propertyId) return property;
     }
     return null;
+  }
+}
+
+class _ChatFilter extends StatelessWidget {
+  const _ChatFilter({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppTheme.accent : AppTheme.bgSurface,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : AppTheme.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -160,92 +235,86 @@ class _ConversationTile extends StatelessWidget {
     final participant = conversation.participants.isNotEmpty
         ? conversation.participants.first
         : null;
-    final title = property?.title.isNotEmpty == true
-        ? property!.title
+    final contactName = participant?.name.isNotEmpty == true
+        ? participant!.name
         : conversation.title;
+    final subtitle = [
+      if (property?.title.isNotEmpty == true) property!.title,
+      conversation.preview,
+    ].join('  ·  ');
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 26,
-                  backgroundColor: AppTheme.bgSurface,
-                  backgroundImage:
-                      participant?.profilePicture.isNotEmpty == true
-                          ? NetworkImage(participant!.profilePicture)
-                          : null,
-                  child: participant?.profilePicture.isNotEmpty == true
-                      ? null
-                      : Icon(
-                          CupertinoIcons.person,
-                          color: AppTheme.textMuted,
-                        ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: AppTheme.textPrimary,
-                                fontSize: 15,
-                                fontWeight: conversation.unreadCount > 0
-                                    ? FontWeight.w800
-                                    : FontWeight.w600,
-                              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          child: Row(
+            children: [
+              _ChatAvatar(participant: participant),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            contactName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 15,
+                              fontWeight: conversation.unreadCount > 0
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
                             ),
                           ),
-                          if (conversation.unreadCount > 0) ...[
-                            const SizedBox(width: 8),
-                            _UnreadCountBadge(count: conversation.unreadCount),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        conversation.preview,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: conversation.unreadCount > 0
-                              ? AppTheme.textPrimary
-                              : AppTheme.textMuted,
-                          fontSize: 12,
-                          fontWeight: conversation.unreadCount > 0
-                              ? FontWeight.w600
-                              : FontWeight.w400,
                         ),
-                      ),
-                    ],
-                  ),
+                        Text(
+                          conversation.updatedAt,
+                          style: TextStyle(
+                            color: conversation.unreadCount > 0
+                                ? AppTheme.accent
+                                : AppTheme.textMuted,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: conversation.unreadCount > 0
+                                  ? AppTheme.textPrimary
+                                  : AppTheme.textMuted,
+                              fontSize: 12,
+                              fontWeight: conversation.unreadCount > 0
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                        if (conversation.unreadCount > 0) ...[
+                          const SizedBox(width: 8),
+                          _UnreadCountBadge(count: conversation.unreadCount),
+                        ],
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  conversation.updatedAt,
-                  style: TextStyle(
-                    color: AppTheme.textMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -353,15 +422,15 @@ class _ConversationScreenState extends State<ConversationScreen> {
     try {
       final messages =
           await state.loadConversationMessages(widget.conversation.id);
-        state.sendLiveEvent('delivered', widget.conversation.id);
-        state.sendLiveEvent('read', widget.conversation.id);
+      state.sendLiveEvent('delivered', widget.conversation.id);
+      state.sendLiveEvent('read', widget.conversation.id);
       if (mounted) setState(() => _messages = messages);
-      } catch (exception) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(userFacingError(exception))),
-          );
-        }
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -377,8 +446,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final contactName = participant?.name.isNotEmpty == true
         ? participant!.name
         : widget.conversation.title;
-    final activeCall =
-      state.activeCallForConversation(widget.conversation.id);
+    final activeCall = state.activeCallForConversation(widget.conversation.id);
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
@@ -472,21 +540,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 ],
               ),
             ),
-          if (property != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: OsmMapPreview(
-                label: property.heroLocation,
-                latitude: property.mapLatitude,
-                longitude: property.mapLongitude,
-                approximate: !property.showExactLocation,
-                height: 150,
-                zoom: property.showExactLocation ? 15 : 12,
-              ),
-            ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
               children: [
                 if (_loading && _messages.isEmpty)
                   Center(child: CircularProgressIndicator()),
@@ -501,25 +557,32 @@ class _ConversationScreenState extends State<ConversationScreen> {
           ),
           SafeArea(
             top: false,
+            minimum: const EdgeInsets.fromLTRB(8, 4, 8, 8),
             child: Container(
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
+              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
               decoration: BoxDecoration(
                 color: AppTheme.bgCard,
-                border: Border(top: BorderSide(color: AppTheme.border)),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppTheme.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(14),
+                    blurRadius: 16,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
                   IconButton(
                     tooltip: 'Add photo or video',
                     onPressed: _uploading ? null : _showAttachmentSheet,
-                    icon: Icon(CupertinoIcons.paperclip),
-                  ),
-                  IconButton(
-                    tooltip: _recording ? 'Stop recording' : 'Record audio',
-                    onPressed: _uploading ? null : _toggleRecording,
-                    icon: Icon(_recording
-                        ? CupertinoIcons.stop_fill
-                        : CupertinoIcons.mic),
+                    icon: const Icon(CupertinoIcons.add_circled_solid),
+                    color: AppTheme.textSecondary,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints.tightFor(width: 34, height: 34),
                   ),
                   IconButton(
                     tooltip: canShareLocation
@@ -532,27 +595,107 @@ class _ConversationScreenState extends State<ConversationScreen> {
                             await _loadMessages();
                           }
                         : null,
-                    icon: Icon(CupertinoIcons.location),
+                    icon: const Icon(CupertinoIcons.location),
+                    color: canShareLocation
+                        ? AppTheme.textSecondary
+                        : AppTheme.textMuted,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints.tightFor(width: 34, height: 34),
                   ),
                   Expanded(
-                    child: TextField(
-                      controller: _message,
-                      minLines: 1,
-                      maxLines: 4,
-                      onChanged: (value) => state.sendLiveEvent(
-                        'typing',
-                        widget.conversation.id,
-                        payload: {'is_typing': value.trim().isNotEmpty},
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 34),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgSurface,
+                        borderRadius: BorderRadius.circular(18),
                       ),
-                      decoration: InputDecoration(
-                          hintText: 'Write a message',
-                          border: InputBorder.none),
+                      child: TextField(
+                        controller: _message,
+                        minLines: 1,
+                        maxLines: 3,
+                        onChanged: (value) => state.sendLiveEvent(
+                          'typing',
+                          widget.conversation.id,
+                          payload: {'is_typing': value.trim().isNotEmpty},
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Message',
+                          border: InputBorder.none,
+                          prefixIcon: IconButton(
+                            tooltip: 'Emoji',
+                            onPressed: _showEmojiPicker,
+                            icon: const Icon(CupertinoIcons.smiley),
+                            color: AppTheme.textSecondary,
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 32,
+                              height: 32,
+                            ),
+                          ),
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 6),
+                        ),
+                      ),
                     ),
                   ),
-                  IconButton.filled(
-                    tooltip: 'Send',
-                    onPressed: _send,
-                    icon: Icon(CupertinoIcons.arrow_up),
+                  IconButton(
+                    tooltip: 'Camera',
+                    onPressed: _uploading
+                        ? null
+                        : () => _pickChatMedia(
+                              source: ImageSource.camera,
+                              video: false,
+                            ),
+                    icon: const Icon(CupertinoIcons.camera),
+                    color: AppTheme.textSecondary,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints.tightFor(width: 34, height: 34),
+                  ),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _message,
+                    builder: (context, value, child) {
+                      final hasText = value.text.trim().isNotEmpty;
+                      return Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: hasText ? AppTheme.accent : AppTheme.bgSurface,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          tooltip: hasText
+                              ? 'Send'
+                              : (_recording
+                                  ? 'Stop recording'
+                                  : 'Record audio'),
+                          onPressed: _uploading
+                              ? null
+                              : hasText
+                                  ? _send
+                                  : _toggleRecording,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 34,
+                            height: 34,
+                          ),
+                          icon: Icon(
+                            hasText
+                                ? CupertinoIcons.arrow_up
+                                : (_recording
+                                    ? CupertinoIcons.stop_fill
+                                    : CupertinoIcons.mic),
+                            size: 18,
+                            color:
+                                hasText ? Colors.white : AppTheme.textSecondary,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -736,6 +879,69 @@ class _ConversationScreenState extends State<ConversationScreen> {
         const SnackBar(content: Text('Notifications muted for this chat')),
       );
     }
+  }
+
+  Future<void> _showEmojiPicker() async {
+    const emojis = [
+      '😀',
+      '😂',
+      '😍',
+      '🥹',
+      '😊',
+      '😉',
+      '👍',
+      '🙏',
+      '❤️',
+      '🔥',
+      '🎉',
+      '🏠',
+      '📍',
+      '✨',
+      '👏',
+      '🤝',
+      '😅',
+      '🤔',
+      '😮',
+      '😢',
+    ];
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final emoji in emojis)
+                IconButton(
+                  tooltip: emoji,
+                  onPressed: () {
+                    final value = _message.value;
+                    final selection = value.selection.isValid
+                        ? value.selection
+                        : TextSelection.collapsed(offset: value.text.length);
+                    final nextText = value.text.replaceRange(
+                      selection.start,
+                      selection.end,
+                      emoji,
+                    );
+                    _message.value = value.copyWith(
+                      text: nextText,
+                      selection: TextSelection.collapsed(
+                        offset: selection.start + emoji.length,
+                      ),
+                    );
+                    Navigator.pop(context);
+                  },
+                  icon: Text(emoji, style: const TextStyle(fontSize: 25)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showAttachmentSheet() async {
@@ -979,23 +1185,52 @@ class _MessageBubble extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(item.createdAt, style: TextStyle(color: muted, fontSize: 9)),
+                Text(item.createdAt,
+                    style: TextStyle(color: muted, fontSize: 9)),
                 if (mine) ...[
                   const SizedBox(width: 4),
-                  Icon(
-                    item.deliveryStatus == 'read'
-                        ? CupertinoIcons.checkmark_alt
-                        : item.deliveryStatus == 'delivered'
-                            ? CupertinoIcons.checkmark_alt
-                            : CupertinoIcons.checkmark,
-                    size: 12,
-                    color: muted,
+                  _DeliveryTicks(
+                    status: item.deliveryStatus,
+                    mutedColor: muted,
                   ),
                 ],
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DeliveryTicks extends StatelessWidget {
+  const _DeliveryTicks({required this.status, required this.mutedColor});
+
+  final String status;
+  final Color mutedColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final read = status.toLowerCase() == 'read';
+    final delivered = read || status.toLowerCase() == 'delivered';
+    final color = read ? const Color(0xff53bdeb) : mutedColor;
+    if (!delivered) {
+      return Icon(CupertinoIcons.checkmark, size: 12, color: color);
+    }
+    return SizedBox(
+      width: 16,
+      height: 13,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            child: Icon(CupertinoIcons.checkmark_alt, size: 12, color: color),
+          ),
+          Positioned(
+            left: 4,
+            child: Icon(CupertinoIcons.checkmark_alt, size: 12, color: color),
+          ),
+        ],
       ),
     );
   }
