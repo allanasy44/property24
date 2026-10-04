@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
@@ -5,18 +7,226 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
+import '../screens/live_call_screen.dart';
 import '../state/property24_state.dart';
-
 import '../theme/app_theme.dart';
 import 'inprop_brand.dart';
 
-class AppScaffold extends StatelessWidget {
+class AppScaffold extends StatefulWidget {
   const AppScaffold({
     required this.navigationShell,
     super.key,
   });
 
   final StatefulNavigationShell navigationShell;
+
+  @override
+  State<AppScaffold> createState() => _AppScaffoldState();
+}
+
+class _AppScaffoldState extends State<AppScaffold> {
+  StreamSubscription<Map<String, dynamic>>? _callSubscription;
+  final Set<String> _promptedCallIds = <String>{};
+  final Set<String> _endedCallIds = <String>{};
+  String? _showingIncomingCallId;
+  String? _answeringIncomingCallId;
+  Property24State? _observedState;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = context.read<Property24State>();
+    if (_observedState == state) return;
+    _callSubscription?.cancel();
+    _observedState = state;
+    _callSubscription = state.callEvents.listen(_handleCallEvent);
+  }
+
+  @override
+  void dispose() {
+    _callSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleCallEvent(Map<String, dynamic> event) async {
+    final rawPayload = event['payload'];
+    if (rawPayload is! Map<String, dynamic>) return;
+    final eventType = '${event['type'] ?? ''}';
+    final callId = '${rawPayload['call_id'] ?? rawPayload['id'] ?? ''}';
+    if (eventType == 'call.ended') {
+      if (_showingIncomingCallId == callId && mounted) {
+        _endedCallIds.add(callId);
+        Navigator.of(context, rootNavigator: true).pop(false);
+      }
+      return;
+    }
+    if (eventType != 'call.started') return;
+    final state = _observedState;
+    if (state == null || !mounted) return;
+    final call = CallLogItem.fromJson(rawPayload);
+    if (call.id.isEmpty ||
+        call.initiatorId == state.user?.id ||
+        _promptedCallIds.contains(call.id)) {
+      return;
+    }
+    ConversationItem? conversation;
+    for (final item in state.snapshot.conversations) {
+      if (item.id == call.conversationId) {
+        conversation = item;
+        break;
+      }
+    }
+    if (conversation == null) {
+      await state.refresh(silent: true);
+      for (final item in state.snapshot.conversations) {
+        if (item.id == call.conversationId) {
+          conversation = item;
+          break;
+        }
+      }
+    }
+    final targetConversation = conversation;
+    if (targetConversation == null) return;
+    if (!_promptedCallIds.add(call.id)) return;
+    if (state.hasLocalActiveCall ||
+        _showingIncomingCallId != null ||
+        _answeringIncomingCallId != null) {
+      try {
+        await state.endCall(
+          targetConversation.id,
+          call.id,
+          status: 'missed',
+        );
+      } catch (exception) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(exception.toString())),
+          );
+        }
+      }
+      return;
+    }
+    _showingIncomingCallId = call.id;
+    unawaited(_showIncomingCall(call, targetConversation));
+  }
+
+  Future<void> _showIncomingCall(
+    CallLogItem call,
+    ConversationItem conversation,
+  ) async {
+    final state = _observedState;
+    if (state == null || !mounted) return;
+    AccountUser? caller;
+    for (final participant in conversation.participants) {
+      if (participant.id == call.initiatorId) {
+        caller = participant;
+        break;
+      }
+    }
+    final callerName =
+        caller?.name.isNotEmpty == true ? caller!.name : conversation.title;
+    final timeout = Timer(const Duration(seconds: 60), () {
+      if (mounted && _showingIncomingCallId == call.id) {
+        Navigator.of(context, rootNavigator: true).pop(false);
+      }
+    });
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: Text(
+          'Incoming ${call.mode == CallMode.video ? 'video' : 'voice'} call',
+        ),
+        content: Row(
+          children: [
+            const CircleAvatar(child: Icon(Icons.person)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    callerName,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  Text(
+                    conversation.propertyId.isEmpty
+                        ? 'Property24 chat'
+                        : conversation.title,
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Decline'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: Icon(
+              call.mode == CallMode.video ? Icons.videocam : Icons.call,
+            ),
+            label: const Text('Answer'),
+          ),
+        ],
+      ),
+    );
+    timeout.cancel();
+    if (_showingIncomingCallId == call.id) _showingIncomingCallId = null;
+    if (!mounted) return;
+    if (_endedCallIds.remove(call.id)) return;
+    if (accepted == true) {
+      _answeringIncomingCallId = call.id;
+      try {
+        await LiveCallScreen.answerIncoming(
+          context,
+          conversation: conversation,
+          call: call,
+          peerId: call.initiatorId,
+          peerName: callerName,
+        );
+      } catch (exception) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(exception.toString())),
+          );
+        }
+        try {
+          await state.endCall(
+            conversation.id,
+            call.id,
+            status: 'missed',
+          );
+        } catch (endException) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(endException.toString())),
+            );
+          }
+        }
+      } finally {
+        if (_answeringIncomingCallId == call.id) {
+          _answeringIncomingCallId = null;
+        }
+      }
+    } else {
+      try {
+        await state.endCall(conversation.id, call.id, status: 'missed');
+      } catch (exception) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(exception.toString())),
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,15 +249,15 @@ class AppScaffold extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(child: navigationShell),
+          Expanded(child: widget.navigationShell),
         ],
       ),
       bottomNavigationBar: _BottomNav(
-        currentIndex: navigationShell.currentIndex,
+        currentIndex: widget.navigationShell.currentIndex,
         onTap: (index) {
-          navigationShell.goBranch(
+          widget.navigationShell.goBranch(
             index,
-            initialLocation: index == navigationShell.currentIndex,
+            initialLocation: index == widget.navigationShell.currentIndex,
           );
         },
         isLandlord: state.user?.role == AccountRole.landlord,

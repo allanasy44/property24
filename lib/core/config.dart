@@ -5,6 +5,35 @@ class AppConfig {
     'API_BASE_URL',
     defaultValue: 'http://127.0.0.1:8010/api',
   );
+  static const _turnUrls = String.fromEnvironment('WEBRTC_TURN_URLS');
+  static const _turnUsername = String.fromEnvironment('WEBRTC_TURN_USERNAME');
+  static const _turnCredential =
+      String.fromEnvironment('WEBRTC_TURN_CREDENTIAL');
+
+  static List<Map<String, dynamic>> get webrtcIceServers {
+    final servers = <Map<String, dynamic>>[
+      {'urls': 'stun:stun.l.google.com:19302'},
+    ];
+    final turnUrls = _turnUrls
+        .split(',')
+        .map((url) => url.trim())
+        .where((url) => url.isNotEmpty)
+        .toList(growable: false);
+    if (turnUrls.isNotEmpty) {
+      if (_turnUsername.isEmpty || _turnCredential.isEmpty) {
+        throw StateError(
+          'Configure WEBRTC_TURN_USERNAME and WEBRTC_TURN_CREDENTIAL '
+          'along with WEBRTC_TURN_URLS.',
+        );
+      }
+      servers.add({
+        'urls': turnUrls,
+        'username': _turnUsername,
+        'credential': _turnCredential,
+      });
+    }
+    return servers;
+  }
 
   static Uri liveSocketUri(String token) {
     final base = Uri.parse(apiBaseUrl);

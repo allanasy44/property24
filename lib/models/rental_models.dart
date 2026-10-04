@@ -75,6 +75,41 @@ String localDate(Object? value, [String fallback = 'Updated']) {
   return DateFormat.yMMMd().format(date.toLocal());
 }
 
+DateTime? localDateTime(Object? value) {
+  if (value == null || '$value'.isEmpty) return null;
+  return DateTime.tryParse('$value')?.toLocal();
+}
+
+bool isSameLocalDay(DateTime first, DateTime second) =>
+    first.year == second.year &&
+    first.month == second.month &&
+    first.day == second.day;
+
+String chatMessageTime(DateTime? date) =>
+    date == null ? '' : DateFormat.jm().format(date);
+
+String chatDateLabel(DateTime? date, {DateTime? now}) {
+  if (date == null) return '';
+  final today = now ?? DateTime.now();
+  final localToday = DateTime(today.year, today.month, today.day);
+  final localDate = DateTime(date.year, date.month, date.day);
+  final difference = localToday.difference(localDate).inDays;
+  if (difference == 0) return 'Today';
+  if (difference == 1) return 'Yesterday';
+  if (difference > 1 && difference < 7) return DateFormat.EEEE().format(date);
+  return DateFormat.yMMMd().format(date);
+}
+
+String chatConversationTime(DateTime? date) {
+  if (date == null) return '';
+  final now = DateTime.now();
+  if (isSameLocalDay(date, now)) return chatMessageTime(date);
+  final yesterday = now.subtract(const Duration(days: 1));
+  if (isSameLocalDay(date, yesterday)) return 'Yesterday';
+  if (now.difference(date).inDays < 7) return DateFormat.E().format(date);
+  return DateFormat.MMMd().format(date);
+}
+
 class AccountUser {
   const AccountUser({
     required this.id,
@@ -833,6 +868,7 @@ class ChatMessageItem {
     required this.sender,
     required this.body,
     required this.createdAt,
+    this.createdAtDate,
     required this.attachmentUrl,
     required this.attachmentType,
     required this.attachmentName,
@@ -841,13 +877,17 @@ class ChatMessageItem {
   });
 
   factory ChatMessageItem.fromJson(Map<String, dynamic> json) {
+    final createdAtDate = localDateTime(json['created_at']);
     return ChatMessageItem(
       id: textValue(json, 'id'),
       conversationId: textValue(json, 'conversation_id'),
       senderId: textValue(json, 'sender_id'),
       sender: textValue(json, 'sender', 'Property24 user'),
       body: textValue(json, 'body'),
-      createdAt: localDate(json['created_at'], 'Just now'),
+      createdAt: createdAtDate == null
+          ? localDate(json['created_at'], 'Just now')
+          : chatMessageTime(createdAtDate),
+      createdAtDate: createdAtDate,
       attachmentUrl: textValue(json, 'attachment_url'),
       attachmentType: textValue(json, 'attachment_type'),
       attachmentName: textValue(json, 'attachment_name'),
@@ -862,6 +902,7 @@ class ChatMessageItem {
   final String sender;
   final String body;
   final String createdAt;
+  final DateTime? createdAtDate;
   final String attachmentUrl;
   final String attachmentType;
   final String attachmentName;
@@ -920,6 +961,7 @@ class ConversationItem {
     required this.title,
     required this.preview,
     required this.updatedAt,
+    this.updatedAtDate,
     required this.phoneNumbersRevealed,
     required this.participants,
     required this.unreadCount,
@@ -937,6 +979,9 @@ class ConversationItem {
     final lastMessage = rawLastMessage is Map
         ? Map<String, dynamic>.from(rawLastMessage)
         : null;
+    final updatedAtDate = localDateTime(
+      json['updated_at'] ?? lastMessage?['created_at'],
+    );
     return ConversationItem(
       id: textValue(json, 'id'),
       propertyId: textValue(json, 'property_id'),
@@ -947,7 +992,8 @@ class ConversationItem {
       ),
       preview: textValue(
           lastMessage ?? const {}, 'body', 'Phone numbers remain hidden.'),
-      updatedAt: localDate(json['updated_at']),
+      updatedAt: chatConversationTime(updatedAtDate),
+      updatedAtDate: updatedAtDate,
       phoneNumbersRevealed: json['phone_numbers_revealed'] == true,
       participants: participants,
       unreadCount: int.tryParse('${json['unread_count'] ?? 0}') ?? 0,
@@ -959,6 +1005,7 @@ class ConversationItem {
   final String title;
   final String preview;
   final String updatedAt;
+  final DateTime? updatedAtDate;
   final bool phoneNumbersRevealed;
   final List<AccountUser> participants;
   final int unreadCount;
@@ -970,6 +1017,7 @@ class ConversationItem {
       title: title,
       preview: preview,
       updatedAt: updatedAt,
+      updatedAtDate: updatedAtDate,
       phoneNumbersRevealed: phoneNumbersRevealed,
       participants: participants,
       unreadCount: unreadCount ?? this.unreadCount,
@@ -988,6 +1036,9 @@ class CallLogItem {
     required this.direction,
     required this.when,
     this.status = '',
+    this.conversationId = '',
+    this.initiatorId = '',
+    this.contactId = '',
   });
 
   factory CallLogItem.fromJson(Map<String, dynamic> json) {
@@ -1002,6 +1053,9 @@ class CallLogItem {
       direction: status == 'Missed' ? 'Missed' : 'Call',
       when: localDate(json['created_at'], 'Recent'),
       status: status,
+      conversationId: textValue(json, 'conversation_id'),
+      initiatorId: textValue(json, 'initiator_id'),
+      contactId: textValue(json, 'contact_id'),
     );
   }
 
@@ -1012,6 +1066,9 @@ class CallLogItem {
   final String direction;
   final String when;
   final String status;
+  final String conversationId;
+  final String initiatorId;
+  final String contactId;
 }
 
 class NotificationItem {

@@ -10,6 +10,7 @@ import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
+import 'live_call_screen.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -45,7 +46,14 @@ class _InboxScreenState extends State<InboxScreen> {
       final matchesFilter = _filter == 'All' ||
           (_filter == 'Unread' && conversation.unreadCount > 0);
       return matchesQuery && matchesFilter;
-    }).toList(growable: false);
+    }).toList()
+      ..sort((first, second) {
+        final firstDate = first.updatedAtDate;
+        final secondDate = second.updatedAtDate;
+        if (firstDate == null) return secondDate == null ? 0 : 1;
+        if (secondDate == null) return -1;
+        return secondDate.compareTo(firstDate);
+      });
 
     return LoadingOverlay(
       child: RefreshIndicator(
@@ -146,19 +154,28 @@ class _InboxScreenState extends State<InboxScreen> {
                 body: '',
               )
             else
-              for (final conversation in conversations)
+              for (var index = 0; index < conversations.length; index++) ...[
+                if (index == 0 ||
+                    _conversationGroup(
+                            conversations[index - 1].updatedAtDate) !=
+                        _conversationGroup(conversations[index].updatedAtDate))
+                  _ConversationGroupHeading(
+                    label:
+                        _conversationGroup(conversations[index].updatedAtDate),
+                  ),
                 _ConversationTile(
-                  conversation: conversation,
-                  property: _propertyFor(state, conversation),
+                  conversation: conversations[index],
+                  property: _propertyFor(state, conversations[index]),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => ConversationScreen(
-                        conversation: conversation,
-                        property: _propertyFor(state, conversation),
+                        conversation: conversations[index],
+                        property: _propertyFor(state, conversations[index]),
                       ),
                     ),
                   ),
                 ),
+              ],
           ],
         ),
       ),
@@ -179,6 +196,38 @@ class _InboxScreenState extends State<InboxScreen> {
       if (property.id == conversation.propertyId) return property;
     }
     return null;
+  }
+
+  String _conversationGroup(DateTime? updatedAt) {
+    if (updatedAt == null) return 'Earlier';
+    final now = DateTime.now();
+    if (isSameLocalDay(updatedAt, now)) return 'Today';
+    if (isSameLocalDay(updatedAt, now.subtract(const Duration(days: 1)))) {
+      return 'Yesterday';
+    }
+    return 'Earlier';
+  }
+}
+
+class _ConversationGroupHeading extends StatelessWidget {
+  const _ConversationGroupHeading({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          color: AppTheme.textMuted,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1,
+        ),
+      ),
+    );
   }
 }
 
@@ -546,12 +595,23 @@ class _ConversationScreenState extends State<ConversationScreen> {
               children: [
                 if (_loading && _messages.isEmpty)
                   Center(child: CircularProgressIndicator()),
-                for (final item in _messages)
+                for (var index = 0; index < _messages.length; index++) ...[
+                  if (_messages[index].createdAtDate != null &&
+                      (index == 0 ||
+                          _messages[index - 1].createdAtDate == null ||
+                          !isSameLocalDay(
+                            _messages[index].createdAtDate!,
+                            _messages[index - 1].createdAtDate!,
+                          )))
+                    _MessageDateDivider(
+                      label: chatDateLabel(_messages[index].createdAtDate),
+                    ),
                   _PersistedMessageBubble(
-                    item: item,
-                    mine: item.senderId == state.user?.id,
-                    onLongPress: () => _showMessageActions(item),
+                    item: _messages[index],
+                    mine: _messages[index].senderId == state.user?.id,
+                    onLongPress: () => _showMessageActions(_messages[index]),
                   ),
+                ],
               ],
             ),
           ),
@@ -575,7 +635,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    tooltip: 'Add photo or video',
+                    tooltip: 'Capture photo or video',
                     onPressed: _uploading ? null : _showAttachmentSheet,
                     icon: const Icon(CupertinoIcons.add_circled_solid),
                     color: AppTheme.textSecondary,
@@ -640,21 +700,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
                         ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Camera',
-                    onPressed: _uploading
-                        ? null
-                        : () => _pickChatMedia(
-                              source: ImageSource.camera,
-                              video: false,
-                            ),
-                    icon: const Icon(CupertinoIcons.camera),
-                    color: AppTheme.textSecondary,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints.tightFor(width: 34, height: 34),
                   ),
                   ValueListenableBuilder<TextEditingValue>(
                     valueListenable: _message,
@@ -793,16 +838,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   Future<void> _startCall(CallMode mode) async {
     try {
-      await context
-          .read<Property24State>()
-          .startCall(widget.conversation.id, mode: mode);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${mode == CallMode.video ? 'Video' : 'Voice'} call request sent',
-          ),
-        ),
+      await LiveCallScreen.startOutgoing(
+        context,
+        conversation: widget.conversation,
+        mode: mode,
+        peerName: _participant(context.read<Property24State>())?.name ??
+            widget.conversation.title,
       );
     } catch (exception) {
       if (mounted) {
@@ -945,84 +986,81 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   Future<void> _showAttachmentSheet() async {
-    await showModalBottomSheet<void>(
+    final captureVideo = await showModalBottomSheet<bool>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         child: Wrap(
           children: [
             ListTile(
-              leading: Icon(CupertinoIcons.camera),
-              title: Text('Take a photo'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pickChatMedia(source: ImageSource.camera, video: false);
-              },
+              leading: const Icon(CupertinoIcons.camera),
+              title: const Text('Photo'),
+              onTap: () => Navigator.pop(sheetContext, false),
             ),
             ListTile(
-              leading: Icon(CupertinoIcons.photo_on_rectangle),
-              title: Text('Choose a photo'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pickChatMedia(source: ImageSource.gallery, video: false);
-              },
-            ),
-            ListTile(
-              leading: Icon(CupertinoIcons.videocam),
-              title: Text('Record a video'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pickChatMedia(source: ImageSource.camera, video: true);
-              },
-            ),
-            ListTile(
-              leading: Icon(CupertinoIcons.film),
-              title: Text('Choose a video'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pickChatMedia(source: ImageSource.gallery, video: true);
-              },
+              leading: const Icon(CupertinoIcons.videocam),
+              title: const Text('Video'),
+              onTap: () => Navigator.pop(sheetContext, true),
             ),
           ],
         ),
       ),
     );
+    if (captureVideo != null) {
+      await _captureChatMedia(video: captureVideo);
+    }
   }
 
-  Future<void> _pickChatMedia(
-      {required ImageSource source, required bool video}) async {
+  Future<void> _captureChatMedia({required bool video}) async {
     try {
       final file = video
           ? await _picker.pickVideo(
-              source: source,
+              source: ImageSource.camera,
               preferredCameraDevice: CameraDevice.rear,
-              maxDuration: const Duration(minutes: 2))
+              maxDuration: const Duration(minutes: 2),
+            )
           : await _picker.pickImage(
-              source: source,
+              source: ImageSource.camera,
               preferredCameraDevice: CameraDevice.rear,
-              imageQuality: 100);
+              imageQuality: 100,
+            );
       if (file != null) await _sendAttachment(file, video ? 'video' : 'image');
     } catch (exception) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+      }
     }
   }
 
   Future<void> _toggleRecording() async {
-    if (_recording) {
-      final path = await _audioRecorder.stop();
-      if (mounted) setState(() => _recording = false);
-      if (path != null)
-        await _sendAttachment(XFile(path, mimeType: 'audio/mp4'), 'audio');
-      return;
-    }
-    if (!await _audioRecorder.hasPermission()) return;
-    final directory = await getTemporaryDirectory();
-    await _audioRecorder.start(const RecordConfig(),
+    try {
+      if (_recording) {
+        final path = await _audioRecorder.stop();
+        if (mounted) setState(() => _recording = false);
+        if (path != null) {
+          await _sendAttachment(XFile(path, mimeType: 'audio/mp4'), 'audio');
+        }
+        return;
+      }
+      if (!await _audioRecorder.hasPermission()) {
+        throw StateError('Microphone permission is required to record audio.');
+      }
+      final directory = await getTemporaryDirectory();
+      await _audioRecorder.start(
+        const RecordConfig(),
         path:
-            '${directory.path}/property24-${DateTime.now().millisecondsSinceEpoch}.m4a');
-    if (mounted) setState(() => _recording = true);
+            '${directory.path}/property24-${DateTime.now().millisecondsSinceEpoch}.m4a',
+      );
+      if (mounted) setState(() => _recording = true);
+    } catch (exception) {
+      if (mounted) {
+        setState(() => _recording = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
   }
 
   Future<void> _sendAttachment(XFile file, String type) async {
@@ -1055,6 +1093,34 @@ class _ConversationScreenState extends State<ConversationScreen> {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
     }
+  }
+}
+
+class _MessageDateDivider extends StatelessWidget {
+  const _MessageDateDivider({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: AppTheme.textMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
   }
 }
 

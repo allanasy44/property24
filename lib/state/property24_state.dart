@@ -28,6 +28,9 @@ class Property24State extends ChangeNotifier {
   final Map<String, int> _conversationRevisions = <String, int>{};
   final Map<String, String> _typingUsers = <String, String>{};
   final Map<String, CallLogItem> _activeCalls = <String, CallLogItem>{};
+  String? _localActiveCallId;
+  final StreamController<Map<String, dynamic>> _callEvents =
+      StreamController<Map<String, dynamic>>.broadcast();
   bool _refreshing = false;
 
   PlatformSnapshot snapshot = PlatformSnapshot.empty();
@@ -52,7 +55,21 @@ class Property24State extends ChangeNotifier {
       _typingUsers[conversationId];
   CallLogItem? activeCallForConversation(String conversationId) =>
       _activeCalls[conversationId];
+  bool get hasLocalActiveCall => _localActiveCallId != null;
+  Stream<Map<String, dynamic>> get callEvents => _callEvents.stream;
   List<CallLogItem> get callHistory => snapshot.calls;
+
+  bool activateLocalCall(String callId) {
+    if (_localActiveCallId != null && _localActiveCallId != callId) {
+      return false;
+    }
+    _localActiveCallId = callId;
+    return true;
+  }
+
+  void deactivateLocalCall(String callId) {
+    if (_localActiveCallId == callId) _localActiveCallId = null;
+  }
 
   String? get token => _token;
   bool get signedIn => _token != null && user != null;
@@ -199,6 +216,12 @@ class Property24State extends ChangeNotifier {
       final payload = event['payload'];
       final conversationId =
           payload is Map ? '${payload['conversation_id'] ?? ''}' : '';
+      if (type.startsWith('call.') && payload is Map<String, dynamic>) {
+        _callEvents.add({
+          'type': type,
+          'payload': Map<String, dynamic>.from(payload),
+        });
+      }
       if (type == 'typing' && conversationId.isNotEmpty && payload is Map) {
         final isTyping = payload['is_typing'] == true;
         if (isTyping) {
@@ -267,18 +290,24 @@ class Property24State extends ChangeNotifier {
     }
   }
 
-  void sendLiveEvent(
+  bool sendLiveEvent(
     String type,
     String conversationId, {
     Map<String, dynamic> payload = const {},
   }) {
     final channel = _liveChannel;
-    if (channel == null) return;
-    channel.sink.add(jsonEncode({
-      'type': type,
-      'conversation_id': conversationId,
-      ...payload,
-    }));
+    if (channel == null) return false;
+    try {
+      channel.sink.add(jsonEncode({
+        'type': type,
+        'conversation_id': conversationId,
+        ...payload,
+      }));
+      return true;
+    } catch (_) {
+      _scheduleLiveReconnect();
+      return false;
+    }
   }
 
   @override
@@ -286,6 +315,7 @@ class Property24State extends ChangeNotifier {
     _syncTimer?.cancel();
     _liveReconnectTimer?.cancel();
     unawaited(_closeLiveSocket());
+    unawaited(_callEvents.close());
     super.dispose();
   }
 

@@ -47,6 +47,23 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8010/api
 
 For iOS simulator, desktop, and web builds, `http://127.0.0.1:8010/api` is usually correct when the backend runs on the same machine.
 
+## Voice and video calls
+
+Calls use the authenticated live websocket for offer/answer/ICE signaling and WebRTC for media. The foreground app prompts for microphone access for voice calls and microphone plus camera access for video calls. Web builds must be served from HTTPS (or localhost) for browser media permissions.
+
+This checkout does not include generated Android or iOS runner folders. For native builds, generate them with the command above and add `android.permission.RECORD_AUDIO` / `android.permission.CAMERA` to the Android manifest, plus `NSMicrophoneUsageDescription` / `NSCameraUsageDescription` to the iOS Info.plist. Native background incoming-call UI and push-token registration are not included in the Flutter client; the backend push endpoint currently needs registered device tokens and platform credentials for that flow.
+
+STUN is enabled by default. For reliable calls across restrictive NATs and corporate/mobile networks, provide a TURN service and build with all of:
+
+```bash
+flutter run \
+  --dart-define=WEBRTC_TURN_URLS=turn:turn.example.com:3478,turns:turn.example.com:5349 \
+  --dart-define=WEBRTC_TURN_USERNAME=ephemeral-username \
+  --dart-define=WEBRTC_TURN_CREDENTIAL=ephemeral-credential
+```
+
+Use short-lived TURN credentials from a trusted service for production; do not put permanent TURN secrets in client builds. Without TURN, some network combinations will not connect even when both clients and signaling are working.
+
 Backend:
 
 ```bash
