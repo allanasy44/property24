@@ -10,7 +10,6 @@ import '../models/rental_models.dart';
 import '../screens/live_call_screen.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
-import 'inprop_brand.dart';
 
 class AppScaffold extends StatefulWidget {
   const AppScaffold({
@@ -234,24 +233,7 @@ class _AppScaffoldState extends State<AppScaffold> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       extendBody: true,
-      body: Column(
-        children: [
-          SafeArea(
-            bottom: false,
-            child: SizedBox(
-              height: 48,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: const InPropBrand(compact: true),
-                ),
-              ),
-            ),
-          ),
-          Expanded(child: widget.navigationShell),
-        ],
-      ),
+      body: widget.navigationShell,
       bottomNavigationBar: _BottomNav(
         currentIndex: widget.navigationShell.currentIndex,
         onTap: (index) {

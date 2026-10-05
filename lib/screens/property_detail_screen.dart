@@ -25,6 +25,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   bool _saved = false;
   bool _liked = false;
   int _likesCount = 0;
+  bool _followingSupplier = false;
+  int _supplierFollowersCount = 0;
+  bool _supplierFollowLoading = false;
   bool _commentsLoading = false;
   final TextEditingController _commentController = TextEditingController();
   List<PropertyCommentItem> _comments = <PropertyCommentItem>[];
@@ -37,6 +40,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadComments();
       _loadLikeStatus();
+      _loadSupplierFollowStatus();
     });
   }
 
@@ -90,6 +94,66 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
           SnackBar(content: Text(userFacingError(exception))),
         );
       }
+    }
+  }
+
+  Future<void> _loadSupplierFollowStatus() async {
+    final supplier = widget.property.supplier;
+    final state = context.read<Property24State>();
+    if (!state.signedIn ||
+        supplier == null ||
+        !supplier.verified ||
+        supplier.id == state.user?.id) {
+      return;
+    }
+    try {
+      final result = await state.supplierFollowStatus(supplier.id);
+      if (!mounted) return;
+      setState(() {
+        _followingSupplier = result['following'] == true;
+        _supplierFollowersCount =
+            int.tryParse('${result['followers_count'] ?? 0}') ?? 0;
+      });
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleSupplierFollow() async {
+    final supplier = widget.property.supplier;
+    final state = context.read<Property24State>();
+    if (supplier == null) return;
+    if (!state.signedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in to follow this supplier.')),
+      );
+      return;
+    }
+    if (_supplierFollowLoading) return;
+    setState(() => _supplierFollowLoading = true);
+    try {
+      final result = await state.toggleSupplierFollow(
+        supplier.id,
+        following: !_followingSupplier,
+      );
+      if (!mounted) return;
+      setState(() {
+        _followingSupplier = result['following'] == true;
+        _supplierFollowersCount =
+            int.tryParse('${result['followers_count'] ?? 0}') ?? 0;
+      });
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _supplierFollowLoading = false);
     }
   }
 
@@ -278,7 +342,13 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         ),
                         const SizedBox(height: 20),
                       ],
-                      _HostCard(property: property),
+                      _HostCard(
+                        property: property,
+                        following: _followingSupplier,
+                        followersCount: _supplierFollowersCount,
+                        followLoading: _supplierFollowLoading,
+                        onFollow: _toggleSupplierFollow,
+                      ),
                       const SizedBox(height: 22),
                       Text(
                         'Comments',
@@ -1200,9 +1270,19 @@ class _Pill extends StatelessWidget {
 }
 
 class _HostCard extends StatelessWidget {
-  const _HostCard({required this.property});
+  const _HostCard({
+    required this.property,
+    required this.following,
+    required this.followersCount,
+    required this.followLoading,
+    required this.onFollow,
+  });
 
   final PropertyListing property;
+  final bool following;
+  final int followersCount;
+  final bool followLoading;
+  final VoidCallback onFollow;
 
   @override
   Widget build(BuildContext context) {
@@ -1234,61 +1314,96 @@ class _HostCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppTheme.border),
         ),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            CircleAvatar(
-              radius: 21,
-              backgroundColor: AppTheme.textPrimary,
-              backgroundImage: supplier?.profilePicture.isNotEmpty == true
-                  ? NetworkImage(supplier!.profilePicture)
-                  : null,
-              child: supplier?.profilePicture.isNotEmpty == true
-                  ? null
-                  : Text(
-                      initials,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 21,
+                  backgroundColor: AppTheme.textPrimary,
+                  backgroundImage: supplier?.profilePicture.isNotEmpty == true
+                      ? NetworkImage(supplier!.profilePicture)
+                      : null,
+                  child: supplier?.profilePicture.isNotEmpty == true
+                      ? null
+                      : Text(
+                          initials,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (name.isNotEmpty)
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      if (role.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          role,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 10.5,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (supplier?.verified == true &&
+                    supplier?.id != context.read<Property24State>().user?.id)
+                  TextButton(
+                    onPressed: followLoading ? null : onFollow,
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (name.isNotEmpty)
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  if (role.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      role,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppTheme.textMuted,
-                        fontSize: 10.5,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+                    child: followLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(following ? 'Following' : 'Follow'),
+                  ),
+                if (supplier?.verified == true)
+                  Icon(
+                    CupertinoIcons.checkmark_seal_fill,
+                    color: AppTheme.accent,
+                    size: 18,
+                  ),
+              ],
             ),
             if (supplier?.verified == true)
-              Icon(
-                CupertinoIcons.checkmark_seal_fill,
-                color: AppTheme.accent,
-                size: 18,
+              Padding(
+                padding: const EdgeInsets.only(left: 54, top: 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '$followersCount followers',
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 10.5,
+                    ),
+                  ),
+                ),
               ),
           ],
         ),
