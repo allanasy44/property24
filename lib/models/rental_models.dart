@@ -259,6 +259,8 @@ class PropertyListing {
     required this.monthlyRent,
     required this.depositRequired,
     required this.propertyType,
+    this.accommodationInstitution = '',
+    this.sharedRoom = false,
     required this.bedrooms,
     required this.bathrooms,
     required this.furnished,
@@ -318,6 +320,9 @@ class PropertyListing {
       monthlyRent: textValue(json, 'monthly_rent', '0'),
       depositRequired: textValue(json, 'deposit_required', '0'),
       propertyType: titleize(json['property_type']),
+      accommodationInstitution:
+          textValue(json, 'accommodation_institution'),
+      sharedRoom: json['shared_room'] == true,
       bedrooms: int.tryParse('${json['bedrooms']}') ?? 0,
       bathrooms: num.tryParse('${json['bathrooms']}') ?? 0,
       furnished: json['furnished'] == true,
@@ -389,6 +394,8 @@ class PropertyListing {
   final String monthlyRent;
   final String depositRequired;
   final String propertyType;
+  final String accommodationInstitution;
+  final bool sharedRoom;
   final int bedrooms;
   final num bathrooms;
   final bool furnished;
@@ -436,6 +443,8 @@ class PropertyListing {
       ? money(monthlyRent)
       : money(monthlyRent, suffix: '/ month');
   bool get isLand => propertyType.toLowerCase().contains('land');
+  bool get isStudentAccommodation =>
+      propertyType.toLowerCase().contains('student accommodation');
   String get landSizeLabel => landSize.trim().isEmpty
       ? 'Size not provided'
       : '${landSize.trim()} $landSizeUnit';
@@ -532,9 +541,16 @@ class PropertyListing {
   }
 
   List<PropertyFact> get passportFacts {
+    final isCommercialProperty = const {
+      'office',
+      'shop',
+      'commercial property',
+    }.contains(propertyType.toLowerCase());
     return [
-      PropertyFact(iconName: 'bed', label: 'Bedrooms', value: '$bedrooms'),
-      PropertyFact(iconName: 'bath', label: 'Bathrooms', value: '$bathrooms'),
+      if (!isCommercialProperty)
+        PropertyFact(iconName: 'bed', label: 'Bedrooms', value: '$bedrooms'),
+      if (!isCommercialProperty)
+        PropertyFact(iconName: 'bath', label: 'Bathrooms', value: '$bathrooms'),
       PropertyFact(iconName: 'type', label: 'Type', value: propertyType),
       if (isLand)
         PropertyFact(

@@ -358,6 +358,32 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       _PriceHeader(property: property),
                       const SizedBox(height: 14),
                       _MetaLine(property: property),
+                      if (property.sharedRoom ||
+                          (property.isStudentAccommodation &&
+                              property
+                                  .accommodationInstitution.isNotEmpty)) ...[
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            if (property.sharedRoom)
+                              const Chip(
+                                avatar: Icon(CupertinoIcons.person_2, size: 16),
+                                label: Text('Shared room'),
+                              ),
+                            if (property.isStudentAccommodation &&
+                                property.accommodationInstitution.isNotEmpty)
+                              Chip(
+                                avatar:
+                                    const Icon(CupertinoIcons.book, size: 16),
+                                label: Text(
+                                  'For ${property.accommodationInstitution}',
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       _AvailabilityCard(property: property),
                       const SizedBox(height: 14),

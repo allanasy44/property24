@@ -14,11 +14,22 @@ def property_search_queryset(params):
             | Q(city__icontains=query)
             | Q(suburb__icontains=query)
             | Q(property_type__icontains=query)
+            | Q(accommodation_institution__icontains=query)
         )
     if params.get("city"):
         properties = properties.filter(city__iexact=params["city"])
     if params.get("suburb"):
         properties = properties.filter(suburb__iexact=params["suburb"])
+    if params.get("institution"):
+        properties = properties.filter(
+            accommodation_institution__iexact=params["institution"].strip()
+        )
+    if truthy(params.get("shared_room")):
+        properties = properties.filter(shared_room=True)
+    if truthy(params.get("student_only")):
+        properties = properties.filter(
+            property_type=Property.PropertyType.STUDENT
+        )
     if params.get("property_type"):
         properties = properties.filter(property_type=params["property_type"])
     if params.get("type"):

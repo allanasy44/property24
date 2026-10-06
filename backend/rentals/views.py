@@ -913,6 +913,15 @@ def properties_collection(request):
     property_type = normalise_choice(data.get("property_type") or data.get("type"), Property.PropertyType, Property.PropertyType.HOUSE)
     if property_type == Property.PropertyType.LAND and listing_intent != Property.ListingIntent.SALE:
         return json_error("Land and stands must be listed for sale", status=400)
+    accommodation_institution = str(data.get("accommodation_institution") or "").strip()
+    if (
+        property_type == Property.PropertyType.STUDENT
+        and not accommodation_institution
+    ):
+        return json_error(
+            "Choose the university, college, or polytechnic this accommodation serves.",
+            status=400,
+        )
     land_size = parse_decimal(data.get("land_size"), "land_size") if data.get("land_size") not in (None, "") else None
 
     prop = Property.objects.create(
@@ -931,6 +940,8 @@ def properties_collection(request):
         monthly_rent=parse_decimal(data.get("monthly_rent") or data.get("price"), "monthly_rent"),
         deposit_required=parse_decimal(data.get("deposit_required") or data.get("deposit"), "deposit_required"),
         property_type=property_type,
+        accommodation_institution=accommodation_institution,
+        shared_room=to_bool(data.get("shared_room")),
         bedrooms=int(data.get("bedrooms", 0)),
         stand_reference=data.get("stand_reference", ""),
         stands_available=max(1, int(data.get("stands_available", 1))),
@@ -1015,6 +1026,18 @@ def property_detail(request, property_id):
         "is_live": _is_live_public_listing(prop),
     }
     apply_property_updates(prop, data, owner, agent, acting_user)
+    if (
+        prop.property_type == Property.PropertyType.STUDENT
+        and not prop.accommodation_institution.strip()
+        and (
+            "property_type" in data
+            or "accommodation_institution" in data
+        )
+    ):
+        return json_error(
+            "Choose the university, college, or polytechnic this accommodation serves.",
+            status=400,
+        )
     prop.save()
     payload = serialize_property(prop)
     if settings.AI_ASSISTED_REVIEW_ENABLED:
@@ -3266,11 +3289,22 @@ def apply_property_filters(properties, params):
             | Q(city__icontains=q)
             | Q(suburb__icontains=q)
             | Q(property_type__icontains=q)
+            | Q(accommodation_institution__icontains=q)
         )
     if params.get("city"):
         properties = properties.filter(city__iexact=params["city"])
     if params.get("suburb"):
         properties = properties.filter(suburb__iexact=params["suburb"])
+    if params.get("institution"):
+        properties = properties.filter(
+            accommodation_institution__iexact=params["institution"].strip()
+        )
+    if to_bool(params.get("shared_room")):
+        properties = properties.filter(shared_room=True)
+    if to_bool(params.get("student_only")):
+        properties = properties.filter(
+            property_type=Property.PropertyType.STUDENT
+        )
     property_type = params.get("property_type") or params.get("type")
     if property_type:
         properties = properties.filter(property_type=normalise_choice(property_type, Property.PropertyType, property_type))
@@ -3419,6 +3453,12 @@ def apply_property_updates(prop, data, owner, agent, acting_user):
             setattr(prop, field, data[field])
     if data.get("property_type") is not None:
         prop.property_type = normalise_choice(data["property_type"], Property.PropertyType, prop.property_type)
+    if data.get("accommodation_institution") is not None:
+        prop.accommodation_institution = str(
+            data["accommodation_institution"]
+        ).strip()
+    if data.get("shared_room") is not None:
+        prop.shared_room = to_bool(data["shared_room"])
     if data.get("listing_intent") is not None or data.get("intent") is not None:
         prop.listing_intent = normalise_choice(data.get("listing_intent") or data.get("intent"), Property.ListingIntent, prop.listing_intent)
     if prop.property_type == Property.PropertyType.LAND:
@@ -4373,6 +4413,8 @@ def serialize_property(prop):
         "monthly_rent": str(prop.monthly_rent),
         "deposit_required": str(prop.deposit_required),
         "property_type": prop.property_type,
+        "accommodation_institution": prop.accommodation_institution,
+        "shared_room": prop.shared_room,
         "bedrooms": prop.bedrooms,
         "stand_reference": prop.stand_reference,
         "stands_available": prop.stands_available,

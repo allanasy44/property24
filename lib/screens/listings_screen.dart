@@ -576,8 +576,10 @@ class _PropertyEditorState extends State<PropertyEditor> {
   late final TextEditingController _landSize;
   late final TextEditingController _zoning;
   late final TextEditingController _roadAccess;
+  late final TextEditingController _accommodationInstitution;
   String _intent = 'Rent';
   String _type = 'house';
+  bool _sharedRoom = false;
   bool _furnished = false;
   bool _solar = false;
   bool _borehole = false;
@@ -605,6 +607,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _landSize = TextEditingController(text: property?.landSize ?? '');
     _zoning = TextEditingController(text: property?.zoning ?? '');
     _roadAccess = TextEditingController(text: property?.roadAccess ?? '');
+    _accommodationInstitution = TextEditingController(
+      text: property?.accommodationInstitution ?? '',
+    );
     _deposit = TextEditingController(text: property?.depositRequired ?? '');
     _beds = TextEditingController(text: '${property?.bedrooms ?? ''}');
     _baths = TextEditingController(text: '${property?.bathrooms ?? ''}');
@@ -630,6 +635,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _pets = property?.petFriendly ?? false;
     _tour = property?.has360Tour ?? false;
     _showExactLocation = property?.showExactLocation ?? false;
+    _sharedRoom = property?.sharedRoom ?? false;
   }
 
   @override
@@ -655,6 +661,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _landSize.dispose();
     _zoning.dispose();
     _roadAccess.dispose();
+    _accommodationInstitution.dispose();
     super.dispose();
   }
 
@@ -662,6 +669,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
   Widget build(BuildContext context) {
     final inset = MediaQuery.viewInsetsOf(context).bottom;
     final isLand = _type == 'land';
+    final isCommercialProperty = _type == 'office' || _type == 'shop';
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
@@ -789,6 +797,12 @@ class _PropertyEditorState extends State<PropertyEditor> {
                           value: 'cottage',
                           child: Text('Cottage'),
                         ),
+                        DropdownMenuItem(value: 'room', child: Text('Room')),
+                        DropdownMenuItem(
+                          value: 'office',
+                          child: Text('Office'),
+                        ),
+                        DropdownMenuItem(value: 'shop', child: Text('Shop')),
                         DropdownMenuItem(
                           value: 'student_accommodation',
                           child: Text('Student accommodation'),
@@ -811,6 +825,17 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       },
                     ),
                   ),
+                  if (_type == 'student_accommodation')
+                    _field(
+                      _accommodationInstitution,
+                      'University, college or polytechnic (e.g. UZ or Harare Polytechnic)',
+                    ),
+                  if (_type == 'room' || _type == 'student_accommodation')
+                    _switch(
+                      'Shared room',
+                      _sharedRoom,
+                      (value) => setState(() => _sharedRoom = value),
+                    ),
                 ],
               ),
             ),
@@ -827,7 +852,11 @@ class _PropertyEditorState extends State<PropertyEditor> {
                   ),
                   _field(
                     _address,
-                    isLand ? 'Stand location / address' : 'House address',
+                    isLand
+                        ? 'Stand location / address'
+                        : isCommercialProperty
+                            ? 'Office / shop address'
+                            : 'Property address',
                   ),
                   Row(
                     children: [
@@ -865,7 +894,11 @@ class _PropertyEditorState extends State<PropertyEditor> {
               ),
             ),
             _Section(
-              title: isLand ? 'Asking price' : 'Pricing and rooms',
+              title: isLand
+                  ? 'Asking price'
+                  : isCommercialProperty
+                      ? 'Rental details'
+                      : 'Pricing and rooms',
               child: Column(
                 children: [
                   Row(
@@ -893,7 +926,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       ],
                     ],
                   ),
-                  if (!isLand)
+                  if (!isLand && !isCommercialProperty)
                     Row(
                       children: [
                         Expanded(
@@ -1340,6 +1373,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final isLandListing = _type == 'land';
+    final isCommercialProperty = _type == 'office' || _type == 'shop';
     final hasLatitude = _latitude.text.trim().isNotEmpty;
     final hasLongitude = _longitude.text.trim().isNotEmpty;
     if (hasLatitude != hasLongitude) {
@@ -1357,11 +1391,18 @@ class _PropertyEditorState extends State<PropertyEditor> {
       longitude: _longitude.text.trim(),
       showExactLocation: _showExactLocation,
       listingIntent: _intent.toLowerCase(),
+      accommodationInstitution: _accommodationInstitution.text.trim(),
+      sharedRoom:
+          _sharedRoom && (_type == 'room' || _type == 'student_accommodation'),
       monthlyRent: _rent.text.trim(),
       depositRequired: isLandListing ? '' : _deposit.text.trim(),
       propertyType: _type,
-      bedrooms: isLandListing ? 0 : int.tryParse(_beds.text) ?? 0,
-      bathrooms: isLandListing ? 0 : num.tryParse(_baths.text) ?? 1,
+      bedrooms: isLandListing || isCommercialProperty
+          ? 0
+          : int.tryParse(_beds.text) ?? 0,
+      bathrooms: isLandListing || isCommercialProperty
+          ? 0
+          : num.tryParse(_baths.text) ?? 1,
       description: _description.text.trim(),
       waterAvailability: isLandListing ? '' : _water.text.trim(),
       parking: isLandListing ? '' : _parking.text.trim(),

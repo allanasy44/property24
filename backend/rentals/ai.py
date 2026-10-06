@@ -209,7 +209,10 @@ SEARCH_SYNONYMS = {
     "garden": {"yard", "outdoor"},
     "cheap": {"affordable", "budget", "low"},
     "furnished": {"furnished", "fully_furnished"},
-    "student": {"student_accommodation", "flat"},
+    "student": {"student_accommodation", "flat", "room"},
+    "office": {"office"},
+    "shop": {"shop"},
+    "room": {"room"},
 }
 SEARCH_CITIES = {
     "harare", "bulawayo", "mutare", "gweru", "masvingo", "kwekwe",
@@ -294,7 +297,8 @@ def parse_search_intent(query):
 
 
 PropertyTypeValues = {
-    "house", "flat", "cottage", "student_accommodation", "commercial_property", "land",
+    "house", "flat", "cottage", "room", "office", "shop",
+    "student_accommodation", "commercial_property", "land",
 }
 
 

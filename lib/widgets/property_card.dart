@@ -30,6 +30,11 @@ class PropertyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final isCommercialProperty = const {
+      'office',
+      'shop',
+      'commercial property',
+    }.contains(property.propertyType.toLowerCase());
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.only(bottom: 14),
@@ -192,6 +197,12 @@ class PropertyCard extends StatelessWidget {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
+                      if (isCommercialProperty ||
+                          property.propertyType.toLowerCase() == 'room')
+                        _Pill(
+                          icon: CupertinoIcons.building_2_fill,
+                          label: property.propertyType,
+                        ),
                       if (property.isLand) ...[
                         _Pill(
                           icon: CupertinoIcons.square,
@@ -215,7 +226,7 @@ class PropertyCard extends StatelessWidget {
                             icon: CupertinoIcons.drop,
                             label: 'Water',
                           ),
-                      ] else ...[
+                      ] else if (!isCommercialProperty) ...[
                         _Pill(
                           icon: CupertinoIcons.bed_double,
                           label: '${property.bedrooms} beds',
@@ -236,6 +247,17 @@ class PropertyCard extends StatelessWidget {
                             label: 'Solar',
                           ),
                       ],
+                      if (property.sharedRoom)
+                        const _Pill(
+                          icon: CupertinoIcons.person_2,
+                          label: 'Shared room',
+                        ),
+                      if (property.isStudentAccommodation &&
+                          property.accommodationInstitution.isNotEmpty)
+                        _Pill(
+                          icon: CupertinoIcons.book,
+                          label: property.accommodationInstitution,
+                        ),
                       if (property.has360Tour)
                         const _Pill(
                           icon: CupertinoIcons.rotate_right,

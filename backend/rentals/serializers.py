@@ -50,6 +50,8 @@ def serialize_property(prop):
         "monthly_rent": str(prop.monthly_rent),
         "deposit_required": str(prop.deposit_required),
         "property_type": prop.property_type,
+        "accommodation_institution": prop.accommodation_institution,
+        "shared_room": prop.shared_room,
         "bedrooms": prop.bedrooms,
         "bathrooms": str(prop.bathrooms),
         "furnished": prop.furnished,

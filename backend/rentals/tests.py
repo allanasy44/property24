@@ -20,7 +20,13 @@ from .models import (
     User,
     Viewing,
 )
-from .views import _notify_property_lifecycle_events, _notify_saved_search_matches
+from .property_search import normalize_search_requirements
+from .views import (
+    _notify_property_lifecycle_events,
+    _notify_saved_search_matches,
+    apply_property_filters,
+    serialize_property,
+)
 from .gemini_service import GeminiConfigurationError, GeminiService
 from .gemini_service import GeminiServiceError
 
@@ -263,6 +269,82 @@ class PropertyAvailabilityTests(TestCase):
         )
         self.assertEqual(notification.payload["property_id"], str(self.property.id))
         send_push.assert_called_once()
+
+class StudentAndCommercialListingTests(TestCase):
+    def setUp(self):
+        self.landlord = User.objects.create_user(
+            username="student-housing-landlord",
+            role=User.Roles.LANDLORD,
+            is_verified=True,
+        )
+        self.student_listing = Property.objects.create(
+            owner=self.landlord,
+            title="Shared room near campus",
+            address="1 Campus Road",
+            city="Bulawayo",
+            suburb="North End",
+            monthly_rent=Decimal("180.00"),
+            deposit_required=Decimal("180.00"),
+            property_type=Property.PropertyType.STUDENT,
+            accommodation_institution="National University of Science and Technology",
+            shared_room=True,
+            listing_status=Property.ListingStatus.VERIFIED,
+        )
+        self.office_listing = Property.objects.create(
+            owner=self.landlord,
+            title="Office suite",
+            address="2 Business Road",
+            city="Bulawayo",
+            suburb="CBD",
+            monthly_rent=Decimal("500.00"),
+            deposit_required=Decimal("500.00"),
+            property_type=Property.PropertyType.OFFICE,
+        )
+
+    def test_student_filters_match_institution_shared_room_and_verified_owner(self):
+        matches = apply_property_filters(
+            Property.objects.all(),
+            {
+                "student_only": "true",
+                "institution": "National University of Science and Technology",
+                "shared_room": "true",
+                "verified_only": "true",
+            },
+        )
+
+        self.assertEqual(list(matches), [self.student_listing])
+
+    def test_student_listing_serializes_institution_and_shared_room_fields(self):
+        payload = serialize_property(self.student_listing)
+
+        self.assertEqual(
+            payload["accommodation_institution"],
+            "National University of Science and Technology",
+        )
+        self.assertTrue(payload["shared_room"])
+
+    def test_office_shop_and_room_categories_are_available(self):
+        self.assertIn("office", Property.PropertyType.values)
+        self.assertIn("shop", Property.PropertyType.values)
+        self.assertIn("room", Property.PropertyType.values)
+        offices = apply_property_filters(
+            Property.objects.all(),
+            {"property_type": "office"},
+        )
+        self.assertEqual(list(offices), [self.office_listing])
+
+    def test_ai_search_accepts_rooms_as_a_property_type(self):
+        requirements = normalize_search_requirements(
+            {
+                "listing_intent": "rent",
+                "property_type": "room",
+                "locations": [],
+                "flexibility": {},
+            },
+            "room for rent",
+        )
+
+        self.assertEqual(requirements["property_type"], "room")
 
 
 class SavedSearchAlertTests(TestCase):

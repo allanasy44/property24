@@ -181,10 +181,10 @@ def normalize_search_requirements(raw, query):
         raise InvalidSearchRequirements("Unsupported listing intent")
 
     property_type = str(raw.get("property_type") or "unspecified").lower()
-    unsupported_category = property_type if property_type in {"townhouse", "room"} else None
+    unsupported_category = property_type if property_type == "townhouse" else None
     if property_type == "apartment":
         property_type = Property.PropertyType.FLAT
-    if property_type in {"townhouse", "room"}:
+    if property_type == "townhouse":
         property_type = "unspecified"
     if property_type not in PROPERTY_TYPES and property_type != "unspecified":
         raise InvalidSearchRequirements("Unsupported property type")
@@ -256,12 +256,6 @@ def normalize_search_requirements(raw, query):
     query_text = str(query or "").casefold()
     if re.search(r"\btownhouse\b", query_text) and "townhouse" not in required_keywords:
         required_keywords.append("townhouse")
-    if (
-        re.search(r"\b(?:a|single|one|student)\s+room\b|\broom\s+to\s+rent\b", query_text)
-        and "room" not in required_keywords
-    ):
-        required_keywords.append("room")
-
     return {
         "listing_intent": listing_intent,
         "property_type": property_type,
@@ -346,11 +340,17 @@ def _amenity_present(prop, amenity):
 
 def _location_matches(prop, locations):
     requested = {value.casefold() for value in locations}
+    institution = prop.accommodation_institution.casefold()
     return bool(
         requested
         and (
             prop.city.casefold() in requested
             or prop.suburb.casefold() in requested
+            or any(
+                location in institution or institution in location
+                for location in requested
+                if institution
+            )
         )
     )
 
@@ -389,7 +389,14 @@ def _hard_requirements_match(prop, requirements, location_match, budget_match):
         if (prop.available_from.year, prop.available_from.month) > (year, month):
             return False
     listing_text = " ".join(
-        [prop.title, prop.description, prop.address, prop.city, prop.suburb]
+        [
+            prop.title,
+            prop.description,
+            prop.address,
+            prop.city,
+            prop.suburb,
+            prop.accommodation_institution,
+        ]
     ).casefold()
     if any(keyword.casefold() not in listing_text for keyword in requirements["required_keywords"]):
         return False
@@ -412,7 +419,14 @@ def rank_property_search(queryset, requirements, limit=40):
         if requirements["max_bedrooms"] is not None:
             property_checks.append(prop.bedrooms <= requirements["max_bedrooms"])
         listing_text = " ".join(
-            [prop.title, prop.description, prop.address, prop.city, prop.suburb]
+            [
+                prop.title,
+                prop.description,
+                prop.address,
+                prop.city,
+                prop.suburb,
+                prop.accommodation_institution,
+            ]
         ).casefold()
         property_checks.extend(
             keyword.casefold() in listing_text

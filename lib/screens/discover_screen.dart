@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'activity_screen.dart';
 
 import '../models/rental_models.dart';
+import '../models/zimbabwe_institutions.dart';
 import '../services/device_location.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
@@ -31,6 +32,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   String _query = '';
   final TextEditingController _searchController = TextEditingController();
   String _type = 'Popular';
+  String? _studentInstitution;
+  double? _studentMaxDistanceKm;
+  bool _studentSharedOnly = false;
+  bool _studentVerifiedOnly = false;
   LatLng? _deviceLocation;
   _DiscoveryArea? _selectedArea;
   String? _locationError;
@@ -42,7 +47,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   static Color get _textDark => AppTheme.textPrimary;
   static Color get _textMuted => AppTheme.textMuted;
 
-  static const _types = ['Popular', 'Nearby', 'Recommended', 'Following'];
+  static const _types = [
+    'Popular',
+    'Nearby',
+    'Recommended',
+    'Student stays',
+    'Shared rooms',
+    'Following',
+  ];
 
   @override
   void didChangeDependencies() {
@@ -152,6 +164,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final sourceProperties = _type == 'Following'
         ? state.followedProperties
         : state.snapshot.properties;
+    final institutions = <String>{
+      ...zimbabweInstitutions,
+      ...state.snapshot.properties
+        .where(
+          (property) =>
+              property.isStudentAccommodation &&
+              property.accommodationInstitution.trim().isNotEmpty,
+        )
+        .map((property) => property.accommodationInstitution.trim())
+    }.toList()
+      ..sort((first, second) => first.toLowerCase().compareTo(
+            second.toLowerCase(),
+          ));
     var properties = sourceProperties.where((property) {
       final haystack = [
         property.title,
@@ -159,6 +184,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         property.city,
         property.suburb,
         property.propertyType,
+        property.accommodationInstitution,
         property.description,
         property.rentLabel,
         property.waterAvailability,
@@ -171,7 +197,51 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
       return matchesQuery;
     }).toList();
-    if (_type == 'Nearby') {
+    if (_type == 'Student stays') {
+      properties = properties
+          .where((property) => property.isStudentAccommodation)
+          .where(
+            (property) =>
+                _studentInstitution == null ||
+                property.accommodationInstitution.toLowerCase() ==
+                    _studentInstitution!.toLowerCase(),
+          )
+          .where((property) => !_studentSharedOnly || property.sharedRoom)
+          .where((property) => !_studentVerifiedOnly || property.verified)
+          .toList();
+      if (_studentMaxDistanceKm != null && _deviceLocation == null) {
+        properties = [];
+      } else if (_deviceLocation case final location?) {
+        properties = properties
+            .where(
+              (property) =>
+                  _distanceMeters(property, location) <=
+                  (_studentMaxDistanceKm ?? double.infinity) * 1000,
+            )
+            .toList()
+          ..sort(
+            (first, second) => _distanceMeters(first, location)
+                .compareTo(_distanceMeters(second, location)),
+          );
+      } else {
+        properties.sort(_newestFirst);
+      }
+    } else if (_type == 'Shared rooms') {
+      properties = properties
+          .where((property) => property.sharedRoom)
+          .toList();
+      if (_deviceLocation case final location?) {
+        properties.sort(
+          (first, second) => _distanceMeters(first, location)
+              .compareTo(_distanceMeters(second, location)),
+        );
+      } else if (_selectedArea case final area?) {
+        properties = properties.where(area.matches).toList()
+          ..sort(_newestFirst);
+      } else {
+        properties.sort(_newestFirst);
+      }
+    } else if (_type == 'Nearby') {
       if (_deviceLocation case final location?) {
         properties.sort(
           (first, second) => _distanceMeters(first, location)
@@ -403,17 +473,42 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 ),
               ),
             ),
-            if (_type == 'Nearby')
+            if (_type == 'Student stays')
+              SliverToBoxAdapter(
+                child: _StudentAccommodationFilters(
+                  institutions: institutions,
+                  institution: _studentInstitution,
+                  sharedOnly: _studentSharedOnly,
+                  verifiedOnly: _studentVerifiedOnly,
+                  maxDistanceKm: _studentMaxDistanceKm,
+                  locationAvailable: _deviceLocation != null,
+                  locationLoading: _locationLoading,
+                  locationError: _locationError,
+                  onInstitutionChanged: (value) =>
+                      setState(() => _studentInstitution = value),
+                  onSharedChanged: (value) =>
+                      setState(() => _studentSharedOnly = value),
+                  onVerifiedChanged: (value) =>
+                      setState(() => _studentVerifiedOnly = value),
+                  onDistanceChanged: (value) =>
+                      setState(() => _studentMaxDistanceKm = value),
+                  onUseDeviceLocation: _requestDeviceLocation,
+                ),
+              ),
+            if (_type == 'Nearby' || _type == 'Shared rooms')
               SliverToBoxAdapter(
                 child: _NearbyLocationControl(
                   loading: _locationLoading,
                   error: _locationError,
                   selectedArea: _selectedArea?.label,
                   onUseDeviceLocation: _requestDeviceLocation,
-                  onChooseArea: () => _chooseNearbyArea(properties),
+                  onChooseArea: () => _chooseNearbyArea(sourceProperties),
                 ),
               ),
-            if (_type != 'Nearby' && _type != 'Following') ...[
+            if (_type != 'Nearby' &&
+                _type != 'Following' &&
+                _type != 'Student stays' &&
+                _type != 'Shared rooms') ...[
               _DiscoveryPropertySection(
                 title: '🔥 New properties today',
                 properties: newToday,
@@ -452,12 +547,28 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   icon: CupertinoIcons.search,
                   title: _type == 'Following'
                       ? 'No followed listings yet'
-                      : _type == 'Nearby' && _selectedArea == null
+                      : _type == 'Student stays' &&
+                              _studentMaxDistanceKm != null &&
+                              _deviceLocation == null
+                          ? 'Set your location for distance filtering'
+                          : _type == 'Student stays'
+                              ? 'No student accommodation matches'
+                              : _type == 'Shared rooms'
+                                  ? 'No shared rooms listed yet'
+                          : _type == 'Nearby' && _selectedArea == null
                           ? 'Choose your nearby area'
                           : 'No matching listings',
                   body: _type == 'Following'
                       ? 'Follow a landlord or agent to see their listings here.'
-                      : _type == 'Nearby' && _selectedArea == null
+                      : _type == 'Student stays' &&
+                              _studentMaxDistanceKm != null &&
+                              _deviceLocation == null
+                          ? 'Use your current location to find student accommodation within your selected distance.'
+                          : _type == 'Student stays'
+                              ? 'Try another institution or adjust shared-room, verification, or distance filters.'
+                              : _type == 'Shared rooms'
+                                  ? 'Browse available shared-room listings or choose a nearby area.'
+                          : _type == 'Nearby' && _selectedArea == null
                           ? 'Allow location access or choose a city or suburb to see nearby homes.'
                           : 'Try another suburb, city, or property type.',
                 ),
@@ -508,7 +619,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     final property = properties[index];
                     return PropertyCard(
                       property: property,
-                      distanceLabel: _type == 'Recommended' &&
+                      distanceLabel: (_type == 'Recommended' ||
+                                  _type == 'Student stays' ||
+                                  _type == 'Shared rooms') &&
                               _deviceLocation != null &&
                               _hasPrivacyAwareCoordinates(property)
                           ? _formatDistance(
@@ -871,6 +984,152 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _StudentAccommodationFilters extends StatelessWidget {
+  const _StudentAccommodationFilters({
+    required this.institutions,
+    required this.institution,
+    required this.sharedOnly,
+    required this.verifiedOnly,
+    required this.maxDistanceKm,
+    required this.locationAvailable,
+    required this.locationLoading,
+    required this.locationError,
+    required this.onInstitutionChanged,
+    required this.onSharedChanged,
+    required this.onVerifiedChanged,
+    required this.onDistanceChanged,
+    required this.onUseDeviceLocation,
+  });
+
+  final List<String> institutions;
+  final String? institution;
+  final bool sharedOnly;
+  final bool verifiedOnly;
+  final double? maxDistanceKm;
+  final bool locationAvailable;
+  final bool locationLoading;
+  final String? locationError;
+  final ValueChanged<String?> onInstitutionChanged;
+  final ValueChanged<bool> onSharedChanged;
+  final ValueChanged<bool> onVerifiedChanged;
+  final ValueChanged<double?> onDistanceChanged;
+  final VoidCallback onUseDeviceLocation;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final distanceValue =
+        maxDistanceKm == null ? 'any' : '${maxDistanceKm!.round()}';
+    final availableInstitutions = <String>{
+      ...institutions,
+      if (institution != null && institution!.trim().isNotEmpty) institution!,
+    }.toList()
+      ..sort((first, second) => first.toLowerCase().compareTo(
+            second.toLowerCase(),
+          ));
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: institution ?? '',
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'University, college or polytechnic',
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: Text('All institutions'),
+                    ),
+                    for (final name in availableInstitutions)
+                      DropdownMenuItem(value: name, child: Text(name)),
+                  ],
+                  onChanged: (value) =>
+                      onInstitutionChanged(value?.isEmpty == true ? null : value),
+                ),
+              ),
+              const SizedBox(width: 12),
+              DropdownButton<String>(
+                value: distanceValue,
+                underline: const SizedBox.shrink(),
+                items: const [
+                  DropdownMenuItem(value: 'any', child: Text('Any distance')),
+                  DropdownMenuItem(value: '5', child: Text('Within 5 km')),
+                  DropdownMenuItem(value: '10', child: Text('Within 10 km')),
+                  DropdownMenuItem(value: '20', child: Text('Within 20 km')),
+                  DropdownMenuItem(value: '50', child: Text('Within 50 km')),
+                ],
+                onChanged: (value) => onDistanceChanged(
+                  value == null || value == 'any' ? null : double.parse(value),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              FilterChip(
+                label: const Text('Shared rooms'),
+                selected: sharedOnly,
+                onSelected: onSharedChanged,
+              ),
+              FilterChip(
+                label: const Text('Verified landlords'),
+                selected: verifiedOnly,
+                onSelected: onVerifiedChanged,
+              ),
+              ActionChip(
+                avatar: locationLoading
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colors.primary,
+                        ),
+                      )
+                    : Icon(
+                        locationAvailable
+                            ? CupertinoIcons.location_fill
+                            : CupertinoIcons.location,
+                        size: 16,
+                      ),
+                label: Text(
+                  locationAvailable ? 'Location on' : 'Use my location',
+                ),
+                onPressed: locationLoading ? null : onUseDeviceLocation,
+              ),
+            ],
+          ),
+          if (locationError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                locationError!,
+                style: TextStyle(color: colors.error, fontSize: 12),
+              ),
+            ),
+          if (maxDistanceKm != null && !locationAvailable)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Enable location to apply the distance filter.',
+                style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
+              ),
+            ),
+        ],
       ),
     );
   }

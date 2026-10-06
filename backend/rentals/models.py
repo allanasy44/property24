@@ -284,6 +284,9 @@ class Property(models.Model):
         HOUSE = "house", "House"
         FLAT = "flat", "Flat"
         COTTAGE = "cottage", "Cottage"
+        ROOM = "room", "Room"
+        OFFICE = "office", "Office"
+        SHOP = "shop", "Shop"
         STUDENT = "student_accommodation", "Student accommodation"
         COMMERCIAL = "commercial_property", "Commercial property"
         LAND = "land", "Land / Stand"
@@ -321,6 +324,8 @@ class Property(models.Model):
     monthly_rent = models.DecimalField(max_digits=12, decimal_places=2)
     deposit_required = models.DecimalField(max_digits=12, decimal_places=2)
     property_type = models.CharField(max_length=32, choices=PropertyType.choices)
+    accommodation_institution = models.CharField(max_length=180, blank=True)
+    shared_room = models.BooleanField(default=False)
     bedrooms = models.PositiveSmallIntegerField(default=0)
     stand_reference = models.CharField(max_length=120, blank=True)
     stands_available = models.PositiveIntegerField(default=1)

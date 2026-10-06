@@ -57,6 +57,8 @@ class PropertyDraft {
     this.longitude,
     this.showExactLocation = false,
     this.listingIntent = 'rent',
+    this.accommodationInstitution = '',
+    this.sharedRoom = false,
     required this.monthlyRent,
     required this.depositRequired,
     required this.propertyType,
@@ -90,6 +92,8 @@ class PropertyDraft {
   final String? longitude;
   final bool showExactLocation;
   final String listingIntent;
+  final String accommodationInstitution;
+  final bool sharedRoom;
   final String monthlyRent;
   final String depositRequired;
   final String propertyType;
@@ -126,6 +130,8 @@ class PropertyDraft {
         'longitude': longitude!.trim(),
       'show_exact_location': showExactLocation,
       'listing_intent': listingIntent,
+      'accommodation_institution': accommodationInstitution.trim(),
+      'shared_room': sharedRoom,
       'monthly_rent': monthlyRent.replaceAll(RegExp(r'[^0-9.]'), ''),
       'deposit_required': depositRequired.replaceAll(RegExp(r'[^0-9.]'), ''),
       'property_type': propertyType.toLowerCase().replaceAll(' ', '_'),

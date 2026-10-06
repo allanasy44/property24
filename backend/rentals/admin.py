@@ -48,8 +48,8 @@ class PropertyVideoInline(admin.TabularInline):
 class PropertyAdmin(admin.ModelAdmin):
     inlines = [PropertyPhotoInline, PropertyVideoInline]
     list_display = ("title", "city", "suburb", "monthly_rent", "property_type", "listing_status", "owner", "agent")
-    list_filter = ("city", "property_type", "listing_status", "furnished", "solar_power", "borehole", "pet_friendly")
-    search_fields = ("title", "address", "city", "suburb", "owner__username", "agent__username")
+    list_filter = ("city", "property_type", "listing_status", "shared_room", "furnished", "solar_power", "borehole", "pet_friendly")
+    search_fields = ("title", "address", "city", "suburb", "accommodation_institution", "owner__username", "agent__username")
 
 
 @admin.register(VerificationRequest)
