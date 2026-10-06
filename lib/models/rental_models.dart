@@ -1,5 +1,12 @@
 import 'package:intl/intl.dart';
 
+String greetingForTime([DateTime? dateTime]) {
+  final hour = (dateTime ?? DateTime.now()).hour;
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
 enum AccountRole { tenant, landlord, agent, admin }
 
 AccountRole accountRoleFromJson(Object? value) {
@@ -24,8 +31,11 @@ extension AccountRoleLabel on AccountRole {
   }
 }
 
-String textValue(Map<String, dynamic> json, String key,
-    [String fallback = '']) {
+String textValue(
+  Map<String, dynamic> json,
+  String key, [
+  String fallback = '',
+]) {
   final value = json[key];
   if (value == null) return fallback;
   return '$value';
@@ -36,9 +46,11 @@ String titleize(Object? value) {
   if (raw.isEmpty || raw == 'null') return '';
   return raw
       .split(RegExp(r'\s+'))
-      .map((word) => word.isEmpty
-          ? word
-          : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}')
+      .map(
+        (word) => word.isEmpty
+            ? word
+            : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}',
+      )
       .join(' ');
 }
 
@@ -57,14 +69,16 @@ num? _roundCoordinate(num? value) {
 }
 
 String money(Object? value, {String suffix = ''}) {
-  if (value == null || '$value'.isEmpty)
+  if (value == null || '$value'.isEmpty) {
     return suffix.isEmpty ? r'$0' : '\$0 $suffix';
+  }
   final number = num.tryParse('$value');
   final amount = number == null
       ? '$value'
       : NumberFormat.currency(
-              symbol: r'$', decimalDigits: number % 1 == 0 ? 0 : 2)
-          .format(number);
+          symbol: r'$',
+          decimalDigits: number % 1 == 0 ? 0 : 2,
+        ).format(number);
   return suffix.isEmpty ? amount : '$amount $suffix';
 }
 
@@ -128,8 +142,10 @@ class AccountUser {
     required this.bio,
   });
 
-  factory AccountUser.fromJson(Map<String, dynamic> json,
-      [Map<String, dynamic>? account]) {
+  factory AccountUser.fromJson(
+    Map<String, dynamic> json, [
+    Map<String, dynamic>? account,
+  ]) {
     return AccountUser(
       id: textValue(json, 'id'),
       username: textValue(json, 'username', textValue(json, 'email')),
@@ -209,7 +225,7 @@ class AccountContext {
         'applications',
         'inbox',
         'profile',
-        'verification'
+        'verification',
       ],
       capabilities: ['search_properties', 'save_properties'],
       onboardingRequirements: ['identity_verification'],
@@ -266,7 +282,10 @@ class PropertyListing {
     this.backendTrustScore,
     this.trustBreakdown = const [],
     this.backendPassportId = '',
+    this.createdAt = '',
     this.backendAvailabilityLabel = '',
+    this.availabilityState = '',
+    this.availableFrom = '',
     this.lastConfirmedAt = '',
     this.availabilityNeedsConfirmation = false,
     this.availabilityTemporarilyHidden = false,
@@ -329,7 +348,10 @@ class PropertyListing {
           .map(TrustSignal.fromJson)
           .toList(growable: false),
       backendPassportId: textValue(json, 'passport_id'),
+      createdAt: textValue(json, 'created_at'),
       backendAvailabilityLabel: textValue(json, 'availability_label'),
+      availabilityState: textValue(json, 'availability_state'),
+      availableFrom: textValue(json, 'available_from'),
       lastConfirmedAt: localDate(json['last_confirmed_at'], ''),
       availabilityNeedsConfirmation:
           json['availability_needs_confirmation'] == true,
@@ -347,7 +369,8 @@ class PropertyListing {
       landWaterAvailable: json['land_water_available'] == true,
       neighborhood: json['neighborhood'] is Map<String, dynamic>
           ? NeighborhoodData.fromJson(
-              json['neighborhood'] as Map<String, dynamic>)
+              json['neighborhood'] as Map<String, dynamic>,
+            )
           : const NeighborhoodData.unavailable(),
     );
   }
@@ -389,7 +412,10 @@ class PropertyListing {
   final int? backendTrustScore;
   final List<TrustSignal> trustBreakdown;
   final String backendPassportId;
+  final String createdAt;
   final String backendAvailabilityLabel;
+  final String availabilityState;
+  final String availableFrom;
   final String lastConfirmedAt;
   final bool availabilityNeedsConfirmation;
   final bool availabilityTemporarilyHidden;
@@ -433,11 +459,17 @@ class PropertyListing {
   num? get mapLongitude => hasCoordinates
       ? (showExactLocation ? longitude : _roundCoordinate(longitude))
       : null;
-  String get availabilityLabel => backendAvailabilityLabel.isNotEmpty
-      ? backendAvailabilityLabel
-      : verified
-          ? 'Confirmed this week'
-          : 'Awaiting confirmation';
+  String get availabilityLabel {
+    if (backendAvailabilityLabel.isNotEmpty) return backendAvailabilityLabel;
+    if (availabilityStatus == 'rented') return 'Rented';
+    if (availabilityStatus == 'sold') return 'Sold';
+    if (availabilityStatus == 'reserved') return 'Reserved';
+    final date = DateTime.tryParse(availableFrom);
+    return date == null
+        ? 'Available'
+        : 'Available from ${DateFormat('d MMM').format(date.toLocal())}';
+  }
+
   String get passportId => backendPassportId.isNotEmpty
       ? backendPassportId
       : 'P24-${id.isEmpty ? title.hashCode.abs() : id.hashCode.abs()}';
@@ -506,23 +538,34 @@ class PropertyListing {
       PropertyFact(iconName: 'type', label: 'Type', value: propertyType),
       if (isLand)
         PropertyFact(
-            iconName: 'land', label: 'Land size', value: landSizeLabel),
+          iconName: 'land',
+          label: 'Land size',
+          value: landSizeLabel,
+        ),
       if (isLand)
         PropertyFact(iconName: 'stand', label: 'Stands', value: standSummary),
       if (isLand)
         PropertyFact(
-            iconName: 'document', label: 'Title', value: landTitleLabel),
+          iconName: 'document',
+          label: 'Title',
+          value: landTitleLabel,
+        ),
       if (isLand)
         PropertyFact(
-            iconName: 'road', label: 'Servicing', value: landServicingLabel),
+          iconName: 'road',
+          label: 'Servicing',
+          value: landServicingLabel,
+        ),
       PropertyFact(
-          iconName: 'water',
-          label: 'Water',
-          value: borehole ? 'Borehole' : waterAvailability),
+        iconName: 'water',
+        label: 'Water',
+        value: borehole ? 'Borehole' : waterAvailability,
+      ),
       PropertyFact(
-          iconName: 'power',
-          label: 'Power',
-          value: solarPower ? 'Solar backup' : 'Grid only'),
+        iconName: 'power',
+        label: 'Power',
+        value: solarPower ? 'Solar backup' : 'Grid only',
+      ),
       PropertyFact(iconName: 'parking', label: 'Parking', value: parking),
     ];
   }
@@ -581,6 +624,7 @@ class SavedSearchItem {
     required this.isActive,
     required this.matchCount,
     required this.latestMatchAt,
+    this.criteria = const <String, dynamic>{},
   });
 
   factory SavedSearchItem.fromJson(Map<String, dynamic> json) {
@@ -591,6 +635,9 @@ class SavedSearchItem {
       isActive: json['is_active'] == true,
       matchCount: int.tryParse('${json['match_count']}') ?? 0,
       latestMatchAt: localDate(json['latest_match_at'], ''),
+      criteria: json['criteria'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(json['criteria'] as Map)
+          : const <String, dynamic>{},
     );
   }
 
@@ -600,6 +647,7 @@ class SavedSearchItem {
   final bool isActive;
   final int matchCount;
   final String latestMatchAt;
+  final Map<String, dynamic> criteria;
 }
 
 class ComparisonSuggestion {
@@ -681,8 +729,15 @@ class AiSearchResponse {
   const AiSearchResponse({
     required this.query,
     required this.intent,
+    required this.requirements,
     required this.explanation,
     required this.results,
+    required this.sessionId,
+    required this.totalMatches,
+    required this.exactMatches,
+    required this.closeMatches,
+    required this.clarificationQuestion,
+    required this.parser,
   });
 
   factory AiSearchResponse.fromJson(Map<String, dynamic> json) {
@@ -691,18 +746,37 @@ class AiSearchResponse {
       intent: json['intent'] is Map<String, dynamic>
           ? Map<String, dynamic>.from(json['intent'] as Map)
           : const <String, dynamic>{},
+      requirements: json['interpreted_requirements'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(
+              json['interpreted_requirements'] as Map,
+            )
+          : const <String, dynamic>{},
       explanation: textValue(json, 'explanation'),
       results: (json['results'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(AiSearchCandidate.fromJson)
           .toList(growable: false),
+      sessionId: textValue(json, 'session_id'),
+      totalMatches: int.tryParse('${json['total_matches']}') ??
+          (json['results'] as List<dynamic>? ?? const []).length,
+      exactMatches: int.tryParse('${json['exact_matches']}') ?? 0,
+      closeMatches: int.tryParse('${json['close_matches']}') ?? 0,
+      clarificationQuestion: textValue(json, 'clarification_question'),
+      parser: textValue(json, 'parser'),
     );
   }
 
   final String query;
   final Map<String, dynamic> intent;
+  final Map<String, dynamic> requirements;
   final String explanation;
   final List<AiSearchCandidate> results;
+  final String sessionId;
+  final int totalMatches;
+  final int exactMatches;
+  final int closeMatches;
+  final String clarificationQuestion;
+  final String parser;
 }
 
 class AiSearchCandidate {
@@ -710,19 +784,36 @@ class AiSearchCandidate {
     required this.property,
     required this.score,
     required this.reasons,
+    required this.matchType,
+    required this.missingRequirements,
+    required this.missingPreferences,
   });
 
   factory AiSearchCandidate.fromJson(Map<String, dynamic> json) {
+    final propertyJson = json['property'] is Map<String, dynamic>
+        ? Map<String, dynamic>.from(json['property'] as Map)
+        : json;
     return AiSearchCandidate(
-      property: PropertyListing.fromJson(json),
-      score: int.tryParse('${json['search_score']}') ?? 0,
+      property: PropertyListing.fromJson(propertyJson),
+      score: int.tryParse(
+            '${json['match_score'] ?? json['search_score']}',
+          ) ??
+          0,
       reasons: List<String>.from(json['match_reasons'] ?? const []),
+      matchType: textValue(json, 'match_type', 'exact'),
+      missingRequirements:
+          List<String>.from(json['missing_requirements'] ?? const []),
+      missingPreferences:
+          List<String>.from(json['missing_preferences'] ?? const []),
     );
   }
 
   final PropertyListing property;
   final int score;
   final List<String> reasons;
+  final String matchType;
+  final List<String> missingRequirements;
+  final List<String> missingPreferences;
 }
 
 class VerificationLevel {
@@ -828,6 +919,7 @@ class ViewingItem {
     required this.scheduledFor,
     required this.status,
     required this.notes,
+    this.conversationId = '',
   });
 
   factory ViewingItem.fromJson(Map<String, dynamic> json) {
@@ -837,9 +929,10 @@ class ViewingItem {
       property: textValue(json, 'property'),
       tenant: textValue(json, 'tenant'),
       agent: textValue(json, 'agent'),
-      scheduledFor: localDate(json['scheduled_for'], 'Scheduled'),
+      scheduledFor: _viewingDateTime(json['scheduled_for']),
       status: titleize(json['status']),
       notes: textValue(json, 'notes'),
+      conversationId: textValue(json, 'conversation_id'),
     );
   }
 
@@ -851,6 +944,7 @@ class ViewingItem {
   final String scheduledFor;
   final String status;
   final String notes;
+  final String conversationId;
 
   bool get isAvailableBooking {
     final normalized = status.toLowerCase();
@@ -858,6 +952,11 @@ class ViewingItem {
         normalized == 'confirmed' ||
         normalized == 'reserved';
   }
+}
+
+String _viewingDateTime(Object? value) {
+  final date = localDateTime(value);
+  return date == null ? 'Scheduled' : DateFormat.yMMMd().add_jm().format(date);
 }
 
 class ChatMessageItem {
@@ -971,9 +1070,11 @@ class ConversationItem {
     final rawParticipants = json['participants'];
     final participants = (rawParticipants is List ? rawParticipants : const [])
         .whereType<Map>()
-        .map((participant) => AccountUser.fromJson(
-              Map<String, dynamic>.from(participant),
-            ))
+        .map(
+          (participant) => AccountUser.fromJson(
+            Map<String, dynamic>.from(participant),
+          ),
+        )
         .toList();
     final rawLastMessage = json['last_message'];
     final lastMessage = rawLastMessage is Map
@@ -991,7 +1092,10 @@ class ConversationItem {
         participants.map((user) => user.name).join(' and '),
       ),
       preview: textValue(
-          lastMessage ?? const {}, 'body', 'Phone numbers remain hidden.'),
+        lastMessage ?? const {},
+        'body',
+        'Phone numbers remain hidden.',
+      ),
       updatedAt: chatConversationTime(updatedAtDate),
       updatedAtDate: updatedAtDate,
       phoneNumbersRevealed: json['phone_numbers_revealed'] == true,
@@ -1078,6 +1182,8 @@ class NotificationItem {
     required this.message,
     required this.isRead,
     required this.createdAt,
+    this.payload = const <String, dynamic>{},
+    this.occurredAt,
   });
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
@@ -1087,6 +1193,10 @@ class NotificationItem {
       message: textValue(json, 'message', 'New notification'),
       isRead: json['is_read'] == true,
       createdAt: localDate(json['created_at'], 'Just now'),
+      payload: json['payload'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(json['payload'] as Map)
+          : const <String, dynamic>{},
+      occurredAt: localDateTime(json['created_at']),
     );
   }
 
@@ -1095,6 +1205,8 @@ class NotificationItem {
   final String message;
   final bool isRead;
   final String createdAt;
+  final Map<String, dynamic> payload;
+  final DateTime? occurredAt;
 
   NotificationItem copyWith({bool? isRead}) {
     return NotificationItem(
@@ -1103,6 +1215,8 @@ class NotificationItem {
       message: message,
       isRead: isRead ?? this.isRead,
       createdAt: createdAt,
+      payload: payload,
+      occurredAt: occurredAt,
     );
   }
 }

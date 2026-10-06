@@ -157,7 +157,8 @@ class _InboxScreenState extends State<InboxScreen> {
               for (var index = 0; index < conversations.length; index++) ...[
                 if (index == 0 ||
                     _conversationGroup(
-                            conversations[index - 1].updatedAtDate) !=
+                          conversations[index - 1].updatedAtDate,
+                        ) !=
                         _conversationGroup(conversations[index].updatedAtDate))
                   _ConversationGroupHeading(
                     label:
@@ -594,7 +595,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
               children: [
                 if (_loading && _messages.isEmpty)
-                  Center(child: CircularProgressIndicator()),
+                  const Center(child: CircularProgressIndicator()),
                 for (var index = 0; index < _messages.length; index++) ...[
                   if (_messages[index].createdAtDate != null &&
                       (index == 0 ||
@@ -650,8 +651,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
                         : 'Location unavailable',
                     onPressed: canShareLocation
                         ? () async {
-                            await state.shareLocation(widget.conversation.id,
-                                property: property!);
+                            await state.shareLocation(
+                              widget.conversation.id,
+                              property: property!,
+                            );
                             await _loadMessages();
                           }
                         : null,
@@ -893,8 +896,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
                   ),
                 ),
                 if (widget.property != null)
-                  Text(widget.property!.title,
-                      style: TextStyle(color: AppTheme.textMuted)),
+                  Text(
+                    widget.property!.title,
+                    style: TextStyle(color: AppTheme.textMuted),
+                  ),
               ],
             ),
           ),
@@ -1071,9 +1076,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
           .sendMessageAttachment(widget.conversation.id, file, type);
       await _loadMessages();
     } catch (exception) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+      }
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -1089,9 +1095,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
           .sendMessage(widget.conversation.id, body);
       await _loadMessages();
     } catch (exception) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+      }
     }
   }
 }
@@ -1251,8 +1258,10 @@ class _MessageBubble extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(item.createdAt,
-                    style: TextStyle(color: muted, fontSize: 9)),
+                Text(
+                  item.createdAt,
+                  style: TextStyle(color: muted, fontSize: 9),
+                ),
                 if (mine) ...[
                   const SizedBox(width: 4),
                   _DeliveryTicks(

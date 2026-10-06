@@ -71,7 +71,6 @@ class AppTheme {
       ),
       scaffoldBackgroundColor: background,
       canvasColor: background,
-      dialogBackgroundColor: card,
       bottomAppBarTheme: const BottomAppBarThemeData(
         color: card,
         surfaceTintColor: Colors.transparent,
@@ -82,7 +81,7 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: surface,
-        contentTextStyle: TextStyle(color: darkText),
+        contentTextStyle: const TextStyle(color: darkText),
         actionTextColor: _darkSecondary,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
@@ -131,23 +130,23 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: darkBorder),
+          side: const BorderSide(color: darkBorder),
         ),
       ),
-      inputDecorationTheme: InputDecorationTheme(
+      inputDecorationTheme: const InputDecorationTheme(
         filled: true,
         fillColor: surface,
         labelStyle: TextStyle(color: mutedText),
         hintStyle: TextStyle(color: mutedText),
-        border: const OutlineInputBorder(
+        border: OutlineInputBorder(
           borderSide: BorderSide(color: darkBorder),
           borderRadius: BorderRadius.all(Radius.circular(8)),
         ),
-        enabledBorder: const OutlineInputBorder(
+        enabledBorder: OutlineInputBorder(
           borderSide: BorderSide(color: darkBorder),
           borderRadius: BorderRadius.all(Radius.circular(8)),
         ),
-        focusedBorder: const OutlineInputBorder(
+        focusedBorder: OutlineInputBorder(
           borderSide: BorderSide(color: accent),
           borderRadius: BorderRadius.all(Radius.circular(8)),
         ),
@@ -205,7 +204,7 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: Color(0xffc9c2ff),
+          foregroundColor: const Color(0xffc9c2ff),
           side: const BorderSide(color: Color(0xff8075d8)),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),

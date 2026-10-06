@@ -32,7 +32,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   bool _homeRedirectScheduled = false;
 
   final List<_OnboardSlide> _slides = [
-    _OnboardSlide(
+    const _OnboardSlide(
       imageUrl:
           'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg',
       semanticLabel:
@@ -42,7 +42,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           'Discover thousands of verified properties across Lagos — from cozy studios to luxury penthouses.',
       accentWord: 'Perfect',
     ),
-    _OnboardSlide(
+    const _OnboardSlide(
       imageUrl:
           'https://images.pexels.com/photos/2029694/pexels-photo-2029694.jpeg',
       semanticLabel:
@@ -52,7 +52,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           'Every property has a Trust Score. Know exactly who you\'re dealing with before signing anything.',
       accentWord: 'Trust',
     ),
-    _OnboardSlide(
+    const _OnboardSlide(
       imageUrl:
           'https://images.pexels.com/photos/3288103/pexels-photo-3288103.jpeg',
       semanticLabel:
@@ -400,7 +400,7 @@ class _OnboardingView extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Icon(
+                                const Icon(
                                   CupertinoIcons.arrow_right,
                                   color: Colors.white,
                                   size: 18,
@@ -442,7 +442,7 @@ class _OnboardingView extends StatelessWidget {
             text: slide.accentWord,
             style: TextStyle(
               foreground: Paint()
-                ..shader = LinearGradient(
+                ..shader = const LinearGradient(
                   colors: [
                     AppTheme.accent,
                     AppTheme.accentTeal,
@@ -579,7 +579,7 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
                         _selectedRole = 'tenant';
                       });
                     },
-                    gradientColors: [
+                    gradientColors: const [
                       AppTheme.accent,
                       AppTheme.accentTeal,
                     ],
@@ -600,7 +600,7 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
                         _selectedRole = 'landlord';
                       });
                     },
-                    gradientColors: [
+                    gradientColors: const [
                       AppTheme.accentTeal,
                       AppTheme.accentTeal,
                     ],
@@ -790,7 +790,7 @@ class _RoleCard extends StatelessWidget {
                 ),
               ),
               child: isSelected
-                  ? Icon(
+                  ? const Icon(
                       CupertinoIcons.check_mark,
                       color: Colors.white,
                       size: 13,

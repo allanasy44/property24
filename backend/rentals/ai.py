@@ -167,18 +167,15 @@ def property_insights(property_obj):
     score = max(0, min(100, sum(item["score"] for item in breakdown) - penalty))
 
     confirmed_at = property_obj.availability_confirmed_at or property_obj.updated_at or property_obj.created_at
-    age_days = (now - confirmed_at).days if confirmed_at else 999
     status = property_obj.availability_status
     if status == property_obj.AvailabilityStatus.AVAILABLE:
-        if age_days <= 7:
-            availability_label = "Available"
-            availability_state = "confirmed"
-        elif age_days <= 30:
-            availability_label = "Availability needs confirmation"
-            availability_state = "needs_confirmation"
+        if property_obj.available_from and property_obj.available_from > timezone.localdate():
+            available_date = property_obj.available_from
+            availability_label = f"Available from {available_date.day} {available_date.strftime('%b')}"
+            availability_state = "available_from"
         else:
-            availability_label = "Temporarily hidden until confirmed"
-            availability_state = "temporarily_hidden"
+            availability_label = "Available"
+            availability_state = "available"
     else:
         availability_label = property_obj.get_availability_status_display()
         availability_state = status
@@ -193,9 +190,10 @@ def property_insights(property_obj):
         "admin_review_required": review_required,
         "availability_label": availability_label,
         "availability_state": availability_state,
+        "available_from": property_obj.available_from.isoformat() if property_obj.available_from else None,
         "last_confirmed_at": confirmed_at.isoformat() if confirmed_at else None,
-        "availability_needs_confirmation": availability_state == "needs_confirmation",
-        "availability_temporarily_hidden": availability_state == "temporarily_hidden",
+        "availability_needs_confirmation": False,
+        "availability_temporarily_hidden": False,
     }
 SEARCH_STOP_WORDS = {
     "a", "an", "and", "at", "for", "from", "has", "have", "in", "is",

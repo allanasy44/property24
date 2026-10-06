@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-
 import '../models/rental_models.dart';
 import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
@@ -19,9 +18,7 @@ class ActivityScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
     final isLandlord = state.user?.role == AccountRole.landlord;
-    final greetingPrefix = state.user?.greeting.trim().isNotEmpty == true
-        ? state.user!.greeting
-        : 'Good morning';
+    final greetingPrefix = greetingForTime();
     final userName = state.user?.name.trim() ?? '';
     final properties = state.snapshot.properties;
     final savedProperties = state.snapshot.savedProperties;
@@ -33,31 +30,37 @@ class ActivityScreen extends StatelessWidget {
     final metrics = isLandlord
         ? <Widget>[
             MetricTile(
-                icon: CupertinoIcons.house,
-                label: 'Total listings',
-                value: '${properties.length}'),
+              icon: CupertinoIcons.house,
+              label: 'Total listings',
+              value: '${properties.length}',
+            ),
             MetricTile(
-                icon: CupertinoIcons.checkmark_seal,
-                label: 'Verified',
-                value: '${state.verifiedProperties}'),
+              icon: CupertinoIcons.checkmark_seal,
+              label: 'Verified',
+              value: '${state.verifiedProperties}',
+            ),
             MetricTile(
-                icon: CupertinoIcons.person_2,
-                label: 'Applications',
-                value: '${state.snapshot.applications.length}'),
+              icon: CupertinoIcons.person_2,
+              label: 'Applications',
+              value: '${state.snapshot.applications.length}',
+            ),
           ]
         : <Widget>[
             MetricTile(
-                icon: CupertinoIcons.heart,
-                label: 'Saved homes',
-                value: '${savedProperties.length}'),
+              icon: CupertinoIcons.heart,
+              label: 'Saved homes',
+              value: '${savedProperties.length}',
+            ),
             MetricTile(
-                icon: CupertinoIcons.doc_text,
-                label: 'Applications',
-                value: '${state.snapshot.applications.length}'),
+              icon: CupertinoIcons.doc_text,
+              label: 'Applications',
+              value: '${state.snapshot.applications.length}',
+            ),
             MetricTile(
-                icon: CupertinoIcons.calendar,
-                label: 'Bookings',
-                value: '${bookings.length}'),
+              icon: CupertinoIcons.calendar,
+              label: 'Bookings',
+              value: '${bookings.length}',
+            ),
           ];
 
     return LoadingOverlay(
@@ -74,9 +77,11 @@ class ActivityScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (!isLandlord)
-                        Text('Home',
-                            style: theme.textTheme.labelLarge
-                                ?.copyWith(color: theme.colorScheme.primary)),
+                        Text(
+                          'Home',
+                          style: theme.textTheme.labelLarge
+                              ?.copyWith(color: theme.colorScheme.primary),
+                        ),
                       Text(
                         greetingPrefix,
                         style: theme.textTheme.titleMedium?.copyWith(
@@ -123,11 +128,14 @@ class ActivityScreen extends StatelessWidget {
               Card(
                 color: theme.colorScheme.primaryContainer,
                 child: ListTile(
-                  leading: Icon(CupertinoIcons.lock_open,
-                      color: theme.colorScheme.primary),
+                  leading: Icon(
+                    CupertinoIcons.lock_open,
+                    color: theme.colorScheme.primary,
+                  ),
                   title: const Text('Finish account verification'),
                   subtitle: const Text(
-                      'Complete identity verification before publishing a listing.'),
+                    'Complete identity verification before publishing a listing.',
+                  ),
                   trailing: const Icon(CupertinoIcons.chevron_forward),
                   onTap: () => GoRouter.of(context).go(AppRoutes.profileScreen),
                 ),
@@ -139,19 +147,23 @@ class ActivityScreen extends StatelessWidget {
                 children: [
                   Text('Portfolio', style: theme.textTheme.titleLarge),
                   TextButton.icon(
-                      onPressed: () =>
-                          GoRouter.of(context).go(AppRoutes.listingsScreen),
-                      icon: const Icon(CupertinoIcons.arrow_right, size: 16),
-                      label: const Text('View all')),
+                    onPressed: () =>
+                        GoRouter.of(context).go(AppRoutes.listingsScreen),
+                    icon: const Icon(CupertinoIcons.arrow_right, size: 16),
+                    label: const Text('View all'),
+                  ),
                 ],
               ),
               if (properties.isEmpty)
                 const Card(
-                    child: ListTile(
-                        leading: Icon(CupertinoIcons.house),
-                        title: Text('No listings yet'),
-                        subtitle: Text(
-                            'Add your first sale or rental property to start receiving enquiries.')))
+                  child: ListTile(
+                    leading: Icon(CupertinoIcons.house),
+                    title: Text('No listings yet'),
+                    subtitle: Text(
+                      'Add your first sale or rental property to start receiving enquiries.',
+                    ),
+                  ),
+                )
               else
                 for (final property in properties.take(3))
                   _PortfolioRow(property: property),
@@ -190,7 +202,8 @@ class ActivityScreen extends StatelessWidget {
                     leading: const Icon(CupertinoIcons.doc_text),
                     title: Text(item.property),
                     subtitle: Text(
-                        '${isLandlord ? item.applicant : item.createdAt} / score ${item.score}'),
+                      '${isLandlord ? item.applicant : item.createdAt} / score ${item.score}',
+                    ),
                     trailing: Text(item.status),
                   ),
               ],
@@ -218,8 +231,11 @@ class ActivityScreen extends StatelessWidget {
                           _ActivityUnreadBadge(count: item.unreadCount),
                       ],
                     ),
-                    subtitle: Text(item.preview,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                      item.preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     trailing: Text(item.updatedAt),
                     onTap: () => _openConversation(context, state, item),
                   ),
@@ -288,6 +304,7 @@ class _BookingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final state = context.read<Property24State>();
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: theme.colorScheme.primaryContainer,
@@ -296,19 +313,78 @@ class _BookingRow extends StatelessWidget {
           color: theme.colorScheme.primary,
         ),
       ),
-      title: Text(isLandlord
-          ? (booking.tenant.isEmpty ? 'Client reservation' : booking.tenant)
-          : booking.property),
-      subtitle: Text(isLandlord
-          ? '${booking.property} / ${booking.scheduledFor}'
-          : '${booking.scheduledFor} / ${booking.status}'),
-      trailing: Text(
-        booking.status,
-        style: theme.textTheme.labelMedium?.copyWith(
-          color: theme.colorScheme.primary,
-          fontWeight: FontWeight.w700,
-        ),
+      title: Text(
+        isLandlord
+            ? (booking.tenant.isEmpty ? 'Client reservation' : booking.tenant)
+            : booking.property,
       ),
+      subtitle: Text(
+        isLandlord
+            ? '${booking.property} / ${booking.scheduledFor}'
+            : '${booking.scheduledFor} / ${booking.status}',
+      ),
+      trailing: booking.status.toLowerCase() == 'pending' && isLandlord
+          ? PopupMenuButton<String>(
+              tooltip: 'Respond to viewing request',
+              onSelected: (status) async {
+                try {
+                  await state.updateViewingStatus(booking, status);
+                } catch (exception) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(userFacingError(exception)),
+                      ),
+                    );
+                  }
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'confirmed',
+                  child: Text('Accept request'),
+                ),
+                PopupMenuItem(
+                  value: 'rejected',
+                  child: Text('Reject request'),
+                ),
+              ],
+            )
+          : Text(
+              booking.status,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+      onTap: booking.conversationId.isEmpty
+          ? null
+          : () {
+              ConversationItem? conversation;
+              for (final item in state.snapshot.conversations) {
+                if (item.id == booking.conversationId) {
+                  conversation = item;
+                  break;
+                }
+              }
+              if (conversation == null) return;
+              final matchedConversation = conversation;
+              PropertyListing? property;
+              for (final item in state.snapshot.properties) {
+                if (item.id == booking.propertyId) {
+                  property = item;
+                  break;
+                }
+              }
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ConversationScreen(
+                    conversation: matchedConversation,
+                    property: property,
+                  ),
+                ),
+              );
+            },
     );
   }
 }
@@ -352,7 +428,7 @@ class _LandlordNotificationButton extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         shape: BoxShape.circle,
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             color: Color(0x0D000000),
             blurRadius: 10,
@@ -368,8 +444,10 @@ class _LandlordNotificationButton extends StatelessWidget {
           isLabelVisible: state.unreadNotificationCount > 0,
           backgroundColor: Theme.of(context).colorScheme.primary,
           textColor: Theme.of(context).colorScheme.onPrimary,
-          label: Text('${state.unreadNotificationCount}',
-              style: const TextStyle(fontSize: 10)),
+          label: Text(
+            '${state.unreadNotificationCount}',
+            style: const TextStyle(fontSize: 10),
+          ),
           child: Icon(
             CupertinoIcons.bell,
             color: Theme.of(context).colorScheme.onSurface,
@@ -410,13 +488,15 @@ void _openLandlordNotifications(BuildContext context, Property24State state) {
     ),
     transitionBuilder: (context, animation, secondaryAnimation, child) {
       final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic);
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
       return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-              .animate(curved),
-          child: child);
+        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+            .animate(curved),
+        child: child,
+      );
     },
   );
 }
@@ -438,8 +518,11 @@ class _LandlordNotificationPanel extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                    child: Text('Notifications',
-                        style: theme.textTheme.titleLarge)),
+                  child: Text(
+                    'Notifications',
+                    style: theme.textTheme.titleLarge,
+                  ),
+                ),
                 IconButton(
                   tooltip: 'Mark all as read',
                   onPressed: state.unreadNotificationCount == 0
@@ -467,17 +550,21 @@ class _LandlordNotificationPanel extends StatelessWidget {
                   icon: const Icon(CupertinoIcons.trash),
                 ),
                 IconButton(
-                    tooltip: 'Close notifications',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(CupertinoIcons.xmark)),
+                  tooltip: 'Close notifications',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(CupertinoIcons.xmark),
+                ),
               ],
             ),
             const SizedBox(height: 12),
             Expanded(
               child: state.allNotifications.isEmpty
                   ? Center(
-                      child: Text('No new notifications',
-                          style: theme.textTheme.bodyMedium))
+                      child: Text(
+                        'No new notifications',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    )
                   : ListView.separated(
                       itemCount: state.allNotifications.length,
                       separatorBuilder: (_, __) =>
@@ -617,33 +704,48 @@ class _PortfolioRow extends StatelessWidget {
               ? DecoratedBox(
                   decoration:
                       BoxDecoration(color: theme.colorScheme.primaryContainer),
-                  child: Icon(CupertinoIcons.house,
-                      color: theme.colorScheme.primary))
-              : Image.network(property.photos.first,
+                  child: Icon(
+                    CupertinoIcons.house,
+                    color: theme.colorScheme.primary,
+                  ),
+                )
+              : Image.network(
+                  property.photos.first,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => DecoratedBox(
-                      decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer),
-                      child: Icon(CupertinoIcons.house,
-                          color: theme.colorScheme.primary))),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                    ),
+                    child: Icon(
+                      CupertinoIcons.house,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
         ),
         title:
             Text(property.title, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Text(
-            '${property.listingIntent == 'sale' ? 'For sale' : 'For rent'} / ${property.availabilityStatus} / ${property.listingViews} views',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis),
-        trailing: Text(property.rentLabel,
-            style: theme.textTheme.labelLarge
-                ?.copyWith(color: theme.colorScheme.primary)),
+          '${property.listingIntent == 'sale' ? 'For sale' : 'For rent'} / ${property.availabilityStatus} / ${property.listingViews} views',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Text(
+          property.rentLabel,
+          style: theme.textTheme.labelLarge
+              ?.copyWith(color: theme.colorScheme.primary),
+        ),
       ),
     );
   }
 }
 
 class _Section extends StatelessWidget {
-  const _Section(
-      {required this.title, required this.empty, required this.children});
+  const _Section({
+    required this.title,
+    required this.empty,
+    required this.children,
+  });
 
   final String title;
   final String empty;
@@ -659,14 +761,20 @@ class _Section extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: Text(title,
-                    style: Theme.of(context).textTheme.titleMedium)),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
             if (children.isEmpty)
               Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: Text(empty,
-                      style: Theme.of(context).textTheme.bodyMedium))
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Text(
+                  empty,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              )
             else
               ...children,
           ],

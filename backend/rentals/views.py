@@ -5,7 +5,7 @@ import re
 import smtplib
 import uuid
 from base64 import b64encode
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from urllib import error as urlerror
 from urllib import request as urlrequest
@@ -27,6 +27,7 @@ from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.crypto import get_random_string
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -49,6 +50,7 @@ from .models import (
     PhoneVerificationOTP,
     Property,
     PropertyComparison,
+    PropertySearchSession,
     PropertyComment,
     PropertyPhoto,
     PropertyVideo,
@@ -62,7 +64,7 @@ from .models import (
     VerificationRequest,
     Viewing,
 )
-from .ai import parse_search_intent, property_insights, rank_property_candidates, review_listing_payload, score_application_payload, search_explanation
+from .ai import as_decimal, parse_search_intent, property_insights, rank_property_candidates, review_listing_payload, score_application_payload, search_explanation
 from .auth import issue_token_pair, user_from_authorization_header, user_from_token
 from .chat_services import (
     audit_event,
@@ -103,8 +105,19 @@ from .media_services import (
     soft_delete_media_asset,
     validate_upload,
 )
+from .gemini_service import (
+    GeminiConfigurationError,
+    GeminiService,
+    GeminiServiceError,
+)
+from .property_search import (
+    InvalidSearchRequirements,
+    normalize_search_requirements,
+    rank_property_search,
+)
 from .notification_services import send_call_push, send_chat_message_push, send_push_to_users
 from .object_storage import object_storage_status
+from .services import record_property_view
 
 
 User = get_user_model()
@@ -310,11 +323,19 @@ def allowed_conversation_participant_ids(user, prop, requested_ids):
 
 
 def is_publicly_contactable_listing(prop):
-    return prop.is_verified and prop.owner.is_verified and (prop.agent_id is None or prop.agent.is_verified)
+    return (
+        prop.availability_status == Property.AvailabilityStatus.AVAILABLE
+        and prop.is_verified
+        and prop.owner.is_verified
+        and (prop.agent_id is None or prop.agent.is_verified)
+    )
 
 
 def public_listings(properties):
-    return properties.filter(is_active=True)
+    return properties.filter(
+        is_active=True,
+        availability_status=Property.AvailabilityStatus.AVAILABLE,
+    )
 
 
 def user_properties(user):
@@ -938,6 +959,12 @@ def properties_collection(request):
         analysis = record_ai_analysis(ai_review, "property", prop.id)
         payload["ai_review"] = serialize_ai_analysis(analysis)
     broadcast_property_change(prop, "created")
+    if _is_live_public_listing(prop):
+        _notify_tenants_about_property_event(
+            prop,
+            "property.new_listing",
+            f"New property listed: {prop.title}",
+        )
     return JsonResponse(payload, status=201)
 
 
@@ -982,6 +1009,11 @@ def property_detail(request, property_id):
     if validation_error:
         return json_error(validation_error)
 
+    previous_state = {
+        "availability_status": prop.availability_status,
+        "monthly_rent": prop.monthly_rent,
+        "is_live": _is_live_public_listing(prop),
+    }
     apply_property_updates(prop, data, owner, agent, acting_user)
     prop.save()
     payload = serialize_property(prop)
@@ -1002,6 +1034,7 @@ def property_detail(request, property_id):
             owner,
         )
         payload["ai_review"] = serialize_ai_analysis(record_ai_analysis(ai_review, "property", prop.id))
+    _notify_property_lifecycle_events(prop, previous_state)
     broadcast_property_change(prop, "updated")
     return JsonResponse(payload)
 
@@ -1010,9 +1043,7 @@ def property_detail(request, property_id):
 @require_http_methods(["POST", "OPTIONS"])
 def property_view(request, property_id):
     prop = get_object_or_404(Property, pk=property_id)
-    prop.views_count += 1
-    prop.save(update_fields=["views_count"])
-    return JsonResponse({"views_count": prop.views_count})
+    return JsonResponse({"views_count": record_property_view(prop)})
 
 
 @csrf_exempt
@@ -1241,6 +1272,128 @@ def _is_live_public_listing(prop):
     )
 
 
+def _notify_tenants_about_property_event(prop, kind, message):
+    tenant_ids = list(
+        User.objects.filter(role=User.Roles.TENANT, is_active=True)
+        .exclude(pk=prop.owner_id)
+        .values_list("id", flat=True)
+    )
+    if not tenant_ids:
+        return
+    payload = {
+        "kind": kind,
+        "property_id": str(prop.id),
+        "title": prop.title,
+        "monthly_rent": str(prop.monthly_rent),
+        "message": message,
+    }
+    for tenant_id in tenant_ids:
+        broadcast_to_user(tenant_id, "notification.created", payload)
+    send_push_to_users(
+        tenant_ids,
+        title="Property24",
+        body=message,
+        data={"kind": kind, "property_id": str(prop.id)},
+        actor=prop.owner,
+        event_type="push_property_notification_sent",
+    )
+
+
+def _notify_property_lifecycle_events(prop, previous_state):
+    if not _is_live_public_listing(prop):
+        return
+    returned_to_market = (
+        previous_state["availability_status"] != Property.AvailabilityStatus.AVAILABLE
+        and prop.availability_status == Property.AvailabilityStatus.AVAILABLE
+    )
+    if returned_to_market:
+        _notify_tenants_about_property_event(
+            prop,
+            "property.back_on_market",
+            f"Back on the market: {prop.title}",
+        )
+    elif not previous_state["is_live"]:
+        _notify_tenants_about_property_event(
+            prop,
+            "property.new_listing",
+            f"New property listed: {prop.title}",
+        )
+    if (
+        previous_state["is_live"]
+        and prop.monthly_rent < previous_state["monthly_rent"]
+    ):
+        _notify_price_drop(
+            prop,
+            previous_state["monthly_rent"],
+        )
+
+
+def _notify_price_drop(prop, previous_price):
+    saved_tenant_ids = set(
+        SavedProperty.objects.filter(property=prop, tenant__is_active=True)
+        .values_list("tenant_id", flat=True)
+        .distinct()
+    )
+    matched_searches = []
+    for search in SavedSearch.objects.filter(
+        tenant__role=User.Roles.TENANT,
+        tenant__is_active=True,
+        is_active=True,
+    ).select_related("tenant"):
+        match, _ = _record_saved_search_match(search, prop)
+        if match is not None:
+            matched_searches.append(search)
+    search_names_by_tenant = {}
+    for search in matched_searches:
+        search_names_by_tenant.setdefault(search.tenant_id, []).append(search.name)
+    tenant_ids = sorted(saved_tenant_ids | set(search_names_by_tenant))
+    if not tenant_ids:
+        return
+    old_price = _format_property_price(previous_price)
+    new_price = _format_property_price(prop.monthly_rent)
+    for tenant_id in tenant_ids:
+        if tenant_id in saved_tenant_ids:
+            message = (
+                f"Price dropped! {prop.title} you saved has dropped "
+                f"from ${old_price} to ${new_price}."
+            )
+        else:
+            search_name = search_names_by_tenant[tenant_id][0]
+            message = (
+                f"Price dropped! {prop.title} now matches your saved search "
+                f"“{search_name}” at ${new_price} (was ${old_price})."
+            )
+        broadcast_to_user(
+            tenant_id,
+            "notification.created",
+            {
+                "kind": "property.price_reduced",
+                "property_id": str(prop.id),
+                "title": prop.title,
+                "old_price": old_price,
+                "new_price": new_price,
+                "message": message,
+            },
+        )
+    send_push_to_users(
+        tenant_ids,
+        title="Price dropped!",
+        body=f"{prop.title}: ${old_price} → ${new_price}",
+        data={
+            "kind": "property.price_reduced",
+            "property_id": str(prop.id),
+            "old_price": old_price,
+            "new_price": new_price,
+        },
+        actor=prop.owner,
+        event_type="push_property_price_drop",
+    )
+
+
+def _format_property_price(value):
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
 def _serialize_neighborhood(profile):
     if profile is None:
         return {
@@ -1299,8 +1452,83 @@ def _search_matches_property(query, prop):
     return candidate if candidate["score"] >= 55 else None
 
 
+def _saved_search_matches_property(saved_search, prop):
+    criteria = saved_search.criteria or {}
+    if criteria.get("mode") != "structured":
+        return _search_matches_property(saved_search.query, prop)
+    if not _is_live_public_listing(prop):
+        return None
+    if prop.listing_intent != criteria.get(
+        "intent",
+        criteria.get("listing_intent", Property.ListingIntent.RENT),
+    ):
+        return None
+    locations = criteria.get("locations") or []
+    location = str(criteria.get("location") or "").strip()
+    if location and location not in locations:
+        locations = [*locations, location]
+    locations = {str(value).strip().casefold() for value in locations if str(value).strip()}
+    if (
+        locations
+        and not criteria.get("flexibility", {}).get("location", False)
+        and prop.city.strip().casefold() not in locations
+        and prop.suburb.strip().casefold() not in locations
+    ):
+        return None
+    bedrooms_min = criteria.get("min_bedrooms", criteria.get("bedrooms_min"))
+    bedrooms_max = criteria.get("max_bedrooms")
+    if not criteria.get("flexibility", {}).get("bedrooms", False):
+        if bedrooms_min is not None and prop.bedrooms < bedrooms_min:
+            return None
+        if bedrooms_max is not None and prop.bedrooms > bedrooms_max:
+            return None
+    rent_min = as_decimal(criteria.get("min_price", criteria.get("rent_min")))
+    if (
+        rent_min is not None
+        and not criteria.get("flexibility", {}).get("budget", False)
+        and prop.monthly_rent < rent_min
+    ):
+        return None
+    rent_max = as_decimal(criteria.get("max_price", criteria.get("rent_max")))
+    if (
+        rent_max is not None
+        and not criteria.get("flexibility", {}).get("budget", False)
+        and prop.monthly_rent > rent_max
+    ):
+        return None
+    property_type = criteria.get("property_type")
+    if (
+        property_type
+        and not criteria.get("flexibility", {}).get("property_type", False)
+        and prop.property_type != property_type
+    ):
+        return None
+    from .property_search import _amenity_present
+
+    if any(
+        not _amenity_present(prop, amenity)
+        for amenity in criteria.get("required_amenities", [])
+    ):
+        return None
+    listing_text = " ".join(
+        [prop.title, prop.description, prop.address, prop.city, prop.suburb]
+    ).casefold()
+    if any(
+        str(keyword).casefold() not in listing_text
+        for keyword in criteria.get("required_keywords", [])
+    ):
+        return None
+    if criteria.get("move_in_date") and prop.available_from:
+        year, month = (
+            int(value) for value in criteria["move_in_date"].split("-")
+        )
+        if (prop.available_from.year, prop.available_from.month) > (year, month):
+            return None
+    return {"score": 100}
+
+
 def _record_saved_search_match(saved_search, prop):
-    candidate = _search_matches_property(saved_search.query, prop)
+    candidate = _saved_search_matches_property(saved_search, prop)
     if candidate is None:
         return None, False
     match, created = SavedSearchMatch.objects.get_or_create(
@@ -1324,16 +1552,31 @@ def _notify_saved_search_matches(prop):
     for saved_search in searches.iterator():
         match, created = _record_saved_search_match(saved_search, prop)
         if created:
+            message = f"New property matching your search “{saved_search.name}”: {prop.title}"
             broadcast_to_user(
                 saved_search.tenant_id,
                 "notification.created",
                 {
                     "kind": "saved_search.match",
-                    "saved_search_id": saved_search.id,
-                    "property_id": prop.id,
+                    "saved_search_id": str(saved_search.id),
+                    "property_id": str(prop.id),
                     "match_score": match.match_score,
-                    "message": f"New match for {saved_search.name}: {prop.title}",
+                    "title": prop.title,
+                    "monthly_rent": str(prop.monthly_rent),
+                    "message": message,
                 },
+            )
+            send_push_to_users(
+                [saved_search.tenant_id],
+                title="New property matching your search",
+                body=f"{prop.title} · ${_format_property_price(prop.monthly_rent)}",
+                data={
+                    "kind": "saved_search.match",
+                    "saved_search_id": str(saved_search.id),
+                    "property_id": str(prop.id),
+                },
+                actor=prop.owner,
+                event_type="push_saved_search_match",
             )
 
 
@@ -1448,6 +1691,142 @@ def property_comparisons_collection(request):
     })
 
 
+def _normalize_saved_search_criteria(criteria):
+    if not isinstance(criteria, dict):
+        raise ValueError("criteria must be an object")
+    normalized = {"mode": "structured"}
+    locations = criteria.get("locations") or []
+    if not isinstance(locations, list):
+        raise ValueError("locations must be a list")
+    normalized_locations = list(dict.fromkeys(
+        str(value).strip()[:100]
+        for value in locations
+        if str(value).strip()
+    ))[:8]
+    location = str(criteria.get("location") or "").strip()
+    if len(location) > 100:
+        raise ValueError("location must be 100 characters or fewer")
+    if location:
+        normalized["location"] = location
+    if normalized_locations:
+        normalized["locations"] = normalized_locations
+    bedrooms_min_value = criteria.get("min_bedrooms", criteria.get("bedrooms_min"))
+    if bedrooms_min_value not in (None, ""):
+        try:
+            bedrooms_min = int(bedrooms_min_value)
+        except (TypeError, ValueError):
+            raise ValueError("bedrooms_min must be a whole number") from None
+        if bedrooms_min < 0 or bedrooms_min > 20:
+            raise ValueError("bedrooms_min must be between 0 and 20")
+        normalized["bedrooms_min"] = bedrooms_min
+    bedrooms_max_value = criteria.get("max_bedrooms")
+    if bedrooms_max_value not in (None, ""):
+        try:
+            bedrooms_max = int(bedrooms_max_value)
+        except (TypeError, ValueError):
+            raise ValueError("bedrooms_max must be a whole number") from None
+        if bedrooms_max < 0 or bedrooms_max > 20:
+            raise ValueError("bedrooms_max must be between 0 and 20")
+        normalized["max_bedrooms"] = bedrooms_max
+    for source_key, normalized_key in (
+        ("min_price", "rent_min"),
+        ("max_price", "rent_max"),
+    ):
+        value = criteria.get(source_key, criteria.get(normalized_key))
+        if value in (None, ""):
+            continue
+        try:
+            amount = Decimal(str(value).replace(",", "").replace("$", "").strip())
+        except (InvalidOperation, TypeError, ValueError):
+            raise ValueError(f"{normalized_key} must be a valid amount") from None
+        if not amount.is_finite() or amount < 0:
+            raise ValueError(f"{normalized_key} must be a non-negative amount")
+        normalized[normalized_key] = str(amount)
+    if (
+        normalized.get("rent_min") is not None
+        and normalized.get("rent_max") is not None
+        and Decimal(normalized["rent_min"]) > Decimal(normalized["rent_max"])
+    ):
+        raise ValueError("rent_min must not be greater than rent_max")
+    property_type = str(criteria.get("property_type") or "").strip().lower()
+    if property_type == "apartment":
+        property_type = "flat"
+    valid_types = {value for value, _ in Property.PropertyType.choices}
+    if property_type and property_type not in valid_types:
+        raise ValueError("property_type is not supported")
+    if property_type:
+        normalized["property_type"] = property_type
+    intent = str(
+        criteria.get("intent", criteria.get("listing_intent"))
+        or Property.ListingIntent.RENT
+    ).strip().lower()
+    if intent not in {value for value, _ in Property.ListingIntent.choices}:
+        raise ValueError("intent must be rent or sale")
+    normalized["intent"] = intent
+    from .property_search import AMENITY_ALIASES
+
+    for key in ("required_amenities", "preferred_amenities"):
+        values = criteria.get(key) or []
+        if not isinstance(values, list):
+            raise ValueError(f"{key} must be a list")
+        normalized[key] = list(dict.fromkeys(
+            str(value).strip().lower()
+            for value in values
+            if str(value).strip().lower() in AMENITY_ALIASES
+        ))
+    required_keywords = criteria.get("required_keywords") or []
+    if not isinstance(required_keywords, list):
+        raise ValueError("required_keywords must be a list")
+    normalized["required_keywords"] = list(dict.fromkeys(
+        str(value).strip()[:80]
+        for value in required_keywords
+        if str(value).strip()
+    ))[:10]
+    flexibility = criteria.get("flexibility") or {}
+    if not isinstance(flexibility, dict):
+        raise ValueError("flexibility must be an object")
+    normalized["flexibility"] = {
+        key: bool(flexibility.get(key, False))
+        for key in ("budget", "location", "bedrooms", "property_type")
+    }
+    if criteria.get("move_in_date"):
+        move_in_date = str(criteria["move_in_date"]).strip()
+        if not re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])", move_in_date):
+            raise ValueError("move_in_date must use YYYY-MM")
+        normalized["move_in_date"] = move_in_date
+    keywords = criteria.get("keywords") or []
+    if not isinstance(keywords, list):
+        raise ValueError("keywords must be a list")
+    normalized["keywords"] = list(dict.fromkeys(
+        str(value).strip()[:80]
+        for value in keywords
+        if str(value).strip()
+    ))[:10]
+    if (
+        normalized.get("bedrooms_min") is not None
+        and normalized.get("max_bedrooms") is not None
+        and normalized["bedrooms_min"] > normalized["max_bedrooms"]
+    ):
+        raise ValueError("bedrooms_min must not exceed bedrooms_max")
+    has_criteria = any([
+        location,
+        normalized_locations,
+        normalized.get("bedrooms_min") is not None,
+        normalized.get("max_bedrooms") is not None,
+        normalized.get("rent_min") is not None,
+        normalized.get("rent_max") is not None,
+        normalized.get("property_type"),
+        normalized["required_amenities"],
+        normalized["preferred_amenities"],
+        normalized["required_keywords"],
+        normalized.get("move_in_date"),
+        normalized["keywords"],
+    ])
+    if not has_criteria:
+        raise ValueError("At least one search criterion is required")
+    return normalized
+
+
 @csrf_exempt
 @require_http_methods(["GET", "POST", "OPTIONS"])
 def saved_searches_collection(request):
@@ -1469,15 +1848,23 @@ def saved_searches_collection(request):
         return json_error("query is required")
     if len(query) > 500:
         return json_error("query must be 500 characters or fewer")
+    try:
+        criteria = (
+            _normalize_saved_search_criteria(data["criteria"])
+            if "criteria" in data
+            else parse_search_intent(query)
+        )
+    except ValueError as exc:
+        return json_error(str(exc))
     name = str(data.get("name") or query).strip()[:80]
     saved_search, created = SavedSearch.objects.get_or_create(
         tenant=tenant,
         query=query,
-        defaults={"name": name, "criteria": parse_search_intent(query)},
+        defaults={"name": name, "criteria": criteria},
     )
     if not created:
         saved_search.name = name
-        saved_search.criteria = parse_search_intent(query)
+        saved_search.criteria = criteria
         saved_search.is_active = True
         saved_search.save(update_fields=["name", "criteria", "is_active", "updated_at"])
     live_properties = Property.objects.select_related("owner", "agent").prefetch_related("photos", "videos").filter(
@@ -1486,7 +1873,7 @@ def saved_searches_collection(request):
         owner__is_verified=True,
         availability_status=Property.AvailabilityStatus.AVAILABLE,
     ).filter(Q(agent__isnull=True) | Q(agent__is_verified=True))
-    for prop in live_properties.iterator():
+    for prop in live_properties.iterator(chunk_size=100):
         _record_saved_search_match(saved_search, prop)
     return JsonResponse(_serialize_saved_search(saved_search), status=201 if created else 200)
 
@@ -1508,7 +1895,12 @@ def saved_search_detail(request, search_id):
         saved_search.name = str(data["name"] or "").strip()[:80] or saved_search.name
     if "is_active" in data:
         saved_search.is_active = to_bool(data["is_active"])
-    saved_search.save(update_fields=["name", "is_active", "updated_at"])
+    if "criteria" in data:
+        try:
+            saved_search.criteria = _normalize_saved_search_criteria(data["criteria"])
+        except ValueError as exc:
+            return json_error(str(exc))
+    saved_search.save(update_fields=["name", "is_active", "criteria", "updated_at"])
     return JsonResponse(_serialize_saved_search(saved_search))
 
 
@@ -2107,17 +2499,73 @@ def viewings_collection(request):
     data = request_json(request)
     if data is None:
         return json_error("Invalid JSON body")
-    viewing = Viewing.objects.create(
-        property_id=data.get("property_id"),
+    prop = get_object_or_404(Property.objects.select_related("owner", "agent"), pk=data.get("property_id"))
+    if not _is_live_public_listing(prop):
+        return json_error("This property is not available for viewing requests", status=409)
+    scheduled_for = parse_datetime(str(data.get("scheduled_for") or ""))
+    if scheduled_for is None:
+        return json_error("scheduled_for must be a valid date and time", status=400)
+    if timezone.is_naive(scheduled_for):
+        return json_error("scheduled_for must include a timezone", status=400)
+    scheduled_for = scheduled_for.astimezone(timezone.get_current_timezone())
+    if scheduled_for <= timezone.now():
+        return json_error("Choose a viewing time in the future", status=400)
+    if prop.available_from and scheduled_for.date() < prop.available_from:
+        return json_error("Choose a viewing on or after the property's available date", status=400)
+    if data.get("agent_id") not in (None, "", prop.agent_id):
+        return json_error("agent_id must match the property's assigned agent", status=400)
+    if Viewing.objects.filter(
+        property=prop,
         tenant=acting_user,
-        agent_id=data.get("agent_id") or None,
-        scheduled_for=data.get("scheduled_for"),
-        status=data.get("status", Viewing.Status.PENDING),
-        notes=data.get("notes", ""),
-    )
-    for recipient_id in {acting_user.id, viewing.property.owner_id, viewing.agent_id} - {None}:
-        broadcast_to_user(recipient_id, "notification.created", {"kind": "viewing", "viewing_id": viewing.id, "property_id": viewing.property_id})
-    return JsonResponse(serialize_viewing(viewing), status=201)
+        status=Viewing.Status.PENDING,
+    ).exists():
+        return json_error("You already have a pending viewing request for this property", status=409)
+
+    try:
+        with transaction.atomic():
+            viewing = Viewing.objects.create(
+                property=prop,
+                tenant=acting_user,
+                agent=prop.agent,
+                scheduled_for=scheduled_for,
+                status=Viewing.Status.PENDING,
+                notes=str(data.get("notes") or "").strip()[:2000],
+            )
+            conversation, conversation_created = open_listing_conversation(
+                acting_user,
+                prop,
+                {prop.owner_id},
+            )
+            local_scheduled_for = timezone.localtime(viewing.scheduled_for)
+            time_label = local_scheduled_for.strftime("%I:%M %p").lstrip("0")
+            message = create_chat_message(
+                conversation,
+                acting_user,
+                (
+                    f"Viewing request for {prop.title}: "
+                    f"{local_scheduled_for.strftime('%A')} {local_scheduled_for.day} "
+                    f"{local_scheduled_for.strftime('%B')} at {time_label}. "
+                    "Please accept or reject this request."
+                ),
+            )
+    except ValueError as exc:
+        return json_error(str(exc), status=409)
+    if conversation_created:
+        for participant_id in conversation.participants.values_list("id", flat=True):
+            broadcast_to_user(
+                participant_id,
+                "notification.created",
+                {"kind": "conversation.created", "conversation_id": conversation.id, "property_id": prop.id},
+            )
+    broadcast_to_conversation(conversation.id, "message.created", serialize_message(message))
+    send_chat_message_push(message)
+    for recipient_id in {acting_user.id, prop.owner_id, prop.agent_id} - {None}:
+        broadcast_to_user(
+            recipient_id,
+            "notification.created",
+            {"kind": "viewing", "viewing_id": viewing.id, "property_id": viewing.property_id},
+        )
+    return JsonResponse(serialize_viewing(viewing, conversation_id=conversation.id), status=201)
 
 
 @csrf_exempt
@@ -2130,25 +2578,71 @@ def viewing_detail(request, viewing_id):
     if not (is_admin(acting_user) or viewing.tenant_id == acting_user.id or can_manage_property(acting_user, viewing.property)):
         return forbidden()
 
+    conversation = Conversation.objects.filter(
+        property=viewing.property,
+        participants=viewing.tenant,
+    ).filter(participants__id=viewing.property.owner_id).distinct().first()
+
     if request.method == "GET":
-        return JsonResponse(serialize_viewing(viewing))
+        return JsonResponse(
+            serialize_viewing(viewing, conversation_id=conversation.id if conversation else None)
+        )
 
     data = request_json(request)
     if data is None:
         return json_error("Invalid JSON body")
-    if data.get("scheduled_for"):
-        viewing.scheduled_for = data["scheduled_for"]
-    if data.get("status"):
-        viewing.status = normalise_choice(data["status"], Viewing.Status, viewing.status)
-    if data.get("notes") is not None:
-        viewing.notes = data["notes"]
-    if data.get("agent_id") is not None:
-        viewing.agent_id = data.get("agent_id") or None
-    viewing.save()
+    status = str(data.get("status") or "").strip().lower()
+    if can_manage_property(acting_user, viewing.property) or is_admin(acting_user):
+        if viewing.status != Viewing.Status.PENDING:
+            return json_error("Only pending viewing requests can be accepted or rejected", status=409)
+        if status not in {Viewing.Status.CONFIRMED, Viewing.Status.REJECTED}:
+            return json_error("Choose accepted or rejected", status=400)
+        viewing.status = status
+    elif acting_user.id == viewing.tenant_id:
+        if status != Viewing.Status.CANCELLED:
+            return json_error("Tenants can only cancel their own viewing requests", status=403)
+        if viewing.status not in {Viewing.Status.PENDING, Viewing.Status.CONFIRMED}:
+            return json_error("This viewing request can no longer be cancelled", status=409)
+        viewing.status = status
+    else:
+        return forbidden()
+    message_actor = (
+        viewing.property.owner
+        if acting_user.role in {User.Roles.AGENT, User.Roles.ADMIN}
+        else acting_user
+    )
+    try:
+        with transaction.atomic():
+            viewing.save(update_fields=["status"])
+            decision = viewing.get_status_display()
+            decision_conversation = conversation or open_listing_conversation(
+                message_actor,
+                viewing.property,
+                {
+                    viewing.tenant_id
+                    if acting_user.id != viewing.tenant_id
+                    else viewing.property.owner_id
+                },
+            )[0]
+            decision_message = create_chat_message(
+                decision_conversation,
+                message_actor,
+                f"{message_actor} {decision.lower()} the viewing request for {viewing.property.title}.",
+            )
+    except ValueError as exc:
+        return json_error(str(exc), status=409)
+    broadcast_to_conversation(
+        decision_message.conversation_id,
+        "message.created",
+        serialize_message(decision_message),
+    )
+    send_chat_message_push(decision_message)
     for recipient_id in [viewing.tenant_id, viewing.property.owner_id, viewing.agent_id]:
         if recipient_id:
             broadcast_to_user(recipient_id, "notification.created", {"kind": "viewing.updated", "viewing_id": viewing.id, "property_id": viewing.property_id})
-    return JsonResponse(serialize_viewing(viewing))
+    return JsonResponse(
+        serialize_viewing(viewing, conversation_id=decision_message.conversation_id)
+    )
 
 
 @csrf_exempt
@@ -2933,6 +3427,8 @@ def apply_property_updates(prop, data, owner, agent, acting_user):
         if not (is_admin(acting_user) or acting_user.id == owner.id):
             raise PermissionError("Only the landlord or an administrator can change listing availability")
         prop.availability_status = normalise_choice(data["availability_status"], Property.AvailabilityStatus, prop.availability_status)
+        if prop.availability_status != Property.AvailabilityStatus.AVAILABLE:
+            prop.available_from = None
     if data.get("bedrooms") is not None:
         prop.bedrooms = int(data["bedrooms"])
     if data.get("bathrooms") is not None:
@@ -3859,6 +4355,7 @@ def serialize_property(prop):
     neighborhood = _serialize_neighborhood(_neighborhood_for_property(prop))
     return {
         "id": prop.id,
+        "created_at": prop.created_at.isoformat(),
         "owner": serialize_user(prop.owner),
         "agent": serialize_user(prop.agent) if prop.agent else None,
         "title": prop.title,
@@ -3872,6 +4369,7 @@ def serialize_property(prop):
         "show_exact_location": prop.show_exact_location,
         "listing_intent": prop.listing_intent,
         "availability_status": prop.availability_status,
+        "available_from": prop.available_from.isoformat() if prop.available_from else None,
         "monthly_rent": str(prop.monthly_rent),
         "deposit_required": str(prop.deposit_required),
         "property_type": prop.property_type,
@@ -3899,7 +4397,7 @@ def serialize_property(prop):
         "photos": [signed_media_url(photo.image) if photo.image else photo.caption for photo in prop.photos.all()],
         "videos": [video.external_url or (signed_media_url(video.video) if video.video else video.caption) for video in prop.videos.all()],
         "listing_views": prop.views_count,
-        "saved_count": prop.saved_count or prop.saved_by.count(),
+        "saved_count": prop.saved_by.count(),
         "likes_count": prop.likes.count(),
         "applications_count": getattr(prop, "application_total", prop.applications.count()),
         "passport_id": insights["passport_id"],
@@ -3909,6 +4407,7 @@ def serialize_property(prop):
         "admin_review_required": insights["admin_review_required"],
         "availability_label": insights["availability_label"],
         "availability_state": insights["availability_state"],
+        "available_from": insights["available_from"],
         "last_confirmed_at": insights["last_confirmed_at"],
         "availability_needs_confirmation": insights["availability_needs_confirmation"],
         "availability_temporarily_hidden": insights["availability_temporarily_hidden"],
@@ -4005,7 +4504,14 @@ def serialize_verification(verification, acting_user=None):
     }
 
 
-def serialize_viewing(viewing):
+def serialize_viewing(viewing, conversation_id=None):
+    if conversation_id is None:
+        conversation_id = Conversation.objects.filter(
+            property_id=viewing.property_id,
+            participants__id=viewing.tenant_id,
+        ).filter(
+            participants__id=viewing.property.owner_id,
+        ).values_list("id", flat=True).first()
     return {
         "id": viewing.id,
         "property_id": viewing.property_id,
@@ -4017,6 +4523,7 @@ def serialize_viewing(viewing):
         "scheduled_for": serialize_date(viewing.scheduled_for),
         "status": viewing.status,
         "notes": viewing.notes,
+        "conversation_id": conversation_id,
     }
 
 
@@ -4173,15 +4680,89 @@ def ai_property_search(request):
     query = str(data.get("query") or "").strip()
     if not query:
         return json_error("query is required")
+    if len(query) > 1000:
+        return json_error("query must be 1000 characters or fewer")
     scope = str(data.get("scope") or "discover").strip().lower()
-    intent = parse_search_intent(query)
-    base_properties = Property.objects.select_related("owner", "agent").prefetch_related("photos", "videos")
+    if scope not in {"discover", "listings", "mine"}:
+        return json_error("Unsupported search scope")
+
+    acting_user = None
+    authorization = request.headers.get("Authorization", "")
+    if authorization:
+        acting_user, auth_error = user_from_authorization_header(authorization)
+        if auth_error:
+            return json_error("Invalid authorization", status=401)
     if scope in {"listings", "mine"}:
-        acting_user, auth_response = require_authenticated(request)
-        if auth_response:
-            return auth_response
+        if acting_user is None:
+            return json_error("Sign in is required for this search scope", status=401)
         if acting_user.role not in {User.Roles.LANDLORD, User.Roles.AGENT, User.Roles.ADMIN}:
             return forbidden()
+
+    search_session = None
+    session_id = str(data.get("session_id") or "").strip()
+    if session_id:
+        try:
+            session_uuid = uuid.UUID(session_id)
+        except ValueError:
+            return json_error("session_id must be a valid search session")
+        try:
+            search_session = PropertySearchSession.objects.get(
+                pk=session_uuid,
+                updated_at__gte=timezone.now() - timedelta(days=30),
+            )
+        except PropertySearchSession.DoesNotExist:
+            return json_error("Search session was not found or has expired", status=404)
+        if search_session.user_id and (
+            acting_user is None or search_session.user_id != acting_user.id
+        ):
+            return forbidden()
+        if search_session.user_id is None and acting_user is not None:
+            search_session.user = acting_user
+
+    previous_requirements = search_session.requirements if search_session else None
+    parser = "gemini"
+    try:
+        raw_requirements = GeminiService.parse_property_search(
+            query,
+            previous_requirements=previous_requirements,
+        )
+    except GeminiConfigurationError:
+        parser = "local"
+        raw_requirements = _local_property_search_requirements(
+            query,
+            previous_requirements,
+        )
+    except GeminiServiceError:
+        return json_error(
+            "AI search is temporarily unavailable. Please try again.",
+            status=502,
+        )
+    try:
+        requirements = normalize_search_requirements(raw_requirements, query)
+    except InvalidSearchRequirements:
+        return json_error(
+            "Could not safely interpret this search. Please try rephrasing it.",
+            status=502,
+        )
+
+    if search_session is None:
+        search_session = PropertySearchSession.objects.create(
+            user=acting_user,
+            original_query=query,
+            requirements=requirements,
+            modifications=[],
+        )
+    else:
+        modifications = search_session.modifications or []
+        modifications.append({"query": query, "requirements": requirements})
+        search_session.requirements = requirements
+        search_session.modifications = modifications[-20:]
+        search_session.save(
+            update_fields=["user", "requirements", "modifications", "updated_at"]
+        )
+
+    base_properties = Property.objects.select_related("owner", "agent").prefetch_related("photos", "videos")
+    if scope in {"listings", "mine"}:
         properties = (
             user_properties(acting_user)
             if acting_user.role != User.Roles.ADMIN
@@ -4190,66 +4771,109 @@ def ai_property_search(request):
     elif scope == "discover":
         properties = public_listings(base_properties)
     else:
-        return json_error("Unsupported search scope")
+        properties = public_listings(base_properties)
     properties = properties.filter(
+        is_active=True,
         listing_status=Property.ListingStatus.VERIFIED,
         owner__is_verified=True,
         availability_status=Property.AvailabilityStatus.AVAILABLE,
+        listing_intent=requirements["listing_intent"],
     ).filter(Q(agent__isnull=True) | Q(agent__is_verified=True))
-    filters = {
-        "listing_intent": intent.get("intent"),
-        "city": intent.get("city"),
-        "property_type": intent.get("property_type"),
-        "bedrooms_min": intent.get("bedrooms_min"),
-        "rent_max": intent.get("budget_max"),
-        "verified_only": "verified_only" in intent.get("features", []),
-    }
-    properties = apply_property_filters(properties, filters)
-    land_size_min = intent.get("land_size_min")
-    if land_size_min:
-        size_value = parse_decimal(land_size_min, "land_size_min")
-        if intent.get("land_size_unit") in {"hectare", "hectares", "ha"}:
-            size_value *= 10000
-        elif intent.get("land_size_unit") == "acres":
-            size_value *= Decimal("4046.8564224")
-        properties = properties.filter(land_size__gte=size_value)
-    if intent.get("stands_min"):
-        properties = properties.filter(stands_available__gte=intent["stands_min"])
-    for feature in intent.get("features", []):
-        if feature == "furnished":
-            properties = properties.filter(furnished=True)
-        elif feature == "pet_friendly":
-            properties = properties.filter(pet_friendly=True)
-        elif feature == "solar_power":
-            properties = properties.filter(solar_power=True)
-        elif feature == "borehole":
-            properties = properties.filter(borehole=True)
-        elif feature == "has_360_tour":
-            properties = properties.filter(has_360_tour=True)
-        elif feature == "title_deed":
-            properties = properties.exclude(title_deed_status__in=["", "not_provided"])
-        elif feature == "serviced":
-            properties = properties.exclude(servicing_status__in=["", "not_serviced"])
-        elif feature == "electricity":
-            properties = properties.filter(electricity_available=True)
-        elif feature == "water":
-            properties = properties.filter(
-                Q(land_water_available=True)
-                | Q(borehole=True)
-                | Q(water_availability__icontains="available")
-                | Q(water_availability__icontains="reliable")
-                | Q(water_availability__icontains="municipal")
-            )
-    candidates = list(properties.order_by("-updated_at")[:250])
-    intent, ranked = rank_property_candidates(query, candidates)
+    if requirements["move_in_date"]:
+        year, month = (int(part) for part in requirements["move_in_date"].split("-"))
+        next_month = (
+            date(year + 1, 1, 1)
+            if month == 12
+            else date(year, month + 1, 1)
+        )
+        properties = properties.filter(
+            Q(available_from__isnull=True) | Q(available_from__lt=next_month)
+        )
+    has_search_criteria = any([
+        requirements["property_type"] != "unspecified",
+        requirements["locations"],
+        requirements["min_bedrooms"] is not None,
+        requirements["max_bedrooms"] is not None,
+        requirements["min_price"] is not None,
+        requirements["max_price"] is not None,
+        requirements["required_amenities"],
+        requirements["preferred_amenities"],
+        requirements["keywords"],
+    ])
+    if requirements["clarification_question"] and not has_search_criteria:
+        return JsonResponse({
+            "query": query,
+            "session_id": str(search_session.id),
+            "parser": parser,
+            "interpreted_requirements": requirements,
+            "intent": _legacy_intent_from_requirements(requirements),
+            "clarification_question": requirements["clarification_question"],
+            "total_matches": 0,
+            "exact_matches": 0,
+            "close_matches": 0,
+            "results": [],
+            "explanation": requirements["clarification_question"],
+        })
+
+    ranked, exact_count, close_count = rank_property_search(
+        properties.order_by("-updated_at"),
+        requirements,
+    )
     results = []
     for item in ranked:
-        payload = serialize_property(item["property"])
-        payload["search_score"] = item["score"]
-        payload["match_reasons"] = item["reasons"]
-        results.append(payload)
-    explanation = search_explanation(query, intent, ranked)
-    return JsonResponse({"query": query, "intent": intent, "explanation": explanation, "results": results})
+        property_payload = serialize_property(item["property"])
+        results.append({
+            "property_id": str(item["property"].id),
+            "match_score": item["score"],
+            "search_score": item["score"],
+            "match_type": item["match_type"],
+            "match_reasons": item["reasons"],
+            "missing_requirements": item["missing_requirements"],
+            "missing_preferences": item["missing_preferences"],
+            "property": property_payload,
+            **property_payload,
+        })
+    exact_results = [item for item in results if item["match_type"] == "exact"]
+    close_results = [item for item in results if item["match_type"] == "close"]
+    explanation = (
+        f"{exact_count} exact matches and {close_count} close matches."
+        if exact_count or close_count
+        else "No available listings match these requirements yet."
+    )
+    return JsonResponse({
+        "query": query,
+        "session_id": str(search_session.id),
+        "parser": parser,
+        "interpreted_requirements": requirements,
+        "intent": _legacy_intent_from_requirements(requirements),
+        "clarification_question": "",
+        "total_matches": exact_count + close_count,
+        "exact_matches": exact_count,
+        "close_matches": close_count,
+        "exact_results": exact_results,
+        "close_results": close_results,
+        "explanation": explanation,
+        "results": results,
+    })
+
+
+def _local_property_search_requirements(query, previous_requirements=None):
+    from .property_search import _local_requirements
+
+    return _local_requirements(query, previous_requirements)
+
+
+def _legacy_intent_from_requirements(requirements):
+    features = requirements["required_amenities"] + requirements["preferred_amenities"]
+    return {
+        "intent": requirements["listing_intent"],
+        "city": requirements["locations"][0] if requirements["locations"] else None,
+        "property_type": requirements["property_type"],
+        "bedrooms_min": requirements["min_bedrooms"],
+        "budget_max": requirements["max_price"],
+        "features": features,
+        "parking": "parking" in features,
+    }
 
 @csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])
@@ -4275,19 +4899,35 @@ def property_availability_confirmation(request, property_id):
     prop = get_object_or_404(Property.objects.select_related("owner", "agent"), pk=property_id)
     if not can_manage_property(acting_user, prop):
         return forbidden()
-    data = request_json(request) or {}
+    data = request_json(request)
+    if data is None:
+        return json_error("Invalid JSON body")
     action = str(data.get("action", "available")).strip().lower()
     allowed = {
         "available": Property.AvailabilityStatus.AVAILABLE,
         "confirm": Property.AvailabilityStatus.AVAILABLE,
+        "available_from": Property.AvailabilityStatus.AVAILABLE,
         "reserved": Property.AvailabilityStatus.RESERVED,
         "rented": Property.AvailabilityStatus.RENTED,
         "sold": Property.AvailabilityStatus.SOLD,
     }
     if action not in allowed:
-        return json_error("Choose available, reserved, rented, or sold", status=400)
+        return json_error("Choose available, available_from, reserved, rented, or sold", status=400)
+    available_from = None
+    if action == "available_from":
+        raw_date = str(data.get("available_from") or "").strip()
+        available_from = parse_date(raw_date) if raw_date else None
+        if available_from is None:
+            return json_error("available_from must be a valid date in YYYY-MM-DD format", status=400)
+    previous_state = {
+        "availability_status": prop.availability_status,
+        "monthly_rent": prop.monthly_rent,
+        "is_live": _is_live_public_listing(prop),
+    }
     prop.availability_status = allowed[action]
+    prop.available_from = available_from
     prop.availability_confirmed_at = timezone.now()
-    prop.save(update_fields=["availability_status", "availability_confirmed_at", "updated_at"])
+    prop.save(update_fields=["availability_status", "available_from", "availability_confirmed_at", "updated_at"])
     broadcast_property_change(prop, "availability_updated")
+    _notify_property_lifecycle_events(prop, previous_state)
     return JsonResponse(serialize_property(prop))

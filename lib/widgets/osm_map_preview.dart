@@ -125,7 +125,7 @@ class _TileMap extends StatelessWidget {
                   gradient: LinearGradient(
                     colors: [
                       Colors.transparent,
-                      Colors.black.withOpacity(0.18),
+                      Colors.black.withValues(alpha: 0.18),
                     ],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
@@ -140,16 +140,16 @@ class _TileMap extends StatelessWidget {
                   width: approximate ? 54 : 42,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppTheme.accent.withOpacity(0.16),
+                    color: AppTheme.accent.withValues(alpha: 0.16),
                     border: Border.all(
-                      color: AppTheme.accent.withOpacity(0.28),
+                      color: AppTheme.accent.withValues(alpha: 0.28),
                     ),
                   ),
                   child: Center(
                     child: Container(
                       height: 16,
                       width: 16,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         color: AppTheme.accent,
                       ),
@@ -247,13 +247,13 @@ class _MapLabel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.92),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             CupertinoIcons.location,
             color: AppTheme.accent,
             size: 16,
@@ -285,7 +285,7 @@ class _Attribution extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.88),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(7),
       ),
       child: Text(
@@ -304,7 +304,7 @@ class _MapPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppTheme.borderMid.withOpacity(0.36)
+      ..color = AppTheme.borderMid.withValues(alpha: 0.36)
       ..strokeWidth = 1;
     for (var i = 0; i < 8; i++) {
       final y = size.height * (i + 1) / 9;

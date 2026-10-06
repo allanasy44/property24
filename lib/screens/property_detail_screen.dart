@@ -9,6 +9,8 @@ import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/osm_map_preview.dart';
+import '../widgets/property_card.dart';
+import 'inbox_screen.dart';
 import 'supplier_profile_screen.dart';
 
 class PropertyDetailScreen extends StatefulWidget {
@@ -23,25 +25,80 @@ class PropertyDetailScreen extends StatefulWidget {
 class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   int _page = 0;
   bool _saved = false;
+  int _listingViews = 0;
+  int _savedCount = 0;
   bool _liked = false;
   int _likesCount = 0;
   bool _followingSupplier = false;
   int _supplierFollowersCount = 0;
   bool _supplierFollowLoading = false;
   bool _commentsLoading = false;
+  bool _similarPropertiesLoading = false;
   final TextEditingController _commentController = TextEditingController();
   List<PropertyCommentItem> _comments = <PropertyCommentItem>[];
+  List<ComparisonSuggestion> _similarProperties = <ComparisonSuggestion>[];
   PropertyCommentItem? _replyTo;
 
   @override
   void initState() {
     super.initState();
+    _listingViews = widget.property.listingViews;
+    _savedCount = widget.property.savedCount;
     _likesCount = widget.property.likesCount;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeEngagement();
       _loadComments();
       _loadLikeStatus();
       _loadSupplierFollowStatus();
+      _loadSimilarProperties();
     });
+  }
+
+  Future<void> _initializeEngagement() async {
+    final state = context.read<Property24State>();
+    if (mounted) {
+      setState(
+        () => _saved = state.savedPropertyIds.contains(widget.property.id),
+      );
+    }
+    try {
+      final views = await state.recordPropertyView(widget.property.id);
+      if (mounted) setState(() => _listingViews = views);
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleSaved() async {
+    final state = context.read<Property24State>();
+    if (!state.signedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in to save this home.')),
+      );
+      return;
+    }
+
+    final wasSaved = state.savedPropertyIds.contains(widget.property.id);
+    try {
+      await state.toggleSaved(widget.property);
+      if (mounted) {
+        setState(() {
+          _saved = state.savedPropertyIds.contains(widget.property.id);
+          _savedCount =
+              (_savedCount + (wasSaved ? -1 : 1)).clamp(0, 1 << 31).toInt();
+        });
+      }
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
   }
 
   @override
@@ -59,6 +116,25 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       if (mounted) setState(() => _comments = comments);
     } finally {
       if (mounted) setState(() => _commentsLoading = false);
+    }
+  }
+
+  Future<void> _loadSimilarProperties() async {
+    final state = context.read<Property24State>();
+    if (state.user?.role != AccountRole.tenant || !state.signedIn) return;
+    setState(() => _similarPropertiesLoading = true);
+    try {
+      final suggestions =
+          await state.comparisonSuggestionsFor(widget.property.id);
+      if (mounted) setState(() => _similarProperties = suggestions);
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _similarPropertiesLoading = false);
     }
   }
 
@@ -223,15 +299,30 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
         .read<Property24State>()
         .deletePropertyComment(widget.property.id, comment.id);
     if (mounted) {
-      setState(() => _comments = _comments
-          .where((item) => item.id != comment.id && item.parentId != comment.id)
-          .toList());
+      setState(
+        () => _comments = _comments
+            .where(
+              (item) => item.id != comment.id && item.parentId != comment.id,
+            )
+            .toList(),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final property = widget.property;
+    final state = context.watch<Property24State>();
+    final currentProperty = state.snapshot.properties.firstWhere(
+      (item) => item.id == property.id,
+      orElse: () => property,
+    );
+    final listingViews = currentProperty.listingViews > _listingViews
+        ? currentProperty.listingViews
+        : _listingViews;
+    final savedCount = currentProperty.savedCount > _savedCount
+        ? currentProperty.savedCount
+        : _savedCount;
     final photos = property.photos.isEmpty ? <String>[''] : property.photos;
     final amenities = _amenities(property);
 
@@ -248,7 +339,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                   saved: _saved,
                   onPageChanged: (index) => setState(() => _page = index),
                   onBack: () => Navigator.pop(context),
-                  onSave: () => setState(() => _saved = !_saved),
+                  onSave: _toggleSaved,
                 ),
               ),
               SliverToBoxAdapter(
@@ -257,7 +348,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                   padding: const EdgeInsets.fromLTRB(22, 18, 22, 112),
                   decoration: BoxDecoration(
                     color: AppTheme.bgCard,
-                    borderRadius: BorderRadius.vertical(
+                    borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(26),
                     ),
                   ),
@@ -284,30 +375,62 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         zoom: property.showExactLocation ? 15 : 12,
                       ),
                       const SizedBox(height: 14),
-                      Row(
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          IconButton(
-                            tooltip: _liked ? 'Unlike listing' : 'Like listing',
-                            onPressed: _toggleLike,
-                            icon: Icon(_liked
-                                ? CupertinoIcons.heart_fill
-                                : CupertinoIcons.heart),
-                            color: _liked
-                                ? Colors.redAccent
-                                : AppTheme.textSecondary,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip:
+                                    _liked ? 'Unlike listing' : 'Like listing',
+                                onPressed: _toggleLike,
+                                icon: Icon(
+                                  _liked
+                                      ? CupertinoIcons.heart_fill
+                                      : CupertinoIcons.heart,
+                                ),
+                                color: _liked
+                                    ? Colors.redAccent
+                                    : AppTheme.textSecondary,
+                              ),
+                              Text(
+                                '$_likesCount likes',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text('$_likesCount likes',
-                              style: TextStyle(
+                          _EngagementCount(
+                            icon: CupertinoIcons.eye,
+                            label: '$listingViews views',
+                          ),
+                          _EngagementCount(
+                            icon: CupertinoIcons.bookmark,
+                            label: '$savedCount saved',
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                CupertinoIcons.chat_bubble,
+                                size: 19,
+                                color: AppTheme.textSecondary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '${_comments.length} comments',
+                                style: TextStyle(
                                   color: AppTheme.textSecondary,
-                                  fontWeight: FontWeight.w700)),
-                          const SizedBox(width: 18),
-                          Icon(CupertinoIcons.chat_bubble,
-                              size: 19, color: AppTheme.textSecondary),
-                          const SizedBox(width: 6),
-                          Text('${_comments.length} comments',
-                              style: TextStyle(
-                                  color: AppTheme.textSecondary,
-                                  fontWeight: FontWeight.w700)),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                       const SizedBox(height: 18),
@@ -339,6 +462,20 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                           children: [
                             for (final item in amenities) _AmenityChip(item),
                           ],
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                      if (state.user?.role == AccountRole.tenant) ...[
+                        _SimilarPropertiesSection(
+                          suggestions: _similarProperties,
+                          isLoading: _similarPropertiesLoading,
+                          onOpen: (suggestion) => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => PropertyDetailScreen(
+                                property: suggestion.property,
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 20),
                       ],
@@ -508,9 +645,11 @@ class _CommentTile extends StatelessWidget {
                 ? null
                 : NetworkImage(comment.author.profilePicture),
             child: comment.author.profilePicture.isEmpty
-                ? Text(comment.author.name.isEmpty
-                    ? '?'
-                    : comment.author.name[0].toUpperCase())
+                ? Text(
+                    comment.author.name.isEmpty
+                        ? '?'
+                        : comment.author.name[0].toUpperCase(),
+                  )
                 : null,
           ),
           const SizedBox(width: 9),
@@ -578,6 +717,31 @@ class _CommentTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _EngagementCount extends StatelessWidget {
+  const _EngagementCount({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: AppTheme.textSecondary),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -708,7 +872,7 @@ class _CircleAction extends StatelessWidget {
       tooltip: tooltip,
       onPressed: onPressed,
       style: IconButton.styleFrom(
-        backgroundColor: Colors.black.withOpacity(0.32),
+        backgroundColor: Colors.black.withValues(alpha: 0.32),
         foregroundColor: Colors.white,
         fixedSize: const Size.square(36),
         minimumSize: const Size.square(36),
@@ -839,13 +1003,10 @@ class _AvailabilityCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
     final theme = Theme.of(context);
-    final liveProperty =
-        state.snapshot.properties.cast<PropertyListing?>().firstWhere(
-                  (item) => item?.id == property.id,
-                  orElse: () => property,
-                ) ??
-            property;
-    final canConfirm = state.user?.id == liveProperty.owner?.id;
+    final liveProperty = state.currentProperty(property);
+    final userId = state.user?.id;
+    final canConfirm = userId != null &&
+        (userId == liveProperty.owner?.id || userId == liveProperty.agent?.id);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -859,11 +1020,17 @@ class _AvailabilityCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                liveProperty.availabilityNeedsConfirmation
+                liveProperty.availabilityNeedsConfirmation ||
+                        liveProperty.availabilityState == 'available_from' ||
+                        liveProperty.availabilityState == 'rented' ||
+                        liveProperty.availabilityState == 'sold'
                     ? CupertinoIcons.exclamationmark_triangle
                     : CupertinoIcons.checkmark_seal,
                 size: 18,
-                color: liveProperty.availabilityNeedsConfirmation
+                color: liveProperty.availabilityNeedsConfirmation ||
+                        liveProperty.availabilityState == 'available_from' ||
+                        liveProperty.availabilityState == 'rented' ||
+                        liveProperty.availabilityState == 'sold'
                     ? theme.colorScheme.tertiary
                     : theme.colorScheme.primary,
               ),
@@ -879,11 +1046,9 @@ class _AvailabilityCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      liveProperty.availabilityLabel,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                    AvailabilityIndicator(
+                      label: liveProperty.availabilityLabel,
+                      state: liveProperty.availabilityState,
                     ),
                   ],
                 ),
@@ -892,20 +1057,37 @@ class _AvailabilityCard extends StatelessWidget {
           ),
           if (liveProperty.lastConfirmedAt.isNotEmpty) ...[
             const SizedBox(height: 3),
-            Text('Last confirmed ${liveProperty.lastConfirmedAt}',
-                style: theme.textTheme.bodySmall),
+            Text(
+              'Last confirmed ${liveProperty.lastConfirmedAt}',
+              style: theme.textTheme.bodySmall,
+            ),
           ],
           if (canConfirm) ...[
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
-              child: OutlinedButton.icon(
-                onPressed: () async {
+              child: AvailabilityActionMenu(
+                onSelected: (action) async {
+                  DateTime? availableFrom;
+                  if (action == 'available_from') {
+                    final today = DateTime.now();
+                    availableFrom = await showDatePicker(
+                      context: context,
+                      initialDate: today,
+                      firstDate: DateTime(today.year, today.month, today.day),
+                      lastDate: DateTime(2100),
+                    );
+                    if (availableFrom == null || !context.mounted) return;
+                  }
                   try {
-                    await state.confirmPropertyAvailability(property);
+                    await state.confirmPropertyAvailability(
+                      liveProperty,
+                      action: action,
+                      availableFrom: availableFrom,
+                    );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Availability confirmed')),
+                        const SnackBar(content: Text('Availability updated')),
                       );
                     }
                   } catch (error) {
@@ -916,8 +1098,6 @@ class _AvailabilityCard extends StatelessWidget {
                     }
                   }
                 },
-                icon: Icon(CupertinoIcons.refresh, size: 16),
-                label: Text('Confirm availability'),
               ),
             ),
           ],
@@ -1128,6 +1308,99 @@ class _AffordabilityCardState extends State<_AffordabilityCard> {
   }
 }
 
+class _SimilarPropertiesSection extends StatelessWidget {
+  const _SimilarPropertiesSection({
+    required this.suggestions,
+    required this.isLoading,
+    required this.onOpen,
+  });
+
+  final List<ComparisonSuggestion> suggestions;
+  final bool isLoading;
+  final ValueChanged<ComparisonSuggestion> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'You might also like',
+          style: TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 112,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: suggestions.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final suggestion = suggestions[index];
+              final property = suggestion.property;
+              return SizedBox(
+                width: 220,
+                child: Material(
+                  color: AppTheme.bgSurface,
+                  borderRadius: BorderRadius.circular(16),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => onOpen(suggestion),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            property.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            '${property.bedrooms} bed · ${property.location}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppTheme.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            property.rentLabel,
+                            style: const TextStyle(
+                              color: AppTheme.accent,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _GuestChips extends StatelessWidget {
   const _GuestChips({required this.property});
 
@@ -1143,18 +1416,23 @@ class _GuestChips extends StatelessWidget {
         if (property.isLand) ...[
           _Pill(icon: CupertinoIcons.square, label: property.landSizeLabel),
           _Pill(
-              icon: CupertinoIcons.square_stack_3d_up,
-              label: property.standSummary),
+            icon: CupertinoIcons.square_stack_3d_up,
+            label: property.standSummary,
+          ),
           _Pill(icon: CupertinoIcons.doc_text, label: property.landTitleLabel),
           _Pill(
-              icon: CupertinoIcons.location,
-              label: property.landServicingLabel),
+            icon: CupertinoIcons.location,
+            label: property.landServicingLabel,
+          ),
         ] else ...[
           _Pill(
-              icon: CupertinoIcons.drop, label: '${property.bathrooms} baths'),
+            icon: CupertinoIcons.drop,
+            label: '${property.bathrooms} baths',
+          ),
           _Pill(
-              icon: CupertinoIcons.bed_double,
-              label: '${property.bedrooms} beds'),
+            icon: CupertinoIcons.bed_double,
+            label: '${property.bedrooms} beds',
+          ),
         ],
       ],
     );
@@ -1219,7 +1497,11 @@ class _AmenityChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(CupertinoIcons.check_mark, size: 13, color: AppTheme.accent),
+          const Icon(
+            CupertinoIcons.check_mark,
+            size: 13,
+            color: AppTheme.accent,
+          ),
           const SizedBox(width: 6),
           Text(
             label,
@@ -1329,7 +1611,7 @@ class _HostCard extends StatelessWidget {
                       ? null
                       : Text(
                           initials,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
@@ -1384,7 +1666,7 @@ class _HostCard extends StatelessWidget {
                         : Text(following ? 'Following' : 'Follow'),
                   ),
                 if (supplier?.verified == true)
-                  Icon(
+                  const Icon(
                     CupertinoIcons.checkmark_seal_fill,
                     color: AppTheme.accent,
                     size: 18,
@@ -1419,6 +1701,9 @@ class _BottomActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<Property24State>();
+    final isTenant = state.user?.role == AccountRole.tenant &&
+        state.user?.id != property.owner?.id;
     return Container(
       padding: EdgeInsets.fromLTRB(
         22,
@@ -1431,42 +1716,136 @@ class _BottomActions extends StatelessWidget {
         border: Border(top: BorderSide(color: AppTheme.border)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 20,
             offset: const Offset(0, -8),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () => _holdAndOpenChat(context),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+          if (isTenant) ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _requestViewing(context),
+                icon: const Icon(CupertinoIcons.calendar),
+                label: const Text('Request viewing'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
-              child: Text('Message host'),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: FilledButton(
-              onPressed: () => _holdAndOpenChat(context),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            const SizedBox(height: 8),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _holdAndOpenChat(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Message host'),
                 ),
               ),
-              child: Text('Reserve'),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => _holdAndOpenChat(context),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Reserve'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _requestViewing(BuildContext context) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final availableFrom = DateTime.tryParse(property.availableFrom);
+    final firstDate = availableFrom != null && availableFrom.isAfter(today)
+        ? availableFrom
+        : today;
+    final initialDate = firstDate.isAfter(today.add(const Duration(days: 1)))
+        ? firstDate
+        : today.add(const Duration(days: 1));
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: DateTime(2100),
+    );
+    if (date == null || !context.mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 10, minute: 0),
+    );
+    if (time == null || !context.mounted) return;
+    final scheduledFor = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+    if (!scheduledFor.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a viewing time in the future.')),
+      );
+      return;
+    }
+    try {
+      final state = context.read<Property24State>();
+      final viewing = await state.requestViewing(property, scheduledFor);
+      if (!context.mounted) return;
+      ConversationItem? conversation;
+      for (final item in state.snapshot.conversations) {
+        if (item.id == viewing.conversationId) {
+          conversation = item;
+          break;
+        }
+      }
+      if (conversation == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Viewing request sent. Refresh your inbox to open the landlord chat.',
+            ),
+          ),
+        );
+        context.go(AppRoutes.chatScreen);
+        return;
+      }
+      final selectedConversation = conversation;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ConversationScreen(
+            conversation: selectedConversation,
+            property: property,
+          ),
+        ),
+      );
+    } catch (exception) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
   }
 
   Future<void> _holdAndOpenChat(BuildContext context) async {

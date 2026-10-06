@@ -25,7 +25,9 @@ class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _email = TextEditingController();
+  final _emailFocusNode = FocusNode();
   final _password = TextEditingController();
+  final _passwordFocusNode = FocusNode();
   final _emailCode = TextEditingController();
   bool _registering = false;
   bool _showForm = false;
@@ -43,7 +45,9 @@ class _AuthScreenState extends State<AuthScreen> {
   void dispose() {
     _name.dispose();
     _email.dispose();
+    _emailFocusNode.dispose();
     _password.dispose();
+    _passwordFocusNode.dispose();
     _resendTimer?.cancel();
     _emailCode.dispose();
     super.dispose();
@@ -90,7 +94,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     onPressed: () => _showForm
                         ? setState(() => _showForm = false)
                         : context.go(AppRoutes.initial),
-                    icon: Icon(CupertinoIcons.chevron_left),
+                    icon: const Icon(CupertinoIcons.chevron_left),
                   ),
                 ),
               ],
@@ -104,7 +108,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget _background() {
     return IgnorePointer(
       child: DecoratedBox(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           image: DecorationImage(
             image: NetworkImage(_heroImage),
             fit: BoxFit.cover,
@@ -209,7 +213,7 @@ class _AuthScreenState extends State<AuthScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _socialButton(
-          Icon(CupertinoIcons.person_fill),
+          const Icon(CupertinoIcons.person_fill),
           AppTheme.accent,
           onTap: _googleAuth,
         ),
@@ -217,8 +221,11 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _socialButton(Widget icon, Color color,
-      {required VoidCallback onTap}) {
+  Widget _socialButton(
+    Widget icon,
+    Color color, {
+    required VoidCallback onTap,
+  }) {
     return InkWell(
       onTap: _submitting ? null : onTap,
       borderRadius: BorderRadius.circular(22),
@@ -281,45 +288,64 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 16),
           if (_registering) ...[
             _field(
-                _name,
-                'Full name',
-                CupertinoIcons.person,
-                (value) =>
-                    value!.trim().isEmpty ? 'Enter your full name' : null),
+              _name,
+              'Full name',
+              CupertinoIcons.person,
+              (value) => value!.trim().isEmpty ? 'Enter your full name' : null,
+            ),
             const SizedBox(height: 10),
           ],
-          _field(_email, 'Email address', CupertinoIcons.at, (value) {
-            final email = value?.trim() ?? '';
-            return email.contains('@') && email.contains('.')
-                ? null
-                : 'Enter a valid email address';
-          }),
+          _field(
+            _email,
+            'Email address',
+            CupertinoIcons.at,
+            (value) {
+              final email = value?.trim() ?? '';
+              return email.contains('@') && email.contains('.')
+                  ? null
+                  : 'Enter a valid email address';
+            },
+            focusNode: _emailFocusNode,
+          ),
           const SizedBox(height: 10),
           TextFormField(
             controller: _password,
+            focusNode: _passwordFocusNode,
+            onTap: () =>
+                FocusScope.of(context).requestFocus(_passwordFocusNode),
             obscureText: _obscurePassword,
-            validator: (value) => (value?.length ?? 0) < 15
-                ? 'Password must be at least 15 characters'
-                : null,
+            validator: (value) {
+              final password = value ?? '';
+              if (password.isEmpty) return 'Enter your password';
+              if (_registering && password.length < 15) {
+                return 'Password must be at least 15 characters';
+              }
+              return null;
+            },
             decoration: InputDecoration(
               hintText: 'Password',
-              prefixIcon: Icon(CupertinoIcons.lock, size: 18),
+              prefixIcon: const Icon(CupertinoIcons.lock, size: 18),
               suffixIcon: IconButton(
                 onPressed: () =>
                     setState(() => _obscurePassword = !_obscurePassword),
                 icon: Icon(
-                    _obscurePassword
-                        ? CupertinoIcons.eye
-                        : CupertinoIcons.eye_slash,
-                    size: 18),
+                  _obscurePassword
+                      ? CupertinoIcons.eye
+                      : CupertinoIcons.eye_slash,
+                  size: 18,
+                ),
               ),
             ),
           ),
           if (_error != null) ...[
             const SizedBox(height: 8),
-            Text(_error!,
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.error, fontSize: 12)),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 12,
+              ),
+            ),
           ],
           if (_registrationChallengeId != null) ...[
             const SizedBox(height: 10),
@@ -331,7 +357,7 @@ class _AuthScreenState extends State<AuthScreen> {
               validator: (value) => RegExp(r'^\d{6}$').hasMatch(value ?? '')
                   ? null
                   : 'Enter the 6-digit email code',
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: 'Email verification code',
                 prefixIcon: Icon(CupertinoIcons.mail, size: 18),
               ),
@@ -342,9 +368,11 @@ class _AuthScreenState extends State<AuthScreen> {
                 onPressed: _submitting || _resendSeconds > 0
                     ? null
                     : _resendRegistrationEmail,
-                child: Text(_resendSeconds == 0
-                    ? 'Resend code'
-                    : 'Resend in ${_resendSeconds}s'),
+                child: Text(
+                  _resendSeconds == 0
+                      ? 'Resend code'
+                      : 'Resend in ${_resendSeconds}s',
+                ),
               ),
             ),
           ],
@@ -354,7 +382,7 @@ class _AuthScreenState extends State<AuthScreen> {
             height: 44,
             child: OutlinedButton.icon(
               onPressed: _submitting ? null : _googleAuth,
-              icon: Icon(CupertinoIcons.person_fill, size: 18),
+              icon: const Icon(CupertinoIcons.person_fill, size: 18),
               label: Text(
                 _registering ? 'Create with Google' : 'Continue with Google',
               ),
@@ -379,15 +407,18 @@ class _AuthScreenState extends State<AuthScreen> {
             child: FilledButton(
               onPressed: _submitting ? null : _submit,
               style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.accent,
-                  foregroundColor: Colors.white),
+                backgroundColor: AppTheme.accent,
+                foregroundColor: Colors.white,
+              ),
               child: _submitting
                   ? const CupertinoActivityIndicator(color: Colors.white)
-                  : Text(_registrationChallengeId != null
-                      ? 'Verify email'
-                      : _registering
-                          ? 'Signup'
-                          : 'Login'),
+                  : Text(
+                      _registrationChallengeId != null
+                          ? 'Verify email'
+                          : _registering
+                              ? 'Signup'
+                              : 'Login',
+                    ),
             ),
           ),
           const SizedBox(height: 12),
@@ -397,9 +428,11 @@ class _AuthScreenState extends State<AuthScreen> {
                 _registering = !_registering;
                 _error = null;
               }),
-              child: Text(_registering
-                  ? 'Already have an account? Login'
-                  : 'New here? Signup'),
+              child: Text(
+                _registering
+                    ? 'Already have an account? Login'
+                    : 'New here? Signup',
+              ),
             ),
           ),
         ],
@@ -407,11 +440,20 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _field(TextEditingController controller, String hint, IconData icon,
-      String? Function(String?) validator) {
+  Widget _field(
+    TextEditingController controller,
+    String hint,
+    IconData icon,
+    String? Function(String?) validator, {
+    FocusNode? focusNode,
+  }) {
     return TextFormField(
       controller: controller,
       validator: validator,
+      focusNode: focusNode,
+      onTap: focusNode == null
+          ? null
+          : () => FocusScope.of(context).requestFocus(focusNode),
       keyboardType: hint == 'Email address'
           ? TextInputType.emailAddress
           : TextInputType.text,
@@ -449,7 +491,9 @@ class _AuthScreenState extends State<AuthScreen> {
       if (_registering) {
         if (_registrationChallengeId != null) {
           await state.verifyRegistrationEmail(
-              _registrationChallengeId!, _emailCode.text.trim());
+            _registrationChallengeId!,
+            _emailCode.text.trim(),
+          );
           if (!mounted) return;
           context.go(AppRoutes.homeScreen);
           return;
@@ -463,11 +507,17 @@ class _AuthScreenState extends State<AuthScreen> {
         if (!mounted) return;
         setState(() => _showForm = true);
         _startResendCooldown();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Check your email for the verification code.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Check your email for the verification code.'),
+          ),
+        );
       } else {
-        await state.signIn(_email.text.trim(), _password.text,
-            role: widget.role);
+        await state.signIn(
+          _email.text.trim(),
+          _password.text,
+          role: widget.role,
+        );
         if (mounted) context.go(AppRoutes.homeScreen);
       }
     } catch (exception) {

@@ -121,7 +121,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           shape: BoxShape.circle,
                           border: Border.all(color: AppTheme.bg, width: 3),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           CupertinoIcons.pencil,
                           size: 14,
                           color: Colors.white,
@@ -191,17 +191,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.accent,
-                side: BorderSide(color: AppTheme.accent, width: 1.2),
+                side: const BorderSide(color: AppTheme.accent, width: 1.2),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              onPressed: user == null
-                  ? null
-                  : () => _signOut(context),
-              icon: Icon(CupertinoIcons.square_arrow_right, size: 18),
-              label: Text(
+              onPressed: user == null ? null : () => _signOut(context),
+              icon: const Icon(CupertinoIcons.square_arrow_right, size: 18),
+              label: const Text(
                 'Sign out',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
@@ -264,7 +262,7 @@ Future<T?> _openSidePanel<T>({
     context: context,
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: Colors.black.withOpacity(0.28),
+    barrierColor: Colors.black.withValues(alpha: 0.28),
     transitionDuration: const Duration(milliseconds: 260),
     pageBuilder: (context, animation, secondaryAnimation) {
       return Align(
@@ -312,9 +310,8 @@ class _MenuCardTile extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.subtitle,
-    this.badge,
     this.showBottomSpacing = true,
-  });
+  }) : badge = null;
 
   final IconData icon;
   final String label;
@@ -345,7 +342,7 @@ class _MenuCardTile extends StatelessWidget {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: AppTheme.accent.withOpacity(0.18),
+                        color: AppTheme.accent.withValues(alpha: 0.18),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -373,7 +370,7 @@ class _MenuCardTile extends StatelessWidget {
                           child: Text(
                             '$badge',
                             textAlign: TextAlign.center,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                               color: Colors.white,
@@ -497,10 +494,14 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                         title: 'Account',
                         rows: [
                           _InfoRowData(
-                              'Name', state.user?.name ?? 'Not signed in'),
+                            'Name',
+                            state.user?.name ?? 'Not signed in',
+                          ),
                           _InfoRowData('Role', state.account.role.label),
                           _InfoRowData(
-                              'Phone', state.user?.phone ?? 'Not provided'),
+                            'Phone',
+                            state.user?.phone ?? 'Not provided',
+                          ),
                           _InfoRowData(
                             'Profile',
                             state.user?.verified == true
@@ -611,7 +612,7 @@ class _PanelHeader extends StatelessWidget {
         IconButton(
           tooltip: 'Close',
           onPressed: onClose,
-          icon: Icon(CupertinoIcons.xmark),
+          icon: const Icon(CupertinoIcons.xmark),
         ),
       ],
     );
@@ -665,13 +666,13 @@ class _CountBadge extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 28),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.accent.withOpacity(0.14),
+        color: AppTheme.accent.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         '$count',
         textAlign: TextAlign.center,
-        style: TextStyle(
+        style: const TextStyle(
           color: AppTheme.accent,
           fontWeight: FontWeight.w700,
           fontSize: 12,
@@ -907,8 +908,8 @@ class _ThemedSwitch extends StatelessWidget {
       child: CupertinoSwitch(
         value: value,
         onChanged: onChanged,
-        activeColor: AppTheme.accent,
-        trackColor: AppTheme.bgSurface,
+        activeTrackColor: AppTheme.accent,
+        inactiveTrackColor: AppTheme.bgSurface,
       ),
     );
   }
@@ -959,7 +960,11 @@ class _ProfileEditorState extends State<_ProfileEditor> {
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
-            20, 12, 20, MediaQuery.viewInsetsOf(context).bottom + 24),
+          20,
+          12,
+          20,
+          MediaQuery.viewInsetsOf(context).bottom + 24,
+        ),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1009,7 +1014,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                   onPressed: _saving ? null : _save,
                   child: _saving
                       ? const CupertinoActivityIndicator(color: Colors.white)
-                      : Text('Save changes'),
+                      : const Text('Save changes'),
                 ),
               ),
             ],
@@ -1139,8 +1144,8 @@ class _ProfileImagePicker extends StatelessWidget {
                         visualDensity: VisualDensity.compact,
                       ),
                       onPressed: onPick,
-                      icon: Icon(CupertinoIcons.photo, size: 16),
-                      label: Text('Upload'),
+                      icon: const Icon(CupertinoIcons.photo, size: 16),
+                      label: const Text('Upload'),
                     ),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
@@ -1149,8 +1154,8 @@ class _ProfileImagePicker extends StatelessWidget {
                         visualDensity: VisualDensity.compact,
                       ),
                       onPressed: onRemove,
-                      icon: Icon(CupertinoIcons.trash, size: 16),
-                      label: Text('Remove'),
+                      icon: const Icon(CupertinoIcons.trash, size: 16),
+                      label: const Text('Remove'),
                     ),
                   ],
                 ),
@@ -1210,7 +1215,7 @@ class _ThemedField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppTheme.accent, width: 1.2),
+          borderSide: const BorderSide(color: AppTheme.accent, width: 1.2),
         ),
       ),
     );
@@ -1333,12 +1338,12 @@ class _StatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.accent.withOpacity(0.14),
+        color: AppTheme.accent.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: TextStyle(
+        style: const TextStyle(
           color: AppTheme.accent,
           fontSize: 12,
           fontWeight: FontWeight.w700,
@@ -1398,7 +1403,7 @@ class _HelpCenterSheet extends StatelessWidget {
               style: TextStyle(color: AppTheme.textMuted, height: 1.4),
             ),
             const SizedBox(height: 16),
-            SelectableText(
+            const SelectableText(
               'support@property24.co.zw',
               style: TextStyle(color: AppTheme.accent),
             ),
@@ -1475,7 +1480,11 @@ class _VerificationSheetState extends State<_VerificationSheet> {
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
-            20, 12, 20, MediaQuery.viewInsetsOf(context).bottom + 24),
+          20,
+          12,
+          20,
+          MediaQuery.viewInsetsOf(context).bottom + 24,
+        ),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1490,7 +1499,7 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                   contentPadding: EdgeInsets.zero,
                   leading:
                       Icon(CupertinoIcons.phone, color: AppTheme.textMuted),
-                  title: Text('Phone number'),
+                  title: const Text('Phone number'),
                   subtitle: Text(
                     user.phone,
                     style: TextStyle(color: AppTheme.textMuted),
@@ -1599,14 +1608,14 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     onPressed: _busy ? null : _submitIdentity,
-                    icon: Icon(CupertinoIcons.checkmark_shield),
-                    label: Text('Submit identity verification'),
+                    icon: const Icon(CupertinoIcons.checkmark_shield),
+                    label: const Text('Submit identity verification'),
                   ),
                 ),
               ],
               if (_error != null) ...[
                 const SizedBox(height: 8),
-                Text(_error!, style: TextStyle(color: AppTheme.accent)),
+                Text(_error!, style: const TextStyle(color: AppTheme.accent)),
               ],
             ],
           ),

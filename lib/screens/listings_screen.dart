@@ -8,6 +8,7 @@ import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
+import '../widgets/property_card.dart';
 import 'ai_search_screen.dart';
 import 'property_detail_screen.dart';
 
@@ -79,8 +80,11 @@ class _ListingsScreenState extends State<ListingsScreen> {
                               shape: BoxShape.circle,
                               color: _primarySoft,
                             ),
-                            child: Icon(CupertinoIcons.house,
-                                color: _primary, size: 22),
+                            child: const Icon(
+                              CupertinoIcons.house,
+                              color: _primary,
+                              size: 22,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -107,12 +111,15 @@ class _ListingsScreenState extends State<ListingsScreen> {
                           child: Container(
                             height: 44,
                             width: 44,
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: _primary,
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(CupertinoIcons.add,
-                                color: Colors.white, size: 22),
+                            child: const Icon(
+                              CupertinoIcons.add,
+                              color: Colors.white,
+                              size: 22,
+                            ),
                           ),
                         ),
                       ],
@@ -195,7 +202,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
             ),
             const SliverToBoxAdapter(child: ErrorBanner()),
             if (state.snapshot.properties.isEmpty)
-              SliverFillRemaining(
+              const SliverFillRemaining(
                 child: EmptyState(
                   icon: CupertinoIcons.house,
                   title: 'No listings yet',
@@ -204,7 +211,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                 ),
               )
             else if (listings.isEmpty)
-              SliverFillRemaining(
+              const SliverFillRemaining(
                 child: EmptyState(
                   icon: CupertinoIcons.search,
                   title: 'No matching listings',
@@ -228,6 +235,8 @@ class _ListingsScreenState extends State<ListingsScreen> {
                       ),
                       onEdit: () => _openEditor(context, property),
                       onDelete: () => _delete(context, property),
+                      onAvailabilityChange: (action) =>
+                          _updateAvailability(context, property, action),
                     );
                   },
                 ),
@@ -267,20 +276,64 @@ class _ListingsScreenState extends State<ListingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: Text('Delete listing?'),
+        title: const Text('Delete listing?'),
         content: Text(property.title),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text('Cancel')),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text('Delete')),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
     if (confirmed != true || !context.mounted) return;
     await context.read<Property24State>().deleteProperty(property.id);
+  }
+
+  Future<void> _updateAvailability(
+    BuildContext context,
+    PropertyListing property,
+    String action,
+  ) async {
+    DateTime? availableFrom;
+    if (action == 'available_from') {
+      final today = DateTime.now();
+      availableFrom = await showDatePicker(
+        context: context,
+        initialDate: today,
+        firstDate: DateTime(today.year, today.month, today.day),
+        lastDate: DateTime(2100),
+      );
+      if (availableFrom == null || !context.mounted) return;
+    }
+    try {
+      await context.read<Property24State>().confirmPropertyAvailability(
+            property,
+            action: action,
+            availableFrom: availableFrom,
+          );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              action == 'rented'
+                  ? 'Listing marked as rented and removed from search.'
+                  : 'Availability updated.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(error))),
+        );
+      }
+    }
   }
 }
 
@@ -319,16 +372,19 @@ class _Section extends StatelessWidget {
 }
 
 class _LandlordListingTile extends StatelessWidget {
-  const _LandlordListingTile(
-      {required this.property,
-      required this.onTap,
-      required this.onEdit,
-      required this.onDelete});
+  const _LandlordListingTile({
+    required this.property,
+    required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onAvailabilityChange,
+  });
 
   final PropertyListing property;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final ValueChanged<String> onAvailabilityChange;
 
   @override
   Widget build(BuildContext context) {
@@ -351,19 +407,29 @@ class _LandlordListingTile extends StatelessWidget {
                   property.photos.isEmpty
                       ? ColoredBox(
                           color: theme.colorScheme.primaryContainer,
-                          child: Icon(CupertinoIcons.house,
-                              size: 42, color: theme.colorScheme.primary))
-                      : Image.network(property.photos.first,
+                          child: Icon(
+                            CupertinoIcons.house,
+                            size: 42,
+                            color: theme.colorScheme.primary,
+                          ),
+                        )
+                      : Image.network(
+                          property.photos.first,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => ColoredBox(
-                              color: theme.colorScheme.primaryContainer,
-                              child: Icon(CupertinoIcons.house,
-                                  size: 42, color: theme.colorScheme.primary))),
+                            color: theme.colorScheme.primaryContainer,
+                            child: Icon(
+                              CupertinoIcons.house,
+                              size: 42,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
                   Positioned(
-                      left: 12,
-                      top: 12,
-                      child:
-                          Chip(label: Text(isSale ? 'For sale' : 'For rent'))),
+                    left: 12,
+                    top: 12,
+                    child: Chip(label: Text(isSale ? 'For sale' : 'For rent')),
+                  ),
                   Positioned(
                     right: 8,
                     top: 8,
@@ -373,12 +439,18 @@ class _LandlordListingTile extends StatelessWidget {
                           value == 'edit' ? onEdit() : onDelete(),
                       itemBuilder: (_) => const [
                         PopupMenuItem(
-                            value: 'edit', child: Text('Edit listing')),
+                          value: 'edit',
+                          child: Text('Edit listing'),
+                        ),
                         PopupMenuItem(
-                            value: 'delete', child: Text('Delete listing')),
+                          value: 'delete',
+                          child: Text('Delete listing'),
+                        ),
                       ],
-                      icon: Icon(CupertinoIcons.ellipsis_circle_fill,
-                          color: Colors.white),
+                      icon: const Icon(
+                        CupertinoIcons.ellipsis_circle_fill,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ],
@@ -392,34 +464,45 @@ class _LandlordListingTile extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                          child: Text(property.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium)),
-                      Text(property.rentLabel,
-                          style: theme.textTheme.labelLarge
-                              ?.copyWith(color: theme.colorScheme.primary)),
+                        child: Text(
+                          property.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                      Text(
+                        property.rentLabel,
+                        style: theme.textTheme.labelLarge
+                            ?.copyWith(color: theme.colorScheme.primary),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(property.heroLocation,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall),
+                  Text(
+                    property.heroLocation,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 14,
                     runSpacing: 6,
                     children: [
                       _ListingMetric(
-                          icon: CupertinoIcons.eye,
-                          value: '${property.listingViews} views'),
+                        icon: CupertinoIcons.eye,
+                        value: '${property.listingViews} views',
+                      ),
                       _ListingMetric(
-                          icon: CupertinoIcons.person_2,
-                          value: '${property.applicationsCount} applications'),
-                      _ListingMetric(
-                          icon: CupertinoIcons.circle_fill,
-                          value: property.availabilityStatus),
+                        icon: CupertinoIcons.person_2,
+                        value: '${property.applicationsCount} applications',
+                      ),
+                      AvailabilityIndicator(
+                        label: property.availabilityLabel,
+                        state: property.availabilityState,
+                      ),
+                      AvailabilityActionMenu(onSelected: onAvailabilityChange),
                     ],
                   ),
                 ],
@@ -440,11 +523,14 @@ class _ListingMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 14, color: AppTheme.textMuted),
-      const SizedBox(width: 4),
-      Text(value, style: Theme.of(context).textTheme.labelSmall)
-    ]);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: AppTheme.textMuted),
+        const SizedBox(width: 4),
+        Text(value, style: Theme.of(context).textTheme.labelSmall),
+      ],
+    );
   }
 }
 
@@ -594,7 +680,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
           IconButton(
             tooltip: 'Close',
             onPressed: () => Navigator.pop(context),
-            icon: Icon(CupertinoIcons.xmark),
+            icon: const Icon(CupertinoIcons.xmark),
           ),
         ],
       ),
@@ -621,14 +707,22 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       ),
                       child: Row(
                         children: [
-                          Icon(CupertinoIcons.tag_fill,
-                              color: colors.primary, size: 20),
+                          Icon(
+                            CupertinoIcons.tag_fill,
+                            color: colors.primary,
+                            size: 20,
+                          ),
                           const SizedBox(width: 12),
-                          Text('For sale',
-                              style: Theme.of(context).textTheme.titleMedium),
+                          Text(
+                            'For sale',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
                           const Spacer(),
-                          Icon(CupertinoIcons.checkmark_circle_fill,
-                              color: colors.primary, size: 20),
+                          Icon(
+                            CupertinoIcons.checkmark_circle_fill,
+                            color: colors.primary,
+                            size: 20,
+                          ),
                         ],
                       ),
                     );
@@ -686,22 +780,27 @@ class _PropertyEditorState extends State<PropertyEditor> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: DropdownButtonFormField<String>(
-                      value: _type,
+                      initialValue: _type,
                       decoration: _inputDeco('Property type'),
                       items: const [
                         DropdownMenuItem(value: 'house', child: Text('House')),
                         DropdownMenuItem(value: 'flat', child: Text('Flat')),
                         DropdownMenuItem(
-                            value: 'cottage', child: Text('Cottage')),
+                          value: 'cottage',
+                          child: Text('Cottage'),
+                        ),
                         DropdownMenuItem(
-                            value: 'student_accommodation',
-                            child: Text('Student accommodation')),
+                          value: 'student_accommodation',
+                          child: Text('Student accommodation'),
+                        ),
                         DropdownMenuItem(
-                            value: 'commercial_property',
-                            child: Text('Commercial property')),
+                          value: 'commercial_property',
+                          child: Text('Commercial property'),
+                        ),
                         DropdownMenuItem(
-                            value: 'land',
-                            child: Text('Land / Stand for sale')),
+                          value: 'land',
+                          child: Text('Land / Stand for sale'),
+                        ),
                       ],
                       onChanged: (value) {
                         final next = value ?? 'house';
@@ -828,14 +927,18 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _landSizeUnit,
+                            initialValue: _landSizeUnit,
                             decoration: _inputDeco('Unit'),
                             items: const [
                               DropdownMenuItem(value: 'sqm', child: Text('m²')),
                               DropdownMenuItem(
-                                  value: 'hectares', child: Text('Hectares')),
+                                value: 'hectares',
+                                child: Text('Hectares'),
+                              ),
                               DropdownMenuItem(
-                                  value: 'acres', child: Text('Acres')),
+                                value: 'acres',
+                                child: Text('Acres'),
+                              ),
                             ],
                             onChanged: (value) =>
                                 setState(() => _landSizeUnit = value ?? 'sqm'),
@@ -854,65 +957,87 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                            child: _field(
-                                _standReference, 'Stand / scheme reference',
-                                requiredField: false)),
+                          child: _field(
+                            _standReference,
+                            'Stand / scheme reference',
+                            requiredField: false,
+                          ),
+                        ),
                       ],
                     ),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: DropdownButtonFormField<String>(
-                        value: _titleDeedStatus,
+                        initialValue: _titleDeedStatus,
                         decoration: _inputDeco('Ownership document status'),
                         items: const [
                           DropdownMenuItem(
-                              value: 'title_deed', child: Text('Title deed')),
+                            value: 'title_deed',
+                            child: Text('Title deed'),
+                          ),
                           DropdownMenuItem(
-                              value: 'cession', child: Text('Cession')),
+                            value: 'cession',
+                            child: Text('Cession'),
+                          ),
                           DropdownMenuItem(
-                              value: 'offer_allocation_letter',
-                              child: Text('Offer / allocation letter')),
+                            value: 'offer_allocation_letter',
+                            child: Text('Offer / allocation letter'),
+                          ),
                           DropdownMenuItem(
-                              value: 'council_approved',
-                              child: Text('Council approved')),
+                            value: 'council_approved',
+                            child: Text('Council approved'),
+                          ),
                           DropdownMenuItem(
-                              value: 'not_provided',
-                              child: Text('Not provided')),
+                            value: 'not_provided',
+                            child: Text('Not provided'),
+                          ),
                         ],
                         onChanged: (value) => setState(
-                            () => _titleDeedStatus = value ?? 'not_provided'),
+                          () => _titleDeedStatus = value ?? 'not_provided',
+                        ),
                       ),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: DropdownButtonFormField<String>(
-                        value: _servicingStatus,
+                        initialValue: _servicingStatus,
                         decoration: _inputDeco('Servicing status'),
                         items: const [
                           DropdownMenuItem(
-                              value: 'serviced', child: Text('Serviced')),
+                            value: 'serviced',
+                            child: Text('Serviced'),
+                          ),
                           DropdownMenuItem(
-                              value: 'partially_serviced',
-                              child: Text('Partly serviced')),
+                            value: 'partially_serviced',
+                            child: Text('Partly serviced'),
+                          ),
                           DropdownMenuItem(
-                              value: 'not_serviced',
-                              child: Text('Not serviced')),
+                            value: 'not_serviced',
+                            child: Text('Not serviced'),
+                          ),
                         ],
                         onChanged: (value) => setState(
-                            () => _servicingStatus = value ?? 'not_serviced'),
+                          () => _servicingStatus = value ?? 'not_serviced',
+                        ),
                       ),
                     ),
                     _field(_zoning, 'Zoning / permitted use'),
                     _field(_roadAccess, 'Road access', requiredField: false),
                     _switch(
-                        'Electricity available',
-                        _electricityAvailable,
-                        (value) =>
-                            setState(() => _electricityAvailable = value)),
-                    _switch('Water available', _landWaterAvailable,
-                        (value) => setState(() => _landWaterAvailable = value)),
-                    _switch('Borehole on site', _borehole,
-                        (value) => setState(() => _borehole = value)),
+                      'Electricity available',
+                      _electricityAvailable,
+                      (value) => setState(() => _electricityAvailable = value),
+                    ),
+                    _switch(
+                      'Water available',
+                      _landWaterAvailable,
+                      (value) => setState(() => _landWaterAvailable = value),
+                    ),
+                    _switch(
+                      'Borehole on site',
+                      _borehole,
+                      (value) => setState(() => _borehole = value),
+                    ),
                   ],
                 ),
               ),
@@ -928,16 +1053,31 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         Expanded(child: _field(_parking, 'Parking')),
                       ],
                     ),
-                    _switch('Furnished', _furnished,
-                        (v) => setState(() => _furnished = v)),
-                    _switch('Solar power', _solar,
-                        (v) => setState(() => _solar = v)),
-                    _switch('Borehole', _borehole,
-                        (v) => setState(() => _borehole = v)),
-                    _switch('Pet friendly', _pets,
-                        (v) => setState(() => _pets = v)),
-                    _switch('360 tour / video walkthrough ready', _tour,
-                        (v) => setState(() => _tour = v)),
+                    _switch(
+                      'Furnished',
+                      _furnished,
+                      (v) => setState(() => _furnished = v),
+                    ),
+                    _switch(
+                      'Solar power',
+                      _solar,
+                      (v) => setState(() => _solar = v),
+                    ),
+                    _switch(
+                      'Borehole',
+                      _borehole,
+                      (v) => setState(() => _borehole = v),
+                    ),
+                    _switch(
+                      'Pet friendly',
+                      _pets,
+                      (v) => setState(() => _pets = v),
+                    ),
+                    _switch(
+                      '360 tour / video walkthrough ready',
+                      _tour,
+                      (v) => setState(() => _tour = v),
+                    ),
                   ],
                 ),
               ),
@@ -959,20 +1099,23 @@ class _PropertyEditorState extends State<PropertyEditor> {
                     children: [
                       OutlinedButton.icon(
                         onPressed: () => _pickPhoto(camera: true),
-                        icon: Icon(CupertinoIcons.camera, size: 18),
-                        label: Text('Take photo'),
+                        icon: const Icon(CupertinoIcons.camera, size: 18),
+                        label: const Text('Take photo'),
                       ),
                       OutlinedButton.icon(
                         onPressed: _pickPhoto,
-                        icon: Icon(CupertinoIcons.photo_on_rectangle, size: 18),
-                        label: Text('Choose photos'),
+                        icon: const Icon(CupertinoIcons.photo_on_rectangle,
+                            size: 18),
+                        label: const Text('Choose photos'),
                       ),
                     ],
                   ),
                   if (widget.property?.photos.isNotEmpty == true) ...[
                     const SizedBox(height: 14),
-                    Text('Published photos',
-                        style: Theme.of(context).textTheme.labelLarge),
+                    Text(
+                      'Published photos',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
                     const SizedBox(height: 8),
                     SizedBox(
                       height: 86,
@@ -992,7 +1135,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                               height: 86,
                               color: AppTheme.bgSurface,
                               alignment: Alignment.center,
-                              child: Icon(CupertinoIcons.photo),
+                              child: const Icon(CupertinoIcons.photo),
                             ),
                           ),
                         ),
@@ -1001,28 +1144,35 @@ class _PropertyEditorState extends State<PropertyEditor> {
                   ],
                   if (_newImages.isNotEmpty) ...[
                     const SizedBox(height: 14),
-                    Text('Ready to upload',
-                        style: Theme.of(context).textTheme.labelLarge),
+                    Text(
+                      'Ready to upload',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
                     const SizedBox(height: 6),
                     for (final file in _newImages)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
-                        leading:
-                            Icon(CupertinoIcons.photo, color: AppTheme.accent),
-                        title: Text(file.name,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        leading: const Icon(CupertinoIcons.photo,
+                            color: AppTheme.accent),
+                        title: Text(
+                          file.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         trailing: IconButton(
                           tooltip: 'Remove photo',
                           onPressed: () =>
                               setState(() => _newImages.remove(file)),
-                          icon: Icon(CupertinoIcons.xmark_circle),
+                          icon: const Icon(CupertinoIcons.xmark_circle),
                         ),
                       ),
                   ],
                   const Divider(height: 28),
-                  Text(isLand ? 'Site video' : 'Video walkthrough',
-                      style: Theme.of(context).textTheme.labelLarge),
+                  Text(
+                    isLand ? 'Site video' : 'Video walkthrough',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -1030,13 +1180,13 @@ class _PropertyEditorState extends State<PropertyEditor> {
                     children: [
                       OutlinedButton.icon(
                         onPressed: () => _pickVideo(camera: true),
-                        icon: Icon(CupertinoIcons.videocam, size: 18),
+                        icon: const Icon(CupertinoIcons.videocam, size: 18),
                         label:
                             Text(isLand ? 'Record site video' : 'Record video'),
                       ),
                       OutlinedButton.icon(
                         onPressed: _pickVideo,
-                        icon: Icon(CupertinoIcons.film, size: 18),
+                        icon: const Icon(CupertinoIcons.film, size: 18),
                         label:
                             Text(isLand ? 'Choose site video' : 'Choose video'),
                       ),
@@ -1046,14 +1196,17 @@ class _PropertyEditorState extends State<PropertyEditor> {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,
-                      leading:
-                          Icon(CupertinoIcons.film, color: AppTheme.accent),
-                      title: Text(_newVideo!.name,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      leading: const Icon(CupertinoIcons.film,
+                          color: AppTheme.accent),
+                      title: Text(
+                        _newVideo!.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       trailing: IconButton(
                         tooltip: 'Remove video',
                         onPressed: () => setState(() => _newVideo = null),
-                        icon: Icon(CupertinoIcons.xmark_circle),
+                        icon: const Icon(CupertinoIcons.xmark_circle),
                       ),
                     ),
                 ],
@@ -1132,12 +1285,14 @@ class _PropertyEditorState extends State<PropertyEditor> {
   Widget _switch(String label, bool value, ValueChanged<bool> onChanged) {
     return SwitchListTile(
       contentPadding: EdgeInsets.zero,
-      activeColor: _primary,
-      title: Text(label,
-          style: TextStyle(
-            fontWeight: FontWeight.w500,
-            color: _textDark,
-          )),
+      activeThumbColor: _primary,
+      title: Text(
+        label,
+        style: TextStyle(
+          fontWeight: FontWeight.w500,
+          color: _textDark,
+        ),
+      ),
       value: value,
       onChanged: onChanged,
     );
@@ -1270,15 +1425,15 @@ class _PropertyEditorState extends State<PropertyEditor> {
                   width: 72,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppTheme.accent.withOpacity(0.16),
+                    color: AppTheme.accent.withValues(alpha: 0.16),
                   ),
                   child: Container(
                     margin: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       shape: BoxShape.circle,
                       color: AppTheme.accent,
                     ),
-                    child: Icon(
+                    child: const Icon(
                       CupertinoIcons.check_mark,
                       color: Colors.white,
                       size: 28,
@@ -1317,7 +1472,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
-                    child: Text('Continue'),
+                    child: const Text('Continue'),
                   ),
                 ),
               ],

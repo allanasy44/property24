@@ -29,6 +29,7 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
   static const _accent = AppTheme.accent;
   AiSearchResponse? _response;
   bool _searching = false;
+  bool _alertSaved = false;
   String? _error;
 
   late final TextEditingController _controller;
@@ -106,7 +107,7 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'AI property matching',
+                                'Find me a house',
                                 style: TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontSize: 20,
@@ -114,7 +115,7 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
                                 ),
                               ),
                               Text(
-                                'Describe the home you need',
+                                'Find matches and get alerts for new homes',
                                 style: TextStyle(
                                   color: AppTheme.textMuted,
                                   fontSize: 12,
@@ -140,7 +141,7 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
                         response: _response,
                         searching: _searching,
                         error: _error,
-                        onSaveSearch: _response == null ? null : _saveSearch,
+                        alertSaved: _alertSaved,
                       ),
                     ),
                   ],
@@ -162,15 +163,20 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
   Future<void> _runSearch(String query) async {
     setState(() {
       _searching = true;
+      _alertSaved = false;
       _error = null;
     });
     try {
       final response = await context.read<Property24State>().searchWithAi(
             query,
             scope: widget.searchScope,
+            sessionId: _response?.sessionId,
           );
       if (!mounted) return;
       setState(() => _response = response);
+      if (context.read<Property24State>().user?.role == AccountRole.tenant) {
+        await _saveSearch();
+      }
     } catch (exception) {
       if (!mounted) return;
       setState(() => _error = userFacingError(exception));
@@ -180,23 +186,76 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
   }
 
   Future<void> _saveSearch() async {
-    final query = _response?.query.trim() ?? '';
+    final response = _response;
+    final query = response?.query.trim() ?? '';
     if (query.isEmpty) return;
     try {
-      await context.read<Property24State>().saveSearch(query);
+      final requirements = response!.requirements;
+      await context.read<Property24State>().saveSearch(
+            query,
+            name: _searchName(requirements, query),
+            criteria: requirements.isEmpty
+                ? null
+                : {
+                    'mode': 'structured',
+                    'locations': requirements['locations'] ?? const [],
+                    'bedrooms_min': requirements['min_bedrooms'],
+                    'bedrooms_max': requirements['max_bedrooms'],
+                    'rent_min': requirements['min_price'],
+                    'rent_max': requirements['max_price'],
+                    'property_type':
+                        requirements['property_type'] == 'unspecified'
+                            ? ''
+                            : requirements['property_type'],
+                    'intent': requirements['listing_intent'],
+                    'required_amenities':
+                        requirements['required_amenities'] ?? const [],
+                    'preferred_amenities':
+                        requirements['preferred_amenities'] ?? const [],
+                    'required_keywords':
+                        requirements['required_keywords'] ?? const [],
+                    'keywords': requirements['keywords'] ?? const [],
+                    'flexibility': requirements['flexibility'] ?? const {},
+                    'move_in_date': requirements['move_in_date'] ?? '',
+                  },
+          );
       if (mounted) {
+        setState(() => _alertSaved = true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Search saved. New live matches will alert you.')),
+            content: Text('Search alert is on for new matching homes.'),
+          ),
         );
       }
     } catch (exception) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
+          SnackBar(
+            content: Text(
+              'Matches found, but the alert could not be saved: '
+              '${userFacingError(exception)}',
+            ),
+          ),
         );
       }
     }
+  }
+
+  String _searchName(Map<String, dynamic> requirements, String fallback) {
+    final locations = (requirements['locations'] as List<dynamic>? ?? const [])
+        .map((value) => '$value')
+        .where((value) => value.isNotEmpty)
+        .join(', ');
+    final type = '${requirements['property_type'] ?? ''}';
+    if (locations.isEmpty && type.isEmpty) return fallback;
+    return [
+      if (requirements['min_bedrooms'] != null)
+        '${requirements['min_bedrooms']} bedroom',
+      if (type.isNotEmpty && type != 'unspecified') titleize(type),
+      if (locations.isNotEmpty) locations,
+      if (requirements['max_price'] != null)
+        'under \$${requirements['max_price']}',
+    ].join(' · ');
   }
 }
 
@@ -205,13 +264,13 @@ class _SearchResults extends StatelessWidget {
     required this.response,
     required this.searching,
     required this.error,
-    required this.onSaveSearch,
+    required this.alertSaved,
   });
 
   final AiSearchResponse? response;
   final bool searching;
   final String? error;
-  final VoidCallback? onSaveSearch;
+  final bool alertSaved;
 
   @override
   Widget build(BuildContext context) {
@@ -286,6 +345,12 @@ class _SearchResults extends StatelessWidget {
         ),
       );
     }
+    final exactResults = result.results
+        .where((item) => item.matchType == 'exact')
+        .toList(growable: false);
+    final closeResults = result.results
+        .where((item) => item.matchType != 'exact')
+        .toList(growable: false);
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.only(bottom: 32),
@@ -302,39 +367,96 @@ class _SearchResults extends StatelessWidget {
               ),
             ),
             Text(
-              '${result.results.length} ${result.results.length == 1 ? 'listing' : 'listings'}',
+              '${result.totalMatches} ${result.totalMatches == 1 ? 'listing' : 'listings'}',
               style: theme.textTheme.labelMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(width: 4),
-            IconButton(
-              tooltip: 'Save search alerts',
-              onPressed: onSaveSearch,
-              icon: const Icon(CupertinoIcons.bell),
-            ),
+            if (alertSaved) ...[
+              const SizedBox(width: 10),
+              const Icon(
+                CupertinoIcons.bell_fill,
+                size: 16,
+                color: AppTheme.accent,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Alert on',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: AppTheme.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ],
         ),
         const SizedBox(height: 8),
-        _IntentSummary(intent: result.intent),
+        _IntentSummary(
+          intent: result.requirements.isNotEmpty
+              ? result.requirements
+              : result.intent,
+        ),
+        if (result.parser == 'local')
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'Using basic search interpretation while AI search is not configured.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
         const SizedBox(height: 10),
+        if (result.clarificationQuestion.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              result.clarificationQuestion,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         Text(
           result.explanation,
           style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
         ),
         const SizedBox(height: 16),
-        for (final item in result.results)
-          _AiMatchResult(
-            item: item,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => PropertyDetailScreen(
-                  property: item.property,
+        if (exactResults.isNotEmpty) ...[
+          _ResultSectionHeading(
+            title: 'EXACT MATCHES',
+            subtitle: '${result.exactMatches} listings match your must-haves',
+          ),
+          for (final item in exactResults)
+            _AiMatchResult(
+              item: item,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => PropertyDetailScreen(
+                    property: item.property,
+                  ),
                 ),
               ),
             ),
+        ],
+        if (closeResults.isNotEmpty) ...[
+          const _ResultSectionHeading(
+            title: 'CLOSE MATCHES',
+            subtitle: 'These listings miss one or more stated requirements.',
           ),
-        if (result.results.isEmpty)
+          for (final item in closeResults)
+            _AiMatchResult(
+              item: item,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => PropertyDetailScreen(
+                    property: item.property,
+                  ),
+                ),
+              ),
+            ),
+        ],
+        if (result.results.isEmpty && result.clarificationQuestion.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 28),
             child: Center(
@@ -345,6 +467,35 @@ class _SearchResults extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _ResultSectionHeading extends StatelessWidget {
+  const _ResultSectionHeading({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(subtitle, style: theme.textTheme.bodySmall),
+        ],
+      ),
     );
   }
 }
@@ -386,12 +537,10 @@ class _AiMatchResult extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(
-                          reason.contains('above') ||
-                                  reason.contains('not confirmed')
+                          reason.contains('above')
                               ? CupertinoIcons.exclamationmark_circle
                               : CupertinoIcons.checkmark_circle_fill,
-                          color: reason.contains('above') ||
-                                  reason.contains('not confirmed')
+                          color: reason.contains('above')
                               ? theme.colorScheme.tertiary
                               : theme.colorScheme.primary,
                           size: 16,
@@ -409,6 +558,27 @@ class _AiMatchResult extends StatelessWidget {
               ],
             ),
           ),
+        if (item.missingRequirements.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 18),
+            child: Text(
+              'Close match: ${item.missingRequirements.join('; ')}.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.tertiary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        if (item.missingPreferences.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 18),
+            child: Text(
+              'Preferences not confirmed: ${item.missingPreferences.join('; ')}.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -421,11 +591,26 @@ class _IntentSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final locations = intent['locations'] is List
+        ? (intent['locations'] as List).map((value) => '$value').join(', ')
+        : '${intent['city'] ?? ''}';
+    final requirements = intent.containsKey('listing_intent');
+    final bedroomsMin =
+        requirements ? intent['min_bedrooms'] : intent['bedrooms_min'];
+    final priceMax = requirements ? intent['max_price'] : intent['budget_max'];
+    final preferredLocations = locations;
+    final amenities = [
+      ...(intent['required_amenities'] as List<dynamic>? ?? const []),
+      ...(intent['preferred_amenities'] as List<dynamic>? ?? const []),
+    ];
     final values = <String>[
-      if (intent['bedrooms_min'] != null) '${intent['bedrooms_min']}+ beds',
-      if ('${intent['budget_max'] ?? ''}'.isNotEmpty)
-        'up to \$${intent['budget_max']}',
-      if ('${intent['city'] ?? ''}'.isNotEmpty) '${intent['city']}',
+      if (bedroomsMin != null) '$bedroomsMin+ beds',
+      if ('$priceMax'.isNotEmpty && priceMax != null) 'up to \$$priceMax',
+      if (preferredLocations.isNotEmpty) preferredLocations,
+      if (intent['property_type'] != null &&
+          intent['property_type'] != 'unspecified')
+        titleize(intent['property_type']),
+      for (final amenity in amenities) titleize(amenity),
       if (intent['water_reliability'] == true) 'reliable water',
       if (intent['parking'] == true) 'parking',
       if (intent['quiet_area'] == true) 'quiet area',
@@ -535,7 +720,8 @@ class _PromptBox extends StatelessWidget {
               errorBorder: InputBorder.none,
               focusedErrorBorder: InputBorder.none,
               contentPadding: EdgeInsets.zero,
-              hintText: 'Describe your ideal home...',
+              hintText:
+                  'e.g. A 2 bedroom house in Hatfield under \$500 with solar',
               hintStyle: TextStyle(
                 color: AppTheme.textMuted,
                 fontSize: 14,
@@ -562,24 +748,16 @@ class _PromptBox extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
               ],
-              IconButton(
-                tooltip: 'Search',
+              FilledButton.icon(
                 onPressed: hasText && !searching ? () => onSubmit(null) : null,
-                style: IconButton.styleFrom(
-                  backgroundColor: AppTheme.accent,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppTheme.border,
-                  disabledForegroundColor: AppTheme.textMuted,
-                  fixedSize: const Size.square(42),
-                  minimumSize: const Size.square(42),
-                ),
                 icon: searching
                     ? const SizedBox(
                         height: 18,
                         width: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(CupertinoIcons.search, size: 19),
+                    : const Icon(CupertinoIcons.search, size: 18),
+                label: const Text('Find my property'),
               ),
             ],
           ),

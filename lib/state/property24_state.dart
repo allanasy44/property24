@@ -28,10 +28,13 @@ class Property24State extends ChangeNotifier {
   final Map<String, int> _conversationRevisions = <String, int>{};
   final Map<String, String> _typingUsers = <String, String>{};
   final Map<String, CallLogItem> _activeCalls = <String, CallLogItem>{};
+  final Map<String, PropertyListing> _changedProperties =
+      <String, PropertyListing>{};
   String? _localActiveCallId;
   final StreamController<Map<String, dynamic>> _callEvents =
       StreamController<Map<String, dynamic>>.broadcast();
   bool _refreshing = false;
+  bool _refreshPending = false;
 
   PlatformSnapshot snapshot = PlatformSnapshot.empty();
   List<PropertyListing> followedProperties = <PropertyListing>[];
@@ -92,6 +95,18 @@ class Property24State extends ChangeNotifier {
       snapshot.comparisonSuggestions;
   List<SavedSearchItem> get savedSearches => snapshot.savedSearches;
 
+  PropertyListing currentProperty(PropertyListing fallback) {
+    final changedProperty = _changedProperties[fallback.id];
+    if (changedProperty != null) return changedProperty;
+    return snapshot.properties.firstWhere(
+      (item) => item.id == fallback.id,
+      orElse: () => snapshot.savedProperties.firstWhere(
+        (item) => item.id == fallback.id,
+        orElse: () => fallback,
+      ),
+    );
+  }
+
   Future<void> boot() async {
     loading = true;
     error = null;
@@ -137,7 +152,10 @@ class Property24State extends ChangeNotifier {
   }
 
   Future<void> refresh({bool silent = false}) async {
-    if (_refreshing) return;
+    if (_refreshing) {
+      _refreshPending = true;
+      return;
+    }
     _refreshing = true;
     error = null;
     if (!silent) notifyListeners();
@@ -168,6 +186,10 @@ class Property24State extends ChangeNotifier {
     } finally {
       _refreshing = false;
       notifyListeners();
+      if (_refreshPending) {
+        _refreshPending = false;
+        unawaited(refresh(silent: true));
+      }
     }
   }
 
@@ -263,6 +285,7 @@ class Property24State extends ChangeNotifier {
               message: message.isNotEmpty ? message : fallback,
               isRead: false,
               createdAt: 'Just now',
+              payload: Map<String, dynamic>.from(payload),
             ),
           );
         }
@@ -274,6 +297,27 @@ class Property24State extends ChangeNotifier {
         _conversationRevisions[conversationId] =
             conversationRevision(conversationId) + 1;
         notifyListeners();
+      }
+      if (type == 'property.changed' && payload is Map<String, dynamic>) {
+        final rawProperty = payload['property'];
+        if (rawProperty is Map<String, dynamic>) {
+          final changedPayload = Map<String, dynamic>.from(rawProperty);
+          PropertyListing? savedProperty;
+          for (final property in snapshot.savedProperties) {
+            if (property.id == '${rawProperty['id']}') {
+              savedProperty = property;
+              break;
+            }
+          }
+          if (savedProperty != null) {
+            changedPayload
+              ..['saved'] = savedProperty.saved
+              ..['reserved'] = savedProperty.reserved;
+          }
+          final changedProperty = PropertyListing.fromJson(changedPayload);
+          _changedProperties[changedProperty.id] = changedProperty;
+          notifyListeners();
+        }
       }
       if (type == 'property.changed' ||
           type == 'comparison.changed' ||
@@ -298,11 +342,13 @@ class Property24State extends ChangeNotifier {
     final channel = _liveChannel;
     if (channel == null) return false;
     try {
-      channel.sink.add(jsonEncode({
-        'type': type,
-        'conversation_id': conversationId,
-        ...payload,
-      }));
+      channel.sink.add(
+        jsonEncode({
+          'type': type,
+          'conversation_id': conversationId,
+          ...payload,
+        }),
+      );
       return true;
     } catch (_) {
       _scheduleLiveReconnect();
@@ -530,6 +576,7 @@ class Property24State extends ChangeNotifier {
   Future<void> signOut() async {
     await _closeLiveSocket();
     await _clearToken();
+    _changedProperties.clear();
     user = null;
     account = AccountContext.guest();
     followedProperties = <PropertyListing>[];
@@ -544,16 +591,20 @@ class Property24State extends ChangeNotifier {
   Future<AiSearchResponse> searchWithAi(
     String query, {
     String scope = 'discover',
+    String? sessionId,
   }) {
     return _api.aiPropertySearch(
       token: _token,
       query: query.trim(),
       scope: scope,
+      sessionId: sessionId,
     );
   }
 
-  Future<PropertyListing> saveProperty(PropertyDraft draft,
-      {String? propertyId}) async {
+  Future<PropertyListing> saveProperty(
+    PropertyDraft draft, {
+    String? propertyId,
+  }) async {
     final activeToken = _requireToken();
     loading = true;
     error = null;
@@ -583,19 +634,39 @@ class Property24State extends ChangeNotifier {
   Future<void> confirmPropertyAvailability(
     PropertyListing property, {
     String action = 'available',
+    DateTime? availableFrom,
   }) async {
     final activeToken = _requireToken();
-    await _api.confirmPropertyAvailability(
+    final updatedProperty = await _api.confirmPropertyAvailability(
       activeToken,
       property.id,
       action: action,
+      availableFrom: availableFrom,
     );
+    _changedProperties[updatedProperty.id] = updatedProperty;
     await refresh();
   }
 
-  Future<void> requestViewing(PropertyListing property) async {
+  Future<ViewingItem> requestViewing(
+    PropertyListing property,
+    DateTime scheduledFor,
+  ) async {
     final activeToken = _requireToken();
-    await _api.requestViewing(activeToken, property.id);
+    final viewing = await _api.requestViewing(
+      activeToken,
+      property.id,
+      scheduledFor,
+    );
+    await refresh();
+    return viewing;
+  }
+
+  Future<void> updateViewingStatus(
+    ViewingItem viewing,
+    String status,
+  ) async {
+    final activeToken = _requireToken();
+    await _api.updateViewingStatus(activeToken, viewing.id, status);
     await refresh();
   }
 
@@ -661,15 +732,17 @@ class Property24State extends ChangeNotifier {
     final activeToken = _requireToken();
     final messages =
         await _api.conversationMessages(activeToken, conversationId);
-    _replaceSnapshot(snapshot.copyWith(
-      conversations: snapshot.conversations
-          .map(
-            (conversation) => conversation.id == conversationId
-                ? conversation.copyWith(unreadCount: 0)
-                : conversation,
-          )
-          .toList(growable: false),
-    ));
+    _replaceSnapshot(
+      snapshot.copyWith(
+        conversations: snapshot.conversations
+            .map(
+              (conversation) => conversation.id == conversationId
+                  ? conversation.copyWith(unreadCount: 0)
+                  : conversation,
+            )
+            .toList(growable: false),
+      ),
+    );
     notifyListeners();
     return messages;
   }
@@ -782,9 +855,20 @@ class Property24State extends ChangeNotifier {
     await _api.toggleSavedProperty(activeToken, property.id, saved: saved);
     if (saved) {
       savedPropertyIds.add(property.id);
+      if (!snapshot.savedProperties.any((item) => item.id == property.id)) {
+        snapshot = snapshot.copyWith(
+          savedProperties: [...snapshot.savedProperties, property],
+        );
+      }
     } else {
       savedPropertyIds.remove(property.id);
+      snapshot = snapshot.copyWith(
+        savedProperties: snapshot.savedProperties
+            .where((item) => item.id != property.id || item.reserved)
+            .toList(growable: false),
+      );
     }
+    notifyListeners();
     await refresh();
   }
 
@@ -804,6 +888,10 @@ class Property24State extends ChangeNotifier {
 
   Future<Map<String, dynamic>> propertyLikeStatus(String propertyId) async {
     return _api.propertyLikeStatus(_requireToken(), propertyId);
+  }
+
+  Future<int> recordPropertyView(String propertyId) {
+    return _api.recordPropertyView(propertyId);
   }
 
   Future<List<PropertyCommentItem>> loadPropertyComments(
@@ -896,9 +984,40 @@ class Property24State extends ChangeNotifier {
     await refresh();
   }
 
-  Future<void> saveSearch(String query, {String? name}) async {
+  Future<List<ComparisonSuggestion>> comparisonSuggestionsFor(
+    String propertyId,
+  ) async {
+    return _api.propertyComparisonSuggestions(
+      token: _requireToken(),
+      propertyId: propertyId,
+    );
+  }
+
+  Future<void> saveSearch(
+    String query, {
+    String? name,
+    Map<String, dynamic>? criteria,
+  }) async {
     final activeToken = _requireToken();
-    await _api.saveSearch(token: activeToken, query: query, name: name);
+    await _api.saveSearch(
+      token: activeToken,
+      query: query,
+      name: name,
+      criteria: criteria,
+    );
+    await refresh();
+  }
+
+  Future<void> setSavedSearchActive(
+    String searchId, {
+    required bool isActive,
+  }) async {
+    final activeToken = _requireToken();
+    await _api.updateSavedSearch(
+      token: activeToken,
+      searchId: searchId,
+      isActive: isActive,
+    );
     await refresh();
   }
 
@@ -954,9 +1073,11 @@ class Property24State extends ChangeNotifier {
     if (snapshot.notifications.any((item) => item.id == notification.id)) {
       return;
     }
-    _replaceSnapshot(snapshot.copyWith(
-      notifications: [notification, ...snapshot.notifications],
-    ));
+    _replaceSnapshot(
+      snapshot.copyWith(
+        notifications: [notification, ...snapshot.notifications],
+      ),
+    );
     notifyListeners();
   }
 
@@ -966,23 +1087,30 @@ class Property24State extends ChangeNotifier {
       token: activeToken,
       notificationId: notificationId,
     );
-    _replaceSnapshot(snapshot.copyWith(
-      notifications: snapshot.notifications
-          .map((item) =>
-              item.id == notificationId ? item.copyWith(isRead: true) : item)
-          .toList(growable: false),
-    ));
+    _replaceSnapshot(
+      snapshot.copyWith(
+        notifications: snapshot.notifications
+            .map(
+              (item) => item.id == notificationId
+                  ? item.copyWith(isRead: true)
+                  : item,
+            )
+            .toList(growable: false),
+      ),
+    );
     notifyListeners();
   }
 
   Future<void> markAllNotificationsRead() async {
     final activeToken = _requireToken();
     await _api.markAllNotificationsRead(token: activeToken);
-    _replaceSnapshot(snapshot.copyWith(
-      notifications: snapshot.notifications
-          .map((item) => item.copyWith(isRead: true))
-          .toList(growable: false),
-    ));
+    _replaceSnapshot(
+      snapshot.copyWith(
+        notifications: snapshot.notifications
+            .map((item) => item.copyWith(isRead: true))
+            .toList(growable: false),
+      ),
+    );
     notifyListeners();
   }
 
@@ -992,11 +1120,13 @@ class Property24State extends ChangeNotifier {
       token: activeToken,
       notificationId: notificationId,
     );
-    _replaceSnapshot(snapshot.copyWith(
-      notifications: snapshot.notifications
-          .where((item) => item.id != notificationId)
-          .toList(growable: false),
-    ));
+    _replaceSnapshot(
+      snapshot.copyWith(
+        notifications: snapshot.notifications
+            .where((item) => item.id != notificationId)
+            .toList(growable: false),
+      ),
+    );
     notifyListeners();
   }
 
@@ -1017,17 +1147,28 @@ class Property24State extends ChangeNotifier {
 
   void _replaceSnapshot(PlatformSnapshot value) {
     snapshot = value;
+    final visiblePropertyIds =
+        value.properties.map((property) => property.id).toSet();
+    _changedProperties.removeWhere(
+      (propertyId, _) => visiblePropertyIds.contains(propertyId),
+    );
     savedPropertyIds
       ..clear()
-      ..addAll(value.savedProperties.map((property) => property.id));
+      ..addAll(
+        value.savedProperties
+            .where((property) => property.saved)
+            .map((property) => property.id),
+      );
     comparisonPropertyIds
       ..clear()
       ..addAll(value.comparisonProperties.map((property) => property.id));
     smartAlerts
       ..clear()
-      ..addAll(value.savedSearches.where((search) => search.isActive).map(
-            (search) => search.query,
-          ));
+      ..addAll(
+        value.savedSearches.where((search) => search.isActive).map(
+              (search) => search.query,
+            ),
+      );
   }
 
   Future<void> _clearToken() async {
@@ -1069,7 +1210,7 @@ class Property24State extends ChangeNotifier {
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
         .replaceAll(RegExp(r'_+'), '_')
-        .replaceAll(RegExp(r"^_|_$"), '');
+        .replaceAll(RegExp(r'^_|_$'), '');
     profileImageUrl = session.user.profilePicture;
     usernameVerified = session.user.verified;
   }
@@ -1077,19 +1218,21 @@ class Property24State extends ChangeNotifier {
   Future<void> _loadVerificationSnapshot() async {
     final publicSnapshot = await _api.snapshot();
     final properties = await _api.searchProperties(token: _token);
-    _replaceSnapshot(PlatformSnapshot(
-      properties: properties,
-      applications: publicSnapshot.applications,
-      verifications: publicSnapshot.verifications,
-      conversations: publicSnapshot.conversations,
-      viewings: publicSnapshot.viewings,
-      calls: publicSnapshot.calls,
-      savedProperties: publicSnapshot.savedProperties,
-      comparisonProperties: publicSnapshot.comparisonProperties,
-      comparisonSuggestions: publicSnapshot.comparisonSuggestions,
-      savedSearches: publicSnapshot.savedSearches,
-      notifications: publicSnapshot.notifications,
-    ));
+    _replaceSnapshot(
+      PlatformSnapshot(
+        properties: properties,
+        applications: publicSnapshot.applications,
+        verifications: publicSnapshot.verifications,
+        conversations: publicSnapshot.conversations,
+        viewings: publicSnapshot.viewings,
+        calls: publicSnapshot.calls,
+        savedProperties: publicSnapshot.savedProperties,
+        comparisonProperties: publicSnapshot.comparisonProperties,
+        comparisonSuggestions: publicSnapshot.comparisonSuggestions,
+        savedSearches: publicSnapshot.savedSearches,
+        notifications: publicSnapshot.notifications,
+      ),
+    );
   }
 
   bool _isVerificationGate(Object exception) {

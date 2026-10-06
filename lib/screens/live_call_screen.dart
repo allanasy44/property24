@@ -214,9 +214,11 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
           _disconnectTimer?.cancel();
           _disconnectTimer = Timer(const Duration(seconds: 15), () {
             if (!_callEnded) {
-              unawaited(_failCall(
-                StateError('The call connection could not be restored.'),
-              ));
+              unawaited(
+                _failCall(
+                  StateError('The call connection could not be restored.'),
+                ),
+              );
             }
           });
           setState(() => _status = 'Connection interrupted');
@@ -374,9 +376,11 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
       },
     );
     if (!sent && !_callEnded) {
-      unawaited(_failCall(
-        StateError('The live connection was lost. The call has ended.'),
-      ));
+      unawaited(
+        _failCall(
+          StateError('The live connection was lost. The call has ended.'),
+        ),
+      );
     }
   }
 
@@ -498,111 +502,114 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
     final isVideo = widget.call.mode == CallMode.video && !_callEnded;
     final connected = _connectedAt != null;
     return PopScope<void>(
-        canPop: _closing,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) unawaited(_endCall());
-        },
-        child: Scaffold(
+      canPop: _closing,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_endCall());
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xff101418),
+        appBar: AppBar(
           backgroundColor: const Color(0xff101418),
-          appBar: AppBar(
-            backgroundColor: const Color(0xff101418),
-            foregroundColor: Colors.white,
-            title: Text(widget.peerName),
-            centerTitle: true,
-          ),
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (isVideo &&
-                  _remoteCameraEnabled &&
-                  _remoteRenderer.textureId != null)
-                RTCVideoView(_remoteRenderer)
-              else
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircleAvatar(
-                        radius: 54,
-                        backgroundColor: AppTheme.accent,
-                        child: const Icon(
-                          CupertinoIcons.person_fill,
-                          color: Colors.white,
-                          size: 50,
-                        ),
+          foregroundColor: Colors.white,
+          title: Text(widget.peerName),
+          centerTitle: true,
+        ),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (isVideo &&
+                _remoteCameraEnabled &&
+                _remoteRenderer.textureId != null)
+              RTCVideoView(_remoteRenderer)
+            else
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircleAvatar(
+                      radius: 54,
+                      backgroundColor: AppTheme.accent,
+                      child: Icon(
+                        CupertinoIcons.person_fill,
+                        color: Colors.white,
+                        size: 50,
                       ),
-                      const SizedBox(height: 24),
-                      Text(
-                        widget.peerName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 23,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      widget.peerName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 23,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        connected ? _formatDuration(_duration) : _status,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 15),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      connected ? _formatDuration(_duration) : _status,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 15,
                       ),
-                    ],
-                  ),
-                ),
-              if (isVideo &&
-                  _localRenderer.textureId != null &&
-                  _cameraEnabled &&
-                  !_callEnded)
-                Positioned(
-                  top: 16,
-                  right: 16,
-                  width: 112,
-                  height: 156,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: RTCVideoView(_localRenderer, mirror: true),
-                  ),
-                ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 28,
-                child: SafeArea(
-                  top: false,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _CallControl(
-                        icon: _muted
-                            ? CupertinoIcons.mic_slash
-                            : CupertinoIcons.mic,
-                        label: _muted ? 'Unmute' : 'Mute',
-                        onTap: _callEnded ? null : _toggleMute,
-                      ),
-                      if (widget.call.mode == CallMode.video) ...[
-                        const SizedBox(width: 22),
-                        _CallControl(
-                          icon: _cameraEnabled
-                              ? CupertinoIcons.video_camera
-                              : CupertinoIcons.video_camera_solid,
-                          label: _cameraEnabled ? 'Camera' : 'Camera off',
-                          onTap: _callEnded ? null : _toggleCamera,
-                        ),
-                      ],
-                      const SizedBox(width: 22),
-                      _CallControl(
-                        icon: CupertinoIcons.phone_down_fill,
-                        label: _callEnded ? 'Close' : 'End',
-                        color: const Color(0xffe5484d),
-                        onTap: _endCall,
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ));
+            if (isVideo &&
+                _localRenderer.textureId != null &&
+                _cameraEnabled &&
+                !_callEnded)
+              Positioned(
+                top: 16,
+                right: 16,
+                width: 112,
+                height: 156,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: RTCVideoView(_localRenderer, mirror: true),
+                ),
+              ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 28,
+              child: SafeArea(
+                top: false,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _CallControl(
+                      icon: _muted
+                          ? CupertinoIcons.mic_slash
+                          : CupertinoIcons.mic,
+                      label: _muted ? 'Unmute' : 'Mute',
+                      onTap: _callEnded ? null : _toggleMute,
+                    ),
+                    if (widget.call.mode == CallMode.video) ...[
+                      const SizedBox(width: 22),
+                      _CallControl(
+                        icon: _cameraEnabled
+                            ? CupertinoIcons.video_camera
+                            : CupertinoIcons.video_camera_solid,
+                        label: _cameraEnabled ? 'Camera' : 'Camera off',
+                        onTap: _callEnded ? null : _toggleCamera,
+                      ),
+                    ],
+                    const SizedBox(width: 22),
+                    _CallControl(
+                      icon: CupertinoIcons.phone_down_fill,
+                      label: _callEnded ? 'Close' : 'End',
+                      color: const Color(0xffe5484d),
+                      onTap: _endCall,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -636,8 +643,10 @@ class _CallControl extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Text(label,
-            style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white70, fontSize: 11),
+        ),
       ],
     );
   }

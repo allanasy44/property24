@@ -284,7 +284,7 @@ class _BottomNav extends StatelessWidget {
         label: 'Messages',
         badgeCount: unreadMessages,
       ),
-      _NavItem(icon: CupertinoIcons.person_circle, label: 'Profile'),
+      const _NavItem(icon: CupertinoIcons.person_circle, label: 'Profile'),
     ];
 
     return SafeArea(

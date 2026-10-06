@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
+import '../services/property24_api.dart';
 import 'listings_screen.dart';
+import 'property_detail_screen.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 
@@ -23,7 +25,9 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
     if (state.user?.role == AccountRole.landlord) {
       return const ListingsScreen();
     }
-    final properties = state.snapshot.savedProperties;
+    final properties = state.snapshot.savedProperties
+        .map(state.currentProperty)
+        .toList(growable: false);
     final sale = properties
         .where((property) => property.listingIntent == 'sale')
         .toList();
@@ -50,36 +54,42 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
                 elevation: 0,
                 scrolledUnderElevation: 0,
                 pinned: true,
-                title: Text('Saved & Reserved'),
+                title: const Text('Saved & Reserved'),
               ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: Row(
-                    children: [
-                      _FilterChip(
-                        label: 'All',
-                        selected: filter == _SavedFilter.all,
-                        onTap: () => setState(() => filter = _SavedFilter.all),
-                      ),
-                      const SizedBox(width: 8),
-                      _FilterChip(
-                        label: 'For Sale',
-                        selected: filter == _SavedFilter.sale,
-                        onTap: () => setState(() => filter = _SavedFilter.sale),
-                      ),
-                      const SizedBox(width: 8),
-                      _FilterChip(
-                        label: 'For Rent',
-                        selected: filter == _SavedFilter.rent,
-                        onTap: () => setState(() => filter = _SavedFilter.rent),
-                      ),
-                    ],
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _FilterChip(
+                          label: 'All',
+                          selected: filter == _SavedFilter.all,
+                          onTap: () =>
+                              setState(() => filter = _SavedFilter.all),
+                        ),
+                        const SizedBox(width: 8),
+                        _FilterChip(
+                          label: 'For Sale',
+                          selected: filter == _SavedFilter.sale,
+                          onTap: () =>
+                              setState(() => filter = _SavedFilter.sale),
+                        ),
+                        const SizedBox(width: 8),
+                        _FilterChip(
+                          label: 'For Rent',
+                          selected: filter == _SavedFilter.rent,
+                          onTap: () =>
+                              setState(() => filter = _SavedFilter.rent),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
               if (state.loading && properties.isEmpty)
-                SliverFillRemaining(
+                const SliverFillRemaining(
                   child: Center(
                     child: CircularProgressIndicator(color: AppTheme.accent),
                   ),
@@ -88,7 +98,11 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
                 SliverFillRemaining(
                   child: Center(
                     child: Text(
-                      'Nothing saved or reserved yet.',
+                      switch (filter) {
+                        _SavedFilter.sale => 'No saved properties for sale.',
+                        _SavedFilter.rent => 'No saved rental properties.',
+                        _SavedFilter.all => 'Nothing saved or reserved yet.',
+                      },
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         color: AppTheme.textMuted,
@@ -103,7 +117,7 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
                     itemCount: visible.length,
                     itemBuilder: (context, index) => _PropertyCard(
                       property: visible[index],
-                      onRemove: () => state.toggleSaved(visible[index]),
+                      onRemove: () => _removeSaved(state, visible[index]),
                     ),
                   ),
                 ),
@@ -112,6 +126,21 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _removeSaved(
+    Property24State state,
+    PropertyListing property,
+  ) async {
+    try {
+      await state.toggleSaved(property);
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFacingError(exception))),
+        );
+      }
+    }
   }
 }
 
@@ -175,7 +204,11 @@ class _PropertyCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _showDetails(context),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PropertyDetailScreen(property: property),
+          ),
+        ),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(10),
@@ -226,12 +259,16 @@ class _PropertyCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        IconButton(
-                          tooltip: 'Remove saved property',
-                          onPressed: onRemove,
-                          icon: Icon(CupertinoIcons.bookmark_fill, size: 18),
-                          visualDensity: VisualDensity.compact,
-                        ),
+                        if (property.saved)
+                          IconButton(
+                            tooltip: 'Remove saved property',
+                            onPressed: onRemove,
+                            icon: const Icon(
+                              CupertinoIcons.bookmark_fill,
+                              size: 18,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
                       ],
                     ),
                     Text(
@@ -255,54 +292,22 @@ class _PropertyCard extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 4,
                       children: [
-                        _DetailChip(property.isLand
-                            ? property.standSummary
-                            : '${property.bedrooms} bd'),
-                        _DetailChip(property.isLand
-                            ? property.landSizeLabel
-                            : '${property.bathrooms} ba'),
+                        _DetailChip(
+                          property.isLand
+                              ? property.standSummary
+                              : '${property.bedrooms} bd',
+                        ),
+                        _DetailChip(
+                          property.isLand
+                              ? property.landSizeLabel
+                              : '${property.bathrooms} ba',
+                        ),
                         _DetailChip(lifecycle),
                       ],
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showDetails(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(property.title,
-                  style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 6),
-              Text(property.heroLocation),
-              const SizedBox(height: 12),
-              Text(property.description.isEmpty
-                  ? 'No description provided.'
-                  : property.description),
-              const SizedBox(height: 14),
-              Text(property.isLand
-                  ? '${property.landSizeLabel} · ${property.standSummary}'
-                  : '${property.bedrooms} bedrooms · ${property.bathrooms} bathrooms'),
-              Text('Status: ${property.availabilityStatus}'),
-              Text(
-                  'Listing: ${property.listingIntent == 'sale' ? 'For sale' : 'For rent'}'),
-              Text('Owner: ${property.owner?.name ?? 'Landlord'}'),
-              if (property.agent != null)
-                Text('Assigned account: ${property.agent!.name}'),
             ],
           ),
         ),

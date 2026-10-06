@@ -85,9 +85,11 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
         .watch<Property24State>()
         .snapshot
         .properties
-        .where((property) =>
-            property.owner?.id == supplier.id ||
-            property.agent?.id == supplier.id)
+        .where(
+          (property) =>
+              property.owner?.id == supplier.id ||
+              property.agent?.id == supplier.id,
+        )
         .toList(growable: false);
     final photos = listings
         .expand((property) => property.photos)
@@ -122,7 +124,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         ),
                         if (supplier.verified) ...[
                           const SizedBox(width: 8),
-                          Icon(
+                          const Icon(
                             CupertinoIcons.check_mark,
                             color: AppTheme.accent,
                             size: 20,
@@ -134,7 +136,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                   IconButton(
                     tooltip: 'More',
                     onPressed: () {},
-                    icon: Icon(CupertinoIcons.ellipsis),
+                    icon: const Icon(CupertinoIcons.ellipsis),
                   ),
                 ],
               ),
@@ -146,7 +148,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                   Center(
                     child: Container(
                       padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: LinearGradient(
                           colors: [AppTheme.accent, AppTheme.accentTeal],
@@ -248,7 +250,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                               borderRadius: BorderRadius.circular(7),
                             ),
                           ),
-                          child: Text('Chat'),
+                          child: const Text('Chat'),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -261,7 +263,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                               borderRadius: BorderRadius.circular(7),
                             ),
                           ),
-                          child: Text('Contacts'),
+                          child: const Text('Contacts'),
                         ),
                       ),
                     ],

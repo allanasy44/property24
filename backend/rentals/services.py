@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 from .models import Application, Conversation, DisputeReport, Message, Property, Review, VerificationRequest, Viewing
@@ -41,8 +42,8 @@ def update_property(prop, cleaned_data):
 
 
 def record_property_view(prop):
-    prop.views_count += 1
-    prop.save(update_fields=["views_count"])
+    Property.objects.filter(pk=prop.pk).update(views_count=F("views_count") + 1)
+    prop.refresh_from_db(fields=["views_count"])
     return prop.views_count
 
 

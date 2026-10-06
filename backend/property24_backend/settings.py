@@ -230,6 +230,16 @@ AI_PROVIDER = env_str("AI_PROVIDER", "local").lower()
 AI_MODEL = env_str("AI_MODEL", "property24-rules-v1")
 AI_ASSISTED_REVIEW_ENABLED = env_bool("AI_ASSISTED_REVIEW_ENABLED", True)
 OPENAI_API_KEY = env_str("OPENAI_API_KEY", "")
+GEMINI_API_KEY = env_str("GEMINI_API_KEY", "")
+GEMINI_MODEL = env_str("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_TIMEOUT_SECONDS = env_int("GEMINI_TIMEOUT_SECONDS", 20)
+PROPERTY_SEARCH_MATCH_WEIGHTS = {
+    "budget": 30,
+    "location": 25,
+    "property": 20,
+    "amenities": 20,
+    "availability": 5,
+}
 IDENTITY_LOCAL_AUTO_VERIFY = env_bool("IDENTITY_LOCAL_AUTO_VERIFY", not IS_PRODUCTION)
 
 STATIC_ROOT = BASE_DIR / "staticfiles"

@@ -10,6 +10,7 @@ from .models import Conversation, Message, PushDevice, SecurityAuditEvent
 from .chat_services import audit_event, safe_metadata
 
 MAX_PUSH_BODY_LENGTH = 180
+MAX_PUSH_BATCH_SIZE = 100
 EXPO_ERROR_TOKEN_INVALID = {"DeviceNotRegistered", "InvalidCredentials"}
 
 
@@ -61,16 +62,38 @@ def send_push_to_users(user_ids, *, title, body, data=None, actor=None, event_ty
     devices = list(PushDevice.objects.filter(user_id__in=list(user_ids), enabled=True))
     if not devices:
         return {"sent": 0, "devices": 0}
-    messages = [expo_message(device.token, title=title, body=body, data=data or {}) for device in devices]
-    response = send_expo_push_messages(messages)
-    disable_invalid_tokens(devices, response)
+    batch_responses = []
+    for offset in range(0, len(devices), MAX_PUSH_BATCH_SIZE):
+        batch_devices = devices[offset : offset + MAX_PUSH_BATCH_SIZE]
+        messages = [
+            expo_message(device.token, title=title, body=body, data=data or {})
+            for device in batch_devices
+        ]
+        response = send_expo_push_messages(messages)
+        disable_invalid_tokens(batch_devices, response)
+        batch_responses.append(response)
     audit_event(
         event_type,
         actor=actor,
         category=SecurityAuditEvent.Category.CHAT,
-        metadata=safe_metadata({"device_count": len(devices), "sent": len(messages), "response_status": response.get("status", "unknown")}),
+        metadata=safe_metadata(
+            {
+                "device_count": len(devices),
+                "sent": len(devices),
+                "batch_count": len(batch_responses),
+                "response_status": (
+                    "error"
+                    if any(item.get("status") == "error" for item in batch_responses)
+                    else "ok"
+                ),
+            }
+        ),
     )
-    return {"sent": len(messages), "devices": len(devices), "response": response}
+    return {
+        "sent": len(devices),
+        "devices": len(devices),
+        "responses": batch_responses,
+    }
 
 
 def expo_message(token, *, title, body, data):

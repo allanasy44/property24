@@ -520,11 +520,29 @@ class Property24Api {
     required String token,
     required String query,
     String? name,
+    Map<String, dynamic>? criteria,
   }) async {
     final body = await _post(
       'tenant/saved-searches/',
       token: token,
-      body: {'query': query, if (name != null) 'name': name},
+      body: {
+        'query': query,
+        if (name != null) 'name': name,
+        if (criteria != null) 'criteria': criteria,
+      },
+    );
+    return SavedSearchItem.fromJson(body);
+  }
+
+  Future<SavedSearchItem> updateSavedSearch({
+    required String token,
+    required String searchId,
+    required bool isActive,
+  }) async {
+    final body = await _patch(
+      'tenant/saved-searches/$searchId/',
+      token: token,
+      body: {'is_active': isActive},
     );
     return SavedSearchItem.fromJson(body);
   }
@@ -553,6 +571,20 @@ class Property24Api {
       },
     );
     return AffordabilityResult.fromJson(body);
+  }
+
+  Future<List<ComparisonSuggestion>> propertyComparisonSuggestions({
+    required String token,
+    required String propertyId,
+  }) async {
+    final body = await _get(
+      'properties/$propertyId/comparison-suggestions/',
+      token: token,
+    );
+    return (body['results'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ComparisonSuggestion.fromJson)
+        .toList(growable: false);
   }
 
   Future<void> markNotificationRead({
@@ -609,17 +641,24 @@ class Property24Api {
     String? token,
     required String query,
     String scope = 'discover',
+    String? sessionId,
   }) async {
     final body = await _post(
       'ai/property-search/',
       token: token,
-      body: {'query': query, 'scope': scope},
+      body: {
+        'query': query,
+        'scope': scope,
+        if (sessionId != null && sessionId.isNotEmpty) 'session_id': sessionId,
+      },
     );
     return AiSearchResponse.fromJson(body);
   }
 
   Future<PropertyListing> createProperty(
-      String token, PropertyDraft draft) async {
+    String token,
+    PropertyDraft draft,
+  ) async {
     final body = await _post('properties/', token: token, body: draft.toJson());
     return PropertyListing.fromJson(body);
   }
@@ -629,8 +668,11 @@ class Property24Api {
     String propertyId,
     PropertyDraft draft,
   ) async {
-    final body = await _patch('properties/$propertyId/',
-        token: token, body: draft.toJson());
+    final body = await _patch(
+      'properties/$propertyId/',
+      token: token,
+      body: draft.toJson(),
+    );
     return PropertyListing.fromJson(body);
   }
 
@@ -638,11 +680,16 @@ class Property24Api {
     String token,
     String propertyId, {
     String action = 'available',
+    DateTime? availableFrom,
   }) async {
     final body = await _post(
       'properties/$propertyId/availability/',
       token: token,
-      body: {'action': action},
+      body: {
+        'action': action,
+        if (availableFrom != null)
+          'available_from': availableFrom.toIso8601String().split('T').first,
+      },
     );
     return PropertyListing.fromJson(body);
   }
@@ -662,6 +709,14 @@ class Property24Api {
     } else {
       await _delete(path, token: token);
     }
+  }
+
+  Future<int> recordPropertyView(String propertyId) async {
+    final result = await _post(
+      'properties/$propertyId/view/',
+      body: const {},
+    );
+    return int.tryParse('${result['views_count'] ?? 0}') ?? 0;
   }
 
   Future<Map<String, dynamic>> togglePropertyLike(
@@ -763,17 +818,33 @@ class Property24Api {
     return _results(body).map(PropertyListing.fromJson).toList();
   }
 
-  Future<void> requestViewing(String token, String propertyId) async {
-    await _post(
+  Future<ViewingItem> requestViewing(
+    String token,
+    String propertyId,
+    DateTime scheduledFor,
+  ) async {
+    final body = await _post(
       'viewings/',
       token: token,
       body: {
         'property_id': propertyId,
-        'scheduled_for':
-            DateTime.now().add(const Duration(days: 1)).toIso8601String(),
-        'notes': 'Tenant requested a physical viewing from the Flutter app.',
+        'scheduled_for': scheduledFor.toIso8601String(),
       },
     );
+    return ViewingItem.fromJson(body);
+  }
+
+  Future<ViewingItem> updateViewingStatus(
+    String token,
+    String viewingId,
+    String status,
+  ) async {
+    final body = await _patch(
+      'viewings/$viewingId/',
+      token: token,
+      body: {'status': status},
+    );
+    return ViewingItem.fromJson(body);
   }
 
   Future<void> submitApplication(String token, String propertyId) async {
@@ -788,7 +859,9 @@ class Property24Api {
   }
 
   Future<ConversationItem> startConversation(
-      String token, String propertyId) async {
+    String token,
+    String propertyId,
+  ) async {
     final body = await _post(
       'conversations/',
       token: token,
@@ -831,7 +904,8 @@ class Property24Api {
       body: const {},
     );
     return ConversationItem.fromJson(
-        body['conversation'] as Map<String, dynamic>);
+      body['conversation'] as Map<String, dynamic>,
+    );
   }
 
   Future<PropertyListing> uploadPropertyPhoto({
@@ -847,12 +921,14 @@ class Property24Api {
     )
       ..headers.addAll(_multipartHeaders(token))
       ..fields['caption'] = filename
-      ..files.add(http.MultipartFile.fromBytes(
-        'image',
-        bytes,
-        filename: filename,
-        contentType: _mediaTypeFor(mimeType, filename),
-      ));
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          bytes,
+          filename: filename,
+          contentType: _mediaTypeFor(mimeType, filename),
+        ),
+      );
     final response = await http.Response.fromStream(await request.send());
     _decode(response);
     return PropertyListing.fromJson(
@@ -873,12 +949,14 @@ class Property24Api {
     )
       ..headers.addAll(_multipartHeaders(token))
       ..fields['caption'] = filename
-      ..files.add(http.MultipartFile.fromBytes(
-        'video',
-        bytes,
-        filename: filename,
-        contentType: _mediaTypeFor(mimeType, filename),
-      ));
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'video',
+          bytes,
+          filename: filename,
+          contentType: _mediaTypeFor(mimeType, filename),
+        ),
+      );
     final response = await http.Response.fromStream(await request.send());
     _decode(response);
     return PropertyListing.fromJson(
@@ -905,18 +983,23 @@ class Property24Api {
       ..fields['attachment_name'] = filename
       ..fields['client_message_id'] =
           'flutter-media-${DateTime.now().microsecondsSinceEpoch}'
-      ..files.add(http.MultipartFile.fromBytes(
-        'attachment',
-        bytes,
-        filename: filename,
-        contentType: _mediaTypeFor(mimeType, filename),
-      ));
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'attachment',
+          bytes,
+          filename: filename,
+          contentType: _mediaTypeFor(mimeType, filename),
+        ),
+      );
     final response = await http.Response.fromStream(await request.send());
     return _decode(response);
   }
 
   Future<void> sendMessage(
-      String token, String conversationId, String body) async {
+    String token,
+    String conversationId,
+    String body,
+  ) async {
     await _post(
       'conversations/$conversationId/messages/',
       token: token,
@@ -986,8 +1069,10 @@ class Property24Api {
     String? token,
     Map<String, String?> query = const {},
   }) async {
-    final response = await _client.get(AppConfig.apiUri(path, query),
-        headers: _headers(token));
+    final response = await _client.get(
+      AppConfig.apiUri(path, query),
+      headers: _headers(token),
+    );
     return _decode(response);
   }
 
@@ -1102,7 +1187,8 @@ class Property24Api {
     final token = '${tokens?['access'] ?? ''}';
     if (token.isEmpty) {
       throw const ApiException(
-          'The account service did not return an access token.');
+        'The account service did not return an access token.',
+      );
     }
     return AuthSession(
       token: token,

@@ -31,7 +31,10 @@ def property_search_queryset(params):
         properties = properties.filter(bedrooms__gte=params["bedrooms_min"])
     if truthy(params.get("verified_only")):
         properties = properties.filter(listing_status=Property.ListingStatus.VERIFIED, owner__is_verified=True)
-    return properties.filter(is_active=True).order_by("-created_at")
+    return properties.filter(
+        is_active=True,
+        availability_status=Property.AvailabilityStatus.AVAILABLE,
+    ).order_by("-created_at")
 
 
 def truthy(value):

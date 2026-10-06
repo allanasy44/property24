@@ -317,6 +317,7 @@ class Property(models.Model):
     show_exact_location = models.BooleanField(default=False)
     listing_intent = models.CharField(max_length=12, choices=ListingIntent.choices, default=ListingIntent.RENT, db_index=True)
     availability_status = models.CharField(max_length=16, choices=AvailabilityStatus.choices, default=AvailabilityStatus.AVAILABLE, db_index=True)
+    available_from = models.DateField(null=True, blank=True)
     monthly_rent = models.DecimalField(max_digits=12, decimal_places=2)
     deposit_required = models.DecimalField(max_digits=12, decimal_places=2)
     property_type = models.CharField(max_length=32, choices=PropertyType.choices)
@@ -498,6 +499,27 @@ class SavedSearchMatch(models.Model):
         ]
 
 
+class PropertySearchSession(models.Model):
+    """Short-lived conversational context for refining property searches."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="property_search_sessions",
+    )
+    original_query = models.CharField(max_length=1000)
+    requirements = models.JSONField(default=dict, blank=True)
+    modifications = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "-updated_at"])]
+
+
 class NeighborhoodProfile(models.Model):
     """Reviewed neighbourhood facts with a source and expiry, never generated data."""
 
@@ -591,6 +613,7 @@ class Viewing(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         CONFIRMED = "confirmed", "Confirmed"
+        REJECTED = "rejected", "Rejected"
         COMPLETED = "completed", "Completed"
         CANCELLED = "cancelled", "Cancelled"
 

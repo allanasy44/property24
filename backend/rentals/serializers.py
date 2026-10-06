@@ -32,6 +32,7 @@ def account_media_url(user, field_name):
 def serialize_property(prop):
     return {
         "id": prop.id,
+        "created_at": prop.created_at.isoformat(),
         "owner": serialize_user(prop.owner),
         "agent": serialize_user(prop.agent) if prop.agent else None,
         "title": prop.title,
@@ -45,6 +46,7 @@ def serialize_property(prop):
         "show_exact_location": prop.show_exact_location,
         "listing_intent": prop.listing_intent,
         "availability_status": prop.availability_status,
+        "available_from": prop.available_from.isoformat() if prop.available_from else None,
         "monthly_rent": str(prop.monthly_rent),
         "deposit_required": str(prop.deposit_required),
         "property_type": prop.property_type,

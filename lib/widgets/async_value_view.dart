@@ -19,7 +19,7 @@ class LoadingOverlay extends StatelessWidget {
         if (loading)
           Positioned.fill(
             child: ColoredBox(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               child: const Center(child: CupertinoActivityIndicator()),
             ),
           ),
@@ -76,11 +76,17 @@ class EmptyState extends StatelessWidget {
           children: [
             Icon(icon, size: 38, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 14),
-            Text(title,
-                style: textTheme.titleMedium, textAlign: TextAlign.center),
+            Text(
+              title,
+              style: textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 8),
-            Text(body,
-                style: textTheme.bodyMedium, textAlign: TextAlign.center),
+            Text(
+              body,
+              style: textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
