@@ -38,9 +38,6 @@ class _AuthScreenState extends State<AuthScreen> {
   Timer? _resendTimer;
   int _resendSeconds = 0;
 
-  static const _heroImage =
-      'https://images.pexels.com/photos/323780/pexels-photo-323780.jpeg?auto=compress&cs=tinysrgb&w=1200';
-
   @override
   void dispose() {
     _name.dispose();
@@ -63,26 +60,54 @@ class _AuthScreenState extends State<AuthScreen> {
             return Stack(
               fit: StackFit.expand,
               children: [
-                _background(),
                 SingleChildScrollView(
                   padding: EdgeInsets.only(
-                    top: 18,
-                    left: 18,
-                    right: 18,
+                    top: 24,
+                    left: 20,
+                    right: 20,
                     bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
                   ),
                   child: ConstrainedBox(
                     constraints:
-                        BoxConstraints(minHeight: constraints.maxHeight - 42),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        const SizedBox(height: 250),
-                        const InPropBrand(onImage: true),
-                        const SizedBox(height: 22),
-                        if (_showForm) _formContent() else _landingContent(),
-                      ],
+                        BoxConstraints(minHeight: constraints.maxHeight - 48),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 460),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 28,
+                            vertical: 30,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.bgCard.withAlpha(242),
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(
+                              color: AppTheme.border.withAlpha(210),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(30),
+                                blurRadius: 36,
+                                offset: const Offset(0, 18),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const InPropBrand(
+                                showWordmark: false,
+                                size: 80,
+                              ),
+                              const SizedBox(height: 26),
+                              if (_showForm)
+                                _formContent()
+                              else
+                                _landingContent(),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -105,59 +130,47 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _background() {
-    return IgnorePointer(
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: NetworkImage(_heroImage),
-            fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
-          ),
-        ),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              stops: const [0.42, 0.64, 0.82, 1],
-              colors: [
-                Colors.transparent,
-                AppTheme.bgCard.withAlpha(120),
-                AppTheme.bgCard.withAlpha(238),
-                AppTheme.bgCard,
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _landingContent() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Connecting You\nwith the\nPerfect Property',
+          'Find a place\nthat feels like home.',
+          textAlign: TextAlign.center,
           style: TextStyle(
             color: AppTheme.textPrimary,
-            fontSize: 32,
-            height: 1.12,
-            fontWeight: FontWeight.w500,
-            letterSpacing: -0.7,
-          ),
-        ),
-        const SizedBox(height: 22),
-        _authChoice(),
-        const SizedBox(height: 14),
-        Center(
-          child: Text(
-            'Continue With Following',
-            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+            fontSize: 30,
+            height: 1.16,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.9,
           ),
         ),
         const SizedBox(height: 12),
+        Text(
+          'Discover the right property for your next chapter.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+            height: 1.5,
+            letterSpacing: 0.05,
+          ),
+        ),
+        const SizedBox(height: 24),
+        _authChoice(),
+        const SizedBox(height: 18),
+        Center(
+          child: Text(
+            'OR CONTINUE WITH',
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
         _socialButtons(),
       ],
     );
@@ -200,8 +213,8 @@ class _AuthScreenState extends State<AuthScreen> {
           label,
           style: TextStyle(
             color: selected ? Colors.white : AppTheme.textPrimary,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -209,37 +222,20 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _socialButtons() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _socialButton(
-          const Icon(CupertinoIcons.person_fill),
-          AppTheme.accent,
-          onTap: _googleAuth,
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: OutlinedButton.icon(
+        onPressed: _submitting ? null : _googleAuth,
+        icon: const _GoogleMark(),
+        label: const Text('Continue with Google'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppTheme.textPrimary,
+          side: BorderSide(color: AppTheme.border),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
-      ],
-    );
-  }
-
-  Widget _socialButton(
-    Widget icon,
-    Color color, {
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: _submitting ? null : onTap,
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        width: 34,
-        height: 34,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppTheme.bgCard,
-          shape: BoxShape.circle,
-          border: Border.all(color: AppTheme.border),
-        ),
-        child:
-            IconTheme(data: IconThemeData(color: color, size: 18), child: icon),
       ),
     );
   }
@@ -269,23 +265,34 @@ class _AuthScreenState extends State<AuthScreen> {
     return Form(
       key: _formKey,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            _registering ? 'Create your account' : 'Welcome back',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 28,
-              height: 1.1,
-              fontWeight: FontWeight.w600,
+          Center(
+            child: Text(
+              _registering ? 'Create your account' : 'Welcome back',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 26,
+                height: 1.18,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.6,
+              ),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '${widget.role.label} account',
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              '${widget.role.label} account',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 22),
           if (_registering) ...[
             _field(
               _name,
@@ -382,7 +389,7 @@ class _AuthScreenState extends State<AuthScreen> {
             height: 44,
             child: OutlinedButton.icon(
               onPressed: _submitting ? null : _googleAuth,
-              icon: const Icon(CupertinoIcons.person_fill, size: 18),
+              icon: const _GoogleMark(size: 20),
               label: Text(
                 _registering ? 'Create with Google' : 'Continue with Google',
               ),
@@ -561,5 +568,36 @@ class _AuthScreenState extends State<AuthScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+}
+
+class _GoogleMark extends StatelessWidget {
+  const _GoogleMark({this.size = 22});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      blendMode: BlendMode.srcIn,
+      shaderCallback: (bounds) => const SweepGradient(
+        colors: [
+          Color(0xff4285f4),
+          Color(0xff34a853),
+          Color(0xfffbbc05),
+          Color(0xffea4335),
+          Color(0xff4285f4),
+        ],
+      ).createShader(bounds),
+      child: Text(
+        'G',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: size,
+          fontWeight: FontWeight.w700,
+          height: 1,
+        ),
+      ),
+    );
   }
 }

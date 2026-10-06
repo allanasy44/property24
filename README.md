@@ -30,8 +30,18 @@ Frontend:
 
 ```bash
 flutter pub get
-flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8010/api
+flutter run -d chrome --web-port 8093 \
+  --dart-define=API_BASE_URL=http://127.0.0.1:8010/api
 ```
+
+For Google sign-in on web, create a Web OAuth client in Google Cloud Console
+and add `http://localhost:8093` as an authorized JavaScript origin (also add
+`http://127.0.0.1:8093` if you open the app using that host). The web app reads
+the public client ID from `GOOGLE_CLIENT_IDS` through the backend's
+`/api/auth/google/config/` endpoint when Google sign-in starts. Set
+`GOOGLE_SIGN_IN_ENABLED=true` and include the Web OAuth client ID in
+`GOOGLE_CLIENT_IDS` in `backend/.env`. Client IDs are public identifiers; never
+put an OAuth client secret in the Flutter app.
 
 If this checkout does not have Flutter platform runner folders yet, generate them once from the project root:
 

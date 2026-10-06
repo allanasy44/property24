@@ -723,6 +723,13 @@ def auth_google(request):
     return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user), "tokens": issue_token_pair(user)})
 
 
+@require_http_methods(["GET", "OPTIONS"])
+def auth_google_config(request):
+    if not settings.GOOGLE_SIGN_IN_ENABLED or not settings.GOOGLE_CLIENT_IDS:
+        return json_error("Google sign-in is not configured", status=503)
+    return JsonResponse({"client_id": settings.GOOGLE_CLIENT_IDS[0]})
+
+
 
 @csrf_exempt
 @require_http_methods(["GET", "POST", "OPTIONS"])

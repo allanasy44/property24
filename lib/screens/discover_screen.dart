@@ -167,12 +167,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final institutions = <String>{
       ...zimbabweInstitutions,
       ...state.snapshot.properties
-        .where(
-          (property) =>
-              property.isStudentAccommodation &&
-              property.accommodationInstitution.trim().isNotEmpty,
-        )
-        .map((property) => property.accommodationInstitution.trim())
+          .where(
+            (property) =>
+                property.isStudentAccommodation &&
+                property.accommodationInstitution.trim().isNotEmpty,
+          )
+          .map((property) => property.accommodationInstitution.trim())
     }.toList()
       ..sort((first, second) => first.toLowerCase().compareTo(
             second.toLowerCase(),
@@ -227,9 +227,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         properties.sort(_newestFirst);
       }
     } else if (_type == 'Shared rooms') {
-      properties = properties
-          .where((property) => property.sharedRoom)
-          .toList();
+      properties = properties.where((property) => property.sharedRoom).toList();
       if (_deviceLocation case final location?) {
         properties.sort(
           (first, second) => _distanceMeters(first, location)
@@ -325,18 +323,45 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                displayName.isEmpty
-                                    ? greeting
-                                    : '$greeting, $displayName',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: _textDark,
-                                  fontWeight: FontWeight.w700,
+                              if (displayName.isNotEmpty) ...[
+                                Text(
+                                  '$greeting,',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    height: 1.3,
+                                    color: _textMuted,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.1,
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 23,
+                                    height: 1.15,
+                                    color: _textDark,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ] else
+                                Text(
+                                  greeting,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 23,
+                                    height: 1.15,
+                                    color: _textDark,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -555,9 +580,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               ? 'No student accommodation matches'
                               : _type == 'Shared rooms'
                                   ? 'No shared rooms listed yet'
-                          : _type == 'Nearby' && _selectedArea == null
-                          ? 'Choose your nearby area'
-                          : 'No matching listings',
+                                  : _type == 'Nearby' && _selectedArea == null
+                                      ? 'Choose your nearby area'
+                                      : 'No matching listings',
                   body: _type == 'Following'
                       ? 'Follow a landlord or agent to see their listings here.'
                       : _type == 'Student stays' &&
@@ -568,9 +593,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               ? 'Try another institution or adjust shared-room, verification, or distance filters.'
                               : _type == 'Shared rooms'
                                   ? 'Browse available shared-room listings or choose a nearby area.'
-                          : _type == 'Nearby' && _selectedArea == null
-                          ? 'Allow location access or choose a city or suburb to see nearby homes.'
-                          : 'Try another suburb, city, or property type.',
+                                  : _type == 'Nearby' && _selectedArea == null
+                                      ? 'Allow location access or choose a city or suburb to see nearby homes.'
+                                      : 'Try another suburb, city, or property type.',
                 ),
               )
             else if (_type == 'Nearby')
@@ -1055,8 +1080,8 @@ class _StudentAccommodationFilters extends StatelessWidget {
                     for (final name in availableInstitutions)
                       DropdownMenuItem(value: name, child: Text(name)),
                   ],
-                  onChanged: (value) =>
-                      onInstitutionChanged(value?.isEmpty == true ? null : value),
+                  onChanged: (value) => onInstitutionChanged(
+                      value?.isEmpty == true ? null : value),
                 ),
               ),
               const SizedBox(width: 12),

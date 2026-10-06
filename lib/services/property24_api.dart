@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -166,7 +167,10 @@ class Property24Api {
   final http.Client _client;
 
   Future<String> googleSignIn() async {
-    final account = await GoogleSignIn().signIn();
+    final clientId = kIsWeb ? await _googleWebClientId() : null;
+    final account = await GoogleSignIn(
+      clientId: clientId,
+    ).signIn();
     if (account == null) {
       throw const ApiException('Google sign-in was cancelled');
     }
@@ -176,6 +180,17 @@ class Property24Api {
       throw const ApiException('Google did not return an ID token');
     }
     return idToken;
+  }
+
+  Future<String> _googleWebClientId() async {
+    final config = await _get('auth/google/config/');
+    final clientId = config['client_id'];
+    if (clientId is! String || clientId.isEmpty) {
+      throw const ApiException(
+        'Google sign-in is not configured on the server.',
+      );
+    }
+    return clientId;
   }
 
   Future<AuthSession> login({

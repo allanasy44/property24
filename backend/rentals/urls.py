@@ -11,6 +11,7 @@ urlpatterns = [
     path("auth/register/verify/", views.auth_register_verify, name="auth_register_verify"),
     path("auth/register/resend/", views.auth_register_resend, name="auth_register_resend"),
     path("auth/login/", views.auth_login, name="auth_login"),
+    path("auth/google/config/", views.auth_google_config, name="auth_google_config"),
     path("auth/google/", views.auth_google, name="auth_google"),
     path("auth/refresh/", views.auth_refresh, name="auth_refresh"),
     path("auth/me/", views.auth_me, name="auth_me"),

@@ -31,6 +31,41 @@ from .gemini_service import GeminiConfigurationError, GeminiService
 from .gemini_service import GeminiServiceError
 
 
+class GoogleSignInConfigTests(TestCase):
+    def test_public_config_returns_first_allowed_google_client_id(self):
+        from django.test import override_settings
+
+        with override_settings(
+            GOOGLE_SIGN_IN_ENABLED=True,
+            GOOGLE_CLIENT_IDS=[
+                "web-client.apps.googleusercontent.com",
+                "mobile-client.apps.googleusercontent.com",
+            ],
+        ):
+            response = self.client.get("/api/auth/google/config/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"client_id": "web-client.apps.googleusercontent.com"},
+        )
+
+    def test_public_config_does_not_return_client_id_when_disabled(self):
+        from django.test import override_settings
+
+        with override_settings(
+            GOOGLE_SIGN_IN_ENABLED=False,
+            GOOGLE_CLIENT_IDS=["web-client.apps.googleusercontent.com"],
+        ):
+            response = self.client.get("/api/auth/google/config/")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.json(),
+            {"error": "Google sign-in is not configured"},
+        )
+
+
 class PropertyAvailabilityTests(TestCase):
     def setUp(self):
         self.landlord = User.objects.create_user(

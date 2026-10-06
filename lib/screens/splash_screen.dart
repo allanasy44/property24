@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -22,7 +24,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final PageController _pageController = PageController();
 
   int _currentPage = 0;
-  bool _showRoleSelection = false;
+  bool _showRoleSelection = true;
 
   late AnimationController _fadeController;
   late AnimationController _slideController;
@@ -30,6 +32,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
   bool _homeRedirectScheduled = false;
+  bool _introFinished = false;
 
   final List<_OnboardSlide> _slides = [
     const _OnboardSlide(
@@ -138,9 +141,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    if (state.loading || state.signedIn) {
-      if (state.signedIn) _redirectSignedInUser();
+    if (state.signedIn) {
+      _redirectSignedInUser();
       return const _SessionGateView();
+    }
+
+    if (state.loading || !_introFinished) {
+      return _BrandLaunchScreen(
+        onFinished: () {
+          if (mounted) {
+            setState(() {
+              _introFinished = true;
+            });
+          }
+        },
+      );
     }
 
     return Scaffold(
@@ -175,6 +190,244 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   });
                 },
               ),
+      ),
+    );
+  }
+}
+
+class _BrandLaunchScreen extends StatefulWidget {
+  const _BrandLaunchScreen({required this.onFinished});
+
+  final VoidCallback onFinished;
+
+  @override
+  State<_BrandLaunchScreen> createState() => _BrandLaunchScreenState();
+}
+
+class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
+    with SingleTickerProviderStateMixin {
+  static const _headlines = [
+    'Find rentals across Zimbabwe.',
+    'Know before you go.',
+    'Find your fit. List your space.',
+  ];
+  static const _descriptions = [
+    'Explore houses, flats and rooms in cities and towns.',
+    'Compare rent and location, contact landlords and request viewings.',
+    'Find student stays and shared rooms. List homes, shops and offices.',
+  ];
+
+  late final AnimationController _controller;
+  late final Animation<double> _logoOpacity;
+  late final Animation<double> _logoScale;
+  late final Animation<double> _copyOpacity;
+  late final Animation<Offset> _copySlide;
+  late final Animation<double> _lineWidth;
+  Timer? _messageStartTimer;
+  Timer? _messageTimer;
+  int _messageIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 11500),
+    )..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          widget.onFinished();
+        }
+      });
+
+    _logoOpacity = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0, 0.14, curve: Curves.easeOutCubic),
+    );
+    _logoScale = Tween<double>(begin: 0.78, end: 1).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0, 0.2, curve: Curves.easeOutCubic),
+      ),
+    );
+    _copyOpacity = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.1, 0.22, curve: Curves.easeOutCubic),
+    );
+    _copySlide = Tween<Offset>(
+      begin: const Offset(0, 0.18),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.1, 0.24, curve: Curves.easeOutCubic),
+      ),
+    );
+    _lineWidth = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.2, 1, curve: Curves.easeInOut),
+    );
+    _messageStartTimer = Timer(const Duration(milliseconds: 2400), () {
+      _messageTimer = Timer.periodic(
+        const Duration(milliseconds: 3000),
+        (timer) {
+          if (!mounted || _messageIndex == _headlines.length - 1) {
+            timer.cancel();
+            return;
+          }
+          setState(() {
+            _messageIndex++;
+          });
+        },
+      );
+    });
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _messageStartTimer?.cancel();
+    _messageTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xff070916),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0, -0.16),
+            radius: 0.9,
+            colors: [
+              Color(0xff17144b),
+              Color(0xff0d1025),
+              Color(0xff070916),
+            ],
+            stops: [0, 0.58, 1],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              children: [
+                const Spacer(flex: 2),
+                Expanded(
+                  flex: 8,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final size = constraints.biggest.shortestSide;
+                      return Center(
+                        child: FadeTransition(
+                          opacity: _logoOpacity,
+                          child: ScaleTransition(
+                            scale: _logoScale,
+                            child: Image.asset(
+                              'web/favicon.png',
+                              width: size,
+                              height: size,
+                              fit: BoxFit.contain,
+                              semanticLabel: 'inprop',
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                FadeTransition(
+                  opacity: _copyOpacity,
+                  child: SlideTransition(
+                    position: _copySlide,
+                    child: SizedBox(
+                      height: 100,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 800),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        transitionBuilder: (child, animation) {
+                          final isLeaving =
+                              animation.status == AnimationStatus.reverse;
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: animation.drive(
+                                Tween<Offset>(
+                                  begin: isLeaving
+                                      ? const Offset(0, -0.45)
+                                      : const Offset(0, 0.45),
+                                  end: Offset.zero,
+                                ),
+                              ),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Column(
+                          key: ValueKey(_messageIndex),
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _headlines[_messageIndex],
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.1,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _descriptions[_messageIndex],
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.poppins(
+                                color: Colors.white.withAlpha(179),
+                                fontSize: 12,
+                                height: 1.5,
+                                fontWeight: FontWeight.w400,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: 104,
+                  child: AnimatedBuilder(
+                    animation: _lineWidth,
+                    builder: (context, child) {
+                      return Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: 104 * _lineWidth.value,
+                          height: 2,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                AppTheme.accentTeal,
+                                AppTheme.accent,
+                                AppTheme.accentGold,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const Spacer(flex: 2),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -532,131 +785,99 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
               padding: const EdgeInsets.symmetric(
                 horizontal: 24,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 48),
-
-                  const InPropBrand(),
-
-                  const SizedBox(height: 42),
-
-                  // Header
-                  Text(
-                    'How will you\nuse inprop?',
-                    style: GoogleFonts.poppins(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
-                      height: 1.2,
-                      letterSpacing: 0,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Tenant card
+                    _RoleCard(
+                      role: 'tenant',
+                      title: "I'm looking for properties",
+                      subtitle: '',
+                      icon: CupertinoIcons.search,
+                      isSelected: _selectedRole == 'tenant',
+                      onTap: () {
+                        setState(() {
+                          _selectedRole = 'tenant';
+                        });
+                      },
+                      gradientColors: const [
+                        AppTheme.accent,
+                        AppTheme.accentTeal,
+                      ],
                     ),
-                  ),
 
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 16),
 
-                  Text(
-                    'Choose your role to get a personalized experience.',
-                    style: GoogleFonts.poppins(
-                      fontSize: 15,
-                      color: AppTheme.textSecondary,
-                      height: 1.5,
+                    // Landlord card
+                    _RoleCard(
+                      role: 'landlord',
+                      title: "I'm providing properties",
+                      subtitle: '',
+                      icon: CupertinoIcons.building_2_fill,
+                      isSelected: _selectedRole == 'landlord',
+                      onTap: () {
+                        setState(() {
+                          _selectedRole = 'landlord';
+                        });
+                      },
+                      gradientColors: const [
+                        AppTheme.accentTeal,
+                        AppTheme.accentTeal,
+                      ],
                     ),
-                  ),
 
-                  const SizedBox(height: 40),
+                    const SizedBox(height: 20),
 
-                  // Tenant card
-                  _RoleCard(
-                    role: 'tenant',
-                    title: "I'm Looking to Rent",
-                    subtitle:
-                        'Browse verified properties, compare listings, and find your perfect home.',
-                    icon: CupertinoIcons.search,
-                    isSelected: _selectedRole == 'tenant',
-                    onTap: () {
-                      setState(() {
-                        _selectedRole = 'tenant';
-                      });
-                    },
-                    gradientColors: const [
-                      AppTheme.accent,
-                      AppTheme.accentTeal,
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Landlord card
-                  _RoleCard(
-                    role: 'landlord',
-                    title: "I'm a Landlord / Agent",
-                    subtitle:
-                        'List your properties, get verified, and connect with quality tenants.',
-                    icon: CupertinoIcons.building_2_fill,
-                    isSelected: _selectedRole == 'landlord',
-                    onTap: () {
-                      setState(() {
-                        _selectedRole = 'landlord';
-                      });
-                    },
-                    gradientColors: const [
-                      AppTheme.accentTeal,
-                      AppTheme.accentTeal,
-                    ],
-                  ),
-
-                  const Spacer(),
-
-                  // Continue button
-                  AnimatedOpacity(
-                    opacity: _selectedRole != null ? 1.0 : 0.4,
-                    duration: const Duration(milliseconds: 300),
-                    child: GestureDetector(
-                      onTap: _selectedRole != null
-                          ? () => widget.onRoleSelected(
-                                _selectedRole!,
-                              )
-                          : null,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 18,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              AppTheme.accent,
-                              AppTheme.accentTeal,
-                            ],
+                    // Continue button
+                    AnimatedOpacity(
+                      opacity: _selectedRole != null ? 1.0 : 0.4,
+                      duration: const Duration(milliseconds: 300),
+                      child: GestureDetector(
+                        onTap: _selectedRole != null
+                            ? () => widget.onRoleSelected(
+                                  _selectedRole!,
+                                )
+                            : null,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 18,
                           ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: _selectedRole != null
-                              ? [
-                                  BoxShadow(
-                                    color: AppTheme.accent.withAlpha(77),
-                                    blurRadius: 24,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ]
-                              : [],
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Continue',
-                            style: GoogleFonts.poppins(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                AppTheme.accent,
+                                AppTheme.accentTeal,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: _selectedRole != null
+                                ? [
+                                    BoxShadow(
+                                      color: AppTheme.accent.withAlpha(77),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ]
+                                : [],
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Continue',
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-
-                  const SizedBox(height: 32),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -760,15 +981,17 @@ class _RoleCard extends StatelessWidget {
                       color: AppTheme.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: AppTheme.textSecondary,
-                      height: 1.4,
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                        height: 1.4,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

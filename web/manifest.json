@@ -10,9 +10,9 @@
     "prefer_related_applications": false,
     "icons": [
         {
-            "src": "favicon.jpg",
+            "src": "favicon.png",
             "sizes": "any",
-            "type": "image/jpeg",
+            "type": "image/png",
             "purpose": "any maskable"
         }
     ]
