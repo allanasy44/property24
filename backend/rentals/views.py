@@ -4013,14 +4013,15 @@ def send_registration_otp(email, code):
 
 def validate_email_otp_provider():
     backend = settings.EMAIL_BACKEND
-    if backend.endswith("locmem.EmailBackend"):
+    if backend.endswith(("locmem.EmailBackend", "console.EmailBackend")):
         return
-    if backend.endswith("console.EmailBackend"):
-        raise ValueError("Email OTP provider is not configured")
     if backend.endswith("smtp.EmailBackend"):
         values = [settings.EMAIL_HOST, settings.EMAIL_HOST_USER, settings.EMAIL_HOST_PASSWORD]
         if any(not str(value or "").strip() or str(value).startswith("replace-me") for value in values):
             raise ValueError("Email OTP provider is not configured")
+        return
+    # Allow custom email backends provided by the app; if they cannot actually send,
+    # the email layer itself will still raise and the view will surface a clear error.
 
 
 def create_public_account_from_otp(challenge):

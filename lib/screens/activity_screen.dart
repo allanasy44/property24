@@ -67,7 +67,7 @@ class ActivityScreen extends StatelessWidget {
       child: RefreshIndicator(
         onRefresh: state.refresh,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -76,16 +76,21 @@ class ActivityScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (!isLandlord)
-                        Text(
-                          'Home',
-                          style: theme.textTheme.labelLarge
-                              ?.copyWith(color: theme.colorScheme.primary),
+                      Text(
+                        isLandlord ? 'Dashboard' : 'Home',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: AppTheme.accent,
+                          letterSpacing: 0.12,
                         ),
+                      ),
                       Text(
                         greetingPrefix,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.primary,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.3,
+                          color: AppTheme.textMuted,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.1,
                         ),
                       ),
                       if (userName.isNotEmpty)
@@ -94,9 +99,11 @@ class ActivityScreen extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 22,
-                            color: theme.colorScheme.onSurface,
+                            fontSize: 23,
+                            height: 1.15,
+                            color: AppTheme.textPrimary,
                             fontWeight: FontWeight.w700,
+                            letterSpacing: -0.5,
                           ),
                         ),
                       if (!isLandlord) ...[
