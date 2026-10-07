@@ -187,14 +187,6 @@ class ActivityScreen extends StatelessWidget {
               else
                 for (final property in properties.take(3))
                   _PortfolioRow(property: property),
-              _Section(
-                title: 'Client reservations',
-                empty: 'No pending or reserved reservations.',
-                children: [
-                  for (final booking in bookings)
-                    _BookingRow(booking: booking, isLandlord: true),
-                ],
-              ),
             ] else ...[
               _Section(
                 title: 'Saved homes',
@@ -213,54 +205,54 @@ class ActivityScreen extends StatelessWidget {
                 ],
               ),
             ],
-            _Section(
-              title: 'Applications',
-              empty: 'No applications yet.',
-              children: [
-                for (final item in state.snapshot.applications.take(5))
-                  ListTile(
-                    leading: const Icon(CupertinoIcons.doc_text),
-                    title: Text(item.property),
-                    subtitle: Text(
-                      '${isLandlord ? item.applicant : item.createdAt} / score ${item.score}',
+            if (!isLandlord) ...[
+              _Section(
+                title: 'Applications',
+                empty: 'No applications yet.',
+                children: [
+                  for (final item in state.snapshot.applications.take(5))
+                    ListTile(
+                      leading: const Icon(CupertinoIcons.doc_text),
+                      title: Text(item.property),
+                      subtitle: Text('${item.createdAt} / score ${item.score}'),
+                      trailing: Text(item.status),
                     ),
-                    trailing: Text(item.status),
-                  ),
-              ],
-            ),
-            _Section(
-              title: 'Messages',
-              empty: 'No conversations yet.',
-              children: [
-                for (final item in state.snapshot.conversations.take(5))
-                  ListTile(
-                    leading: const Icon(CupertinoIcons.chat_bubble),
-                    title: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.title,
-                            style: TextStyle(
-                              fontWeight: item.unreadCount > 0
-                                  ? FontWeight.w800
-                                  : FontWeight.w500,
+                ],
+              ),
+              _Section(
+                title: 'Messages',
+                empty: 'No conversations yet.',
+                children: [
+                  for (final item in state.snapshot.conversations.take(5))
+                    ListTile(
+                      leading: const Icon(CupertinoIcons.chat_bubble),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.title,
+                              style: TextStyle(
+                                fontWeight: item.unreadCount > 0
+                                    ? FontWeight.w800
+                                    : FontWeight.w500,
+                              ),
                             ),
                           ),
-                        ),
-                        if (item.unreadCount > 0)
-                          _ActivityUnreadBadge(count: item.unreadCount),
-                      ],
+                          if (item.unreadCount > 0)
+                            _ActivityUnreadBadge(count: item.unreadCount),
+                        ],
+                      ),
+                      subtitle: Text(
+                        item.preview,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Text(item.updatedAt),
+                      onTap: () => _openConversation(context, state, item),
                     ),
-                    subtitle: Text(
-                      item.preview,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Text(item.updatedAt),
-                    onTap: () => _openConversation(context, state, item),
-                  ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
