@@ -76,16 +76,20 @@ class ActivityScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        isLandlord ? 'Dashboard' : 'Home',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: AppTheme.accent,
-                          letterSpacing: 0.12,
+                      if (!isLandlord)
+                        Text(
+                          'Home',
+                          style: TextStyle(
+                            fontSize: 14,
+                            height: 1.3,
+                            color: AppTheme.textMuted,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.1,
+                          ),
                         ),
-                      ),
                       Text(
                         greetingPrefix,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           height: 1.3,
                           color: AppTheme.textMuted,
@@ -126,7 +130,7 @@ class ActivityScreen extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
-              childAspectRatio: 1.45,
+              childAspectRatio: 1.2,
               children: metrics,
             ),
             const SizedBox(height: 18),
@@ -134,6 +138,10 @@ class ActivityScreen extends StatelessWidget {
             if (isLandlord && state.user?.accountOnboardingComplete != true)
               Card(
                 color: theme.colorScheme.primaryContainer,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(color: AppTheme.border),
+                ),
                 child: ListTile(
                   leading: Icon(
                     CupertinoIcons.lock_open,
@@ -162,7 +170,12 @@ class ActivityScreen extends StatelessWidget {
                 ],
               ),
               if (properties.isEmpty)
-                const Card(
+                Card(
+                  color: AppTheme.bgCard,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(color: AppTheme.border),
+                  ),
                   child: ListTile(
                     leading: Icon(CupertinoIcons.house),
                     title: Text('No listings yet'),
@@ -435,6 +448,7 @@ class _LandlordNotificationButton extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         shape: BoxShape.circle,
+        border: Border.all(color: AppTheme.border),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0D000000),
@@ -702,6 +716,11 @@ class _PortfolioRow extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       clipBehavior: Clip.antiAlias,
+      color: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: AppTheme.border),
+      ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         leading: SizedBox(
@@ -709,11 +728,13 @@ class _PortfolioRow extends StatelessWidget {
           height: 58,
           child: property.photos.isEmpty
               ? DecoratedBox(
-                  decoration:
-                      BoxDecoration(color: theme.colorScheme.primaryContainer),
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgSurface,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   child: Icon(
                     CupertinoIcons.house,
-                    color: theme.colorScheme.primary,
+                    color: AppTheme.accent,
                   ),
                 )
               : Image.network(
@@ -721,11 +742,12 @@ class _PortfolioRow extends StatelessWidget {
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => DecoratedBox(
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
+                      color: AppTheme.bgSurface,
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: Icon(
                       CupertinoIcons.house,
-                      color: theme.colorScheme.primary,
+                      color: AppTheme.accent,
                     ),
                   ),
                 ),
@@ -739,8 +761,10 @@ class _PortfolioRow extends StatelessWidget {
         ),
         trailing: Text(
           property.rentLabel,
-          style: theme.textTheme.labelLarge
-              ?.copyWith(color: theme.colorScheme.primary),
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: AppTheme.accent,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
@@ -760,8 +784,20 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(top: 16),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D6A53FE),
+            blurRadius: 18,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(
@@ -771,7 +807,10 @@ class _Section extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Text(
                 title,
-                style: Theme.of(context).textTheme.titleMedium,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
             ),
             if (children.isEmpty)
@@ -779,7 +818,9 @@ class _Section extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 child: Text(
                   empty,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textMuted,
+                      ),
                 ),
               )
             else
