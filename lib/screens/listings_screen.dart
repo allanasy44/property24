@@ -24,7 +24,6 @@ class _ListingsScreenState extends State<ListingsScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   static const _primary = AppTheme.accent;
-  static Color get _primarySoft => AppTheme.bgSurface;
   static Color get _searchFill => AppTheme.bgSurface;
   static Color get _textDark => AppTheme.textPrimary;
   static Color get _textMuted => AppTheme.textMuted;
@@ -39,6 +38,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
     final displayName = state.user?.name.trim() ?? '';
+    final greeting = greetingForTime();
     final listings = state.snapshot.properties.where((property) {
       final haystack = [
         property.title,
@@ -70,50 +70,54 @@ class _ListingsScreenState extends State<ListingsScreen> {
                   children: [
                     Row(
                       children: [
-                        if (state.snapshot.properties.isEmpty)
-                          const Spacer()
-                        else ...[
-                          Container(
-                            height: 44,
-                            width: 44,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _primarySoft,
-                            ),
-                            child: const Icon(
-                              CupertinoIcons.house,
-                              color: _primary,
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  displayName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: _textDark,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$greeting,',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  height: 1.3,
+                                  color: _textMuted,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.1,
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                displayName.isEmpty ? greeting : displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 23,
+                                  height: 1.15,
+                                  color: _textDark,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                         InkWell(
-                          borderRadius: BorderRadius.circular(28),
+                          borderRadius: BorderRadius.circular(24),
                           onTap: () => _openEditor(context),
                           child: Container(
-                            height: 44,
-                            width: 44,
-                            decoration: const BoxDecoration(
+                            height: 48,
+                            width: 48,
+                            decoration: BoxDecoration(
                               color: _primary,
                               shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _primary.withValues(alpha: 0.2),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
                             ),
                             child: const Icon(
                               CupertinoIcons.add,
@@ -138,10 +142,11 @@ class _ListingsScreenState extends State<ListingsScreen> {
                       children: [
                         Expanded(
                           child: Container(
-                            height: 50,
+                            height: 54,
                             decoration: BoxDecoration(
                               color: _searchFill,
-                              borderRadius: BorderRadius.circular(28),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppTheme.border),
                             ),
                             child: TextField(
                               controller: _searchController,
@@ -175,8 +180,10 @@ class _ListingsScreenState extends State<ListingsScreen> {
                                         ),
                                       ),
                                 border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
                                 contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 15,
+                                  vertical: 17,
                                 ),
                               ),
                             ),
@@ -189,7 +196,12 @@ class _ListingsScreenState extends State<ListingsScreen> {
                           style: IconButton.styleFrom(
                             backgroundColor: _primary,
                             foregroundColor: Colors.white,
-                            fixedSize: const Size.square(50),
+                            fixedSize: const Size.square(54),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 2,
+                            shadowColor: _primary.withValues(alpha: 0.25),
                           ),
                           icon: const Icon(CupertinoIcons.lightbulb),
                         ),
@@ -393,63 +405,98 @@ class _LandlordListingTile extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.only(bottom: 14),
+      color: AppTheme.bgCard,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: AppTheme.border),
+      ),
       child: InkWell(
         onTap: onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              height: 168,
-              width: double.infinity,
+            AspectRatio(
+              aspectRatio: 16 / 9,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   property.photos.isEmpty
-                      ? ColoredBox(
-                          color: theme.colorScheme.primaryContainer,
+                      ? DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [AppTheme.bgSurface, AppTheme.borderMid],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
                           child: Icon(
-                            CupertinoIcons.house,
-                            size: 42,
-                            color: theme.colorScheme.primary,
+                            CupertinoIcons.building_2_fill,
+                            size: 46,
+                            color: theme.colorScheme.secondary,
                           ),
                         )
                       : Image.network(
                           property.photos.first,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => ColoredBox(
-                            color: theme.colorScheme.primaryContainer,
+                          errorBuilder: (_, __, ___) => DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: AppTheme.bgSurface,
+                            ),
                             child: Icon(
-                              CupertinoIcons.house,
-                              size: 42,
-                              color: theme.colorScheme.primary,
+                              CupertinoIcons.building_2_fill,
+                              size: 46,
+                              color: theme.colorScheme.secondary,
                             ),
                           ),
                         ),
                   Positioned(
                     left: 12,
                     top: 12,
-                    child: Chip(label: Text(isSale ? 'For sale' : 'For rent')),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            theme.colorScheme.surface.withValues(alpha: 0.94),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        isSale ? 'For sale' : 'For rent',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
                   ),
                   Positioned(
-                    right: 8,
-                    top: 8,
-                    child: PopupMenuButton<String>(
-                      tooltip: 'Listing actions',
-                      onSelected: (value) =>
-                          value == 'edit' ? onEdit() : onDelete(),
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(
-                          value: 'edit',
-                          child: Text('Edit listing'),
+                    right: 10,
+                    top: 10,
+                    child: Material(
+                      color: theme.colorScheme.surface.withValues(alpha: 0.94),
+                      shape: const CircleBorder(),
+                      child: PopupMenuButton<String>(
+                        tooltip: 'Listing actions',
+                        onSelected: (value) =>
+                            value == 'edit' ? onEdit() : onDelete(),
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Text('Edit listing'),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Delete listing'),
+                          ),
+                        ],
+                        icon: Icon(
+                          CupertinoIcons.ellipsis,
+                          color: theme.colorScheme.onSurface,
+                          size: 20,
                         ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Text('Delete listing'),
-                        ),
-                      ],
-                      icon: const Icon(
-                        CupertinoIcons.ellipsis_circle_fill,
-                        color: Colors.white,
                       ),
                     ),
                   ),
@@ -457,7 +504,7 @@ class _LandlordListingTile extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
+              padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -466,15 +513,20 @@ class _LandlordListingTile extends StatelessWidget {
                       Expanded(
                         child: Text(
                           property.title,
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 10),
                       Text(
                         property.rentLabel,
-                        style: theme.textTheme.labelLarge
-                            ?.copyWith(color: theme.colorScheme.primary),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: AppTheme.accent,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ],
                   ),
@@ -483,9 +535,11 @@ class _LandlordListingTile extends StatelessWidget {
                     property.heroLocation,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   Wrap(
                     spacing: 14,
                     runSpacing: 6,
@@ -1115,17 +1169,10 @@ class _PropertyEditorState extends State<PropertyEditor> {
                 ),
               ),
             _Section(
-              title: 'Media files',
+              title: 'Photos & video',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    isLand
-                        ? 'Add clear photos of the stand, boundaries, road access, and surrounding area.'
-                        : 'Add clear, well-lit photos and a short walkthrough for a stronger listing.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -1133,20 +1180,20 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       OutlinedButton.icon(
                         onPressed: () => _pickPhoto(camera: true),
                         icon: const Icon(CupertinoIcons.camera, size: 18),
-                        label: const Text('Take photo'),
+                        label: const Text('Camera'),
                       ),
                       OutlinedButton.icon(
                         onPressed: _pickPhoto,
                         icon: const Icon(CupertinoIcons.photo_on_rectangle,
                             size: 18),
-                        label: const Text('Choose photos'),
+                        label: const Text('Photos'),
                       ),
                     ],
                   ),
                   if (widget.property?.photos.isNotEmpty == true) ...[
                     const SizedBox(height: 14),
                     Text(
-                      'Published photos',
+                      'Current photos',
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
                     const SizedBox(height: 8),
@@ -1178,7 +1225,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                   if (_newImages.isNotEmpty) ...[
                     const SizedBox(height: 14),
                     Text(
-                      'Ready to upload',
+                      'Selected photos',
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
                     const SizedBox(height: 6),
@@ -1214,14 +1261,12 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       OutlinedButton.icon(
                         onPressed: () => _pickVideo(camera: true),
                         icon: const Icon(CupertinoIcons.videocam, size: 18),
-                        label:
-                            Text(isLand ? 'Record site video' : 'Record video'),
+                        label: Text(isLand ? 'Record site' : 'Record'),
                       ),
                       OutlinedButton.icon(
                         onPressed: _pickVideo,
                         icon: const Icon(CupertinoIcons.film, size: 18),
-                        label:
-                            Text(isLand ? 'Choose site video' : 'Choose video'),
+                        label: Text(isLand ? 'Site video' : 'Video'),
                       ),
                     ],
                   ),

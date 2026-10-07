@@ -157,17 +157,9 @@ class ActivityScreen extends StatelessWidget {
               ),
             const SizedBox(height: 18),
             if (isLandlord) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Portfolio', style: theme.textTheme.titleLarge),
-                  TextButton.icon(
-                    onPressed: () =>
-                        GoRouter.of(context).go(AppRoutes.listingsScreen),
-                    icon: const Icon(CupertinoIcons.arrow_right, size: 16),
-                    label: const Text('View all'),
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text('Portfolio', style: theme.textTheme.titleLarge),
               ),
               if (properties.isEmpty)
                 Card(
