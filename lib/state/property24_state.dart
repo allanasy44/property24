@@ -129,7 +129,10 @@ class Property24State extends ChangeNotifier {
         }
         _applySession(session);
         try {
-          _replaceSnapshot(await _api.snapshot(token: _token));
+          _replaceSnapshot(await _api.snapshot(
+            token: _token,
+            isAdmin: user?.role == AccountRole.admin,
+          ));
         } catch (exception) {
           if (!_isVerificationGate(exception)) rethrow;
           await _loadVerificationSnapshot();
@@ -166,14 +169,20 @@ class Property24State extends ChangeNotifier {
         } else {
           final session = await _api.me(_token!);
           _applySession(session);
-          _replaceSnapshot(await _api.snapshot(token: _token));
+          _replaceSnapshot(await _api.snapshot(
+            token: _token,
+            isAdmin: user?.role == AccountRole.admin,
+          ));
         }
       } catch (exception) {
         if (_isUnauthorized(exception)) {
           final restored = await _restoreSession();
           if (restored == null) rethrow;
           _applySession(restored);
-          _replaceSnapshot(await _api.snapshot(token: _token));
+          _replaceSnapshot(await _api.snapshot(
+            token: _token,
+            isAdmin: user?.role == AccountRole.admin,
+          ));
         } else if (!_isVerificationGate(exception)) {
           rethrow;
         } else {
@@ -195,7 +204,12 @@ class Property24State extends ChangeNotifier {
 
   Future<void> _connectLiveSocket() async {
     final activeToken = _token;
-    if (activeToken == null || activeToken.isEmpty || !signedIn) return;
+    if (activeToken == null ||
+        activeToken.isEmpty ||
+        !signedIn ||
+        user?.role == AccountRole.admin) {
+      return;
+    }
     await _closeLiveSocket();
     try {
       final channel = WebSocketChannel.connect(
@@ -416,7 +430,10 @@ class Property24State extends ChangeNotifier {
     await _storeSession(session);
     _applySession(session);
     try {
-      _replaceSnapshot(await _api.snapshot(token: session.token));
+      _replaceSnapshot(await _api.snapshot(
+        token: session.token,
+        isAdmin: session.user.role == AccountRole.admin,
+      ));
     } catch (_) {
       try {
         await _loadVerificationSnapshot();
@@ -543,7 +560,10 @@ class Property24State extends ChangeNotifier {
     user = session.user;
 
     account = session.account;
-    _replaceSnapshot(await _api.snapshot(token: activeToken));
+    _replaceSnapshot(await _api.snapshot(
+      token: activeToken,
+      isAdmin: user?.role == AccountRole.admin,
+    ));
     notifyListeners();
     return verification;
   }
@@ -557,7 +577,10 @@ class Property24State extends ChangeNotifier {
       await _storeSession(session);
       _applySession(session);
       try {
-        _replaceSnapshot(await _api.snapshot(token: session.token));
+        _replaceSnapshot(await _api.snapshot(
+          token: session.token,
+          isAdmin: session.user.role == AccountRole.admin,
+        ));
       } catch (exception) {
         if (!_isVerificationGate(exception)) rethrow;
         await _loadVerificationSnapshot();
@@ -613,7 +636,10 @@ class Property24State extends ChangeNotifier {
       final saved = propertyId == null
           ? await _api.createProperty(activeToken, draft)
           : await _api.updateProperty(activeToken, propertyId, draft);
-      _replaceSnapshot(await _api.snapshot(token: activeToken));
+      _replaceSnapshot(await _api.snapshot(
+        token: activeToken,
+        isAdmin: user?.role == AccountRole.admin,
+      ));
       return saved;
     } catch (exception) {
       error = userFacingError(exception);
@@ -627,7 +653,10 @@ class Property24State extends ChangeNotifier {
   Future<void> deleteProperty(String propertyId) async {
     final activeToken = _requireToken();
     await _api.deleteProperty(activeToken, propertyId);
-    _replaceSnapshot(await _api.snapshot(token: activeToken));
+    _replaceSnapshot(await _api.snapshot(
+      token: activeToken,
+      isAdmin: user?.role == AccountRole.admin,
+    ));
     notifyListeners();
   }
 
@@ -679,7 +708,10 @@ class Property24State extends ChangeNotifier {
   Future<ConversationItem> holdProperty(PropertyListing property) async {
     final activeToken = _requireToken();
     final conversation = await _api.holdProperty(activeToken, property.id);
-    _replaceSnapshot(await _api.snapshot(token: activeToken));
+    _replaceSnapshot(await _api.snapshot(
+      token: activeToken,
+      isAdmin: user?.role == AccountRole.admin,
+    ));
     notifyListeners();
     return conversation;
   }

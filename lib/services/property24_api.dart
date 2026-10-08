@@ -63,6 +63,7 @@ class PropertyDraft {
     required this.monthlyRent,
     required this.depositRequired,
     required this.propertyType,
+    this.ownerId,
     required this.bedrooms,
     required this.bathrooms,
     required this.description,
@@ -98,6 +99,7 @@ class PropertyDraft {
   final String monthlyRent;
   final String depositRequired;
   final String propertyType;
+  final String? ownerId;
   final int bedrooms;
   final num bathrooms;
   final String description;
@@ -136,6 +138,7 @@ class PropertyDraft {
       'monthly_rent': monthlyRent.replaceAll(RegExp(r'[^0-9.]'), ''),
       'deposit_required': depositRequired.replaceAll(RegExp(r'[^0-9.]'), ''),
       'property_type': propertyType.toLowerCase().replaceAll(' ', '_'),
+      if (ownerId != null && ownerId!.isNotEmpty) 'owner_id': ownerId,
       'bedrooms': bedrooms,
       'bathrooms': bathrooms,
       'description': description,
@@ -463,13 +466,32 @@ class Property24Api {
     );
   }
 
-  Future<PlatformSnapshot> snapshot({String? token}) async {
+  Future<PlatformSnapshot> snapshot({
+    String? token,
+    bool isAdmin = false,
+  }) async {
     final propertiesResponse = await _get('properties/', token: token);
     final properties =
         _results(propertiesResponse).map(PropertyListing.fromJson).toList();
 
     if (token == null || token.isEmpty) {
       return PlatformSnapshot.empty().copyWith(properties: properties);
+    }
+
+    if (isAdmin) {
+      final responses = await Future.wait([
+        _get('applications/', token: token),
+        _get('verifications/', token: token),
+        _get('viewings/', token: token),
+      ]);
+      return PlatformSnapshot.empty().copyWith(
+        properties: properties,
+        applications:
+            _results(responses[0]).map(ApplicationItem.fromJson).toList(),
+        verifications:
+            _results(responses[1]).map(VerificationItem.fromJson).toList(),
+        viewings: _results(responses[2]).map(ViewingItem.fromJson).toList(),
+      );
     }
 
     final responses = await Future.wait([
@@ -509,6 +531,76 @@ class Property24Api {
           _results(responses[8]).map(SavedSearchItem.fromJson).toList(),
     );
   }
+
+  Future<Map<String, dynamic>> adminDashboard(String token) =>
+      _get('admin/dashboard/', token: token);
+
+  Future<List<Map<String, dynamic>>> adminUsers(String token) async =>
+      _results(await _get('users/', token: token));
+
+  Future<Map<String, dynamic>> createAdminUser({
+    required String token,
+    required Map<String, dynamic> data,
+  }) =>
+      _post('users/', token: token, body: data);
+
+  Future<Map<String, dynamic>> updateAdminUser({
+    required String token,
+    required String userId,
+    required Map<String, dynamic> data,
+  }) =>
+      _patch('users/$userId/', token: token, body: data);
+
+  Future<void> deactivateAdminUser({
+    required String token,
+    required String userId,
+  }) =>
+      _delete('users/$userId/', token: token);
+
+  Future<List<Map<String, dynamic>>> adminReports(String token) async =>
+      _results(await _get('reports/', token: token));
+
+  Future<Map<String, dynamic>> createAdminReport({
+    required String token,
+    required Map<String, dynamic> data,
+  }) =>
+      _post('reports/', token: token, body: data);
+
+  Future<Map<String, dynamic>> updateAdminReport({
+    required String token,
+    required String reportId,
+    required Map<String, dynamic> data,
+  }) =>
+      _patch('reports/$reportId/', token: token, body: data);
+
+  Future<void> deleteAdminReport({
+    required String token,
+    required String reportId,
+  }) =>
+      _delete('reports/$reportId/', token: token);
+
+  Future<void> updateAdminApplication({
+    required String token,
+    required String applicationId,
+    required String status,
+  }) async {
+    await _patch(
+      'applications/$applicationId/',
+      token: token,
+      body: {'status': status},
+    );
+  }
+
+  Future<Map<String, dynamic>> reviewAdminVerification({
+    required String token,
+    required String verificationId,
+    required String status,
+  }) =>
+      _post(
+        'verifications/$verificationId/review/',
+        token: token,
+        body: {'status': status},
+      );
 
   Future<PlatformSnapshot> comparisonsSnapshot(String token) async {
     final body = await _get('tenant/comparisons/', token: token);

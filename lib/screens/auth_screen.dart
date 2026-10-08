@@ -135,7 +135,9 @@ class _AuthScreenState extends State<AuthScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Find a place\nthat feels like home.',
+          widget.role == AccountRole.admin
+              ? 'Property24\nSupport'
+              : 'Find a place\nthat feels like home.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppTheme.textPrimary,
@@ -147,7 +149,9 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Discover the right property for your next chapter.',
+          widget.role == AccountRole.admin
+              ? 'Sign in to the private support workspace.'
+              : 'Discover the right property for your next chapter.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppTheme.textSecondary,
@@ -158,25 +162,49 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 24),
         _authChoice(),
-        const SizedBox(height: 18),
-        Center(
-          child: Text(
-            'OR CONTINUE WITH',
-            style: TextStyle(
-              color: AppTheme.textMuted,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.2,
+        if (widget.role != AccountRole.admin) ...[
+          const SizedBox(height: 18),
+          Center(
+            child: Text(
+              'OR CONTINUE WITH',
+              style: TextStyle(
+                color: AppTheme.textMuted,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.2,
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 14),
-        _socialButtons(),
+          const SizedBox(height: 14),
+          _socialButtons(),
+        ],
       ],
     );
   }
 
   Widget _authChoice() {
+    if (widget.role == AccountRole.admin) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () => setState(() {
+          _showForm = true;
+          _registering = false;
+        }),
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.bgCard.withAlpha(190),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: const Text(
+            'Support admin login',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
+    }
     return Container(
       height: 44,
       padding: const EdgeInsets.all(2),
@@ -384,30 +412,32 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ],
           const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: 44,
-            child: OutlinedButton.icon(
-              onPressed: _submitting ? null : _googleAuth,
-              icon: const _GoogleMark(size: 20),
-              label: Text(
-                _registering ? 'Create with Google' : 'Continue with Google',
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.textPrimary,
-                side: BorderSide(color: AppTheme.border),
-                backgroundColor: AppTheme.bgCard.withAlpha(210),
+          if (widget.role != AccountRole.admin) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: _submitting ? null : _googleAuth,
+                icon: const _GoogleMark(size: 20),
+                label: Text(
+                  _registering ? 'Create with Google' : 'Continue with Google',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.textPrimary,
+                  side: BorderSide(color: AppTheme.border),
+                  backgroundColor: AppTheme.bgCard.withAlpha(210),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Center(
-            child: Text(
-              'or continue with your account details',
-              style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+            const SizedBox(height: 10),
+            Center(
+              child: Text(
+                'or continue with your account details',
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
+            const SizedBox(height: 14),
+          ],
           SizedBox(
             width: double.infinity,
             height: 44,
@@ -428,20 +458,22 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
             ),
           ),
-          const SizedBox(height: 12),
-          Center(
-            child: TextButton(
-              onPressed: () => setState(() {
-                _registering = !_registering;
-                _error = null;
-              }),
-              child: Text(
-                _registering
-                    ? 'Already have an account? Login'
-                    : 'New here? Signup',
+          if (widget.role != AccountRole.admin) ...[
+            const SizedBox(height: 12),
+            Center(
+              child: TextButton(
+                onPressed: () => setState(() {
+                  _registering = !_registering;
+                  _error = null;
+                }),
+                child: Text(
+                  _registering
+                      ? 'Already have an account? Login'
+                      : 'New here? Signup',
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -489,6 +521,10 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (widget.role == AccountRole.admin && _registering) {
+      setState(() => _error = 'Support accounts are provisioned on the server.');
+      return;
+    }
     setState(() {
       _submitting = true;
       _error = null;

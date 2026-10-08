@@ -129,6 +129,11 @@ The local Django backend and Docker expose JSON endpoints under `http://localhos
 - `POST /api/applications/` for tenant rental applications
 - `POST /api/conversations/` and `/api/conversations/:id/messages/` for in-app messaging
 - `GET /api/analytics/landlords/:user_id/` for listing views, saves, and applications
+- `GET /api/admin/dashboard/` and `/api/users/` for private support-admin insights and account management
+
+### Private support administration
+
+Support-admin accounts are not available through public signup. Provision one on the server with `python3 manage.py create_support_admin` from `backend/`; the command prompts for account details and a password without echoing it. After migration, open the app's private `/support/login` route to sign in. The admin workspace provides platform insights, user account management, listings, reports, and verification review. Removing a user deactivates their account and retains their records. Admin accounts cannot access private chat or call contents.
 
 ## Backend checks
 

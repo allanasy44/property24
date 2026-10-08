@@ -21,6 +21,17 @@ class ActivityScreen extends StatelessWidget {
     final greetingPrefix = greetingForTime();
     final userName = state.user?.name.trim() ?? '';
     final properties = state.snapshot.properties;
+    final listingPurposes = properties
+        .map((property) => property.listingIntent.toLowerCase())
+        .toSet();
+    final listingPurposeSummary = listingPurposes.contains('rent') &&
+            listingPurposes.contains('sale')
+        ? 'Rent + sale'
+        : listingPurposes.contains('rent')
+            ? 'Rent'
+            : listingPurposes.contains('sale')
+                ? 'Sale'
+                : '';
     final savedProperties = state.snapshot.savedProperties;
     final bookings = state.snapshot.viewings
         .where((item) => item.isAvailableBooking)
@@ -31,7 +42,9 @@ class ActivityScreen extends StatelessWidget {
         ? <Widget>[
             MetricTile(
               icon: CupertinoIcons.house,
-              label: 'Total listings',
+              label: listingPurposeSummary.isEmpty
+                  ? 'Total listings'
+                  : 'Listings · $listingPurposeSummary',
               value: '${properties.length}',
             ),
             MetricTile(

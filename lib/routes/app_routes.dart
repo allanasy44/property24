@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
+import '../screens/admin_dashboard_screen.dart';
+import '../screens/admin_support_screen.dart';
 import '../screens/activity_screen.dart';
 import '../screens/auth_screen.dart';
 import '../screens/calls_screen.dart';
@@ -11,6 +14,7 @@ import '../screens/listings_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/property_detail_screen.dart';
 import '../screens/splash_screen.dart';
+import '../state/property24_state.dart';
 import '../widgets/app_scaffold.dart';
 
 class AppRoutes {
@@ -36,6 +40,7 @@ class AppRoutes {
   static const String profileScreen = '/profile';
   static const String propertyDetailScreen = '/property-detail';
   static const String authScreen = '/auth/:role';
+  static const String supportLoginScreen = '/support/login';
 }
 
 final GoRouter appRouter = GoRouter(
@@ -56,6 +61,11 @@ final GoRouter appRouter = GoRouter(
         return _fadePage(state, AuthScreen(role: role));
       },
     ),
+    GoRoute(
+      path: AppRoutes.supportLoginScreen,
+      pageBuilder: (context, state) =>
+          _fadePage(state, const AuthScreen(role: AccountRole.admin)),
+    ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>
           AppScaffold(navigationShell: navigationShell),
@@ -67,7 +77,7 @@ final GoRouter appRouter = GoRouter(
               name: AppRoutes.homeName,
               pageBuilder: (context, state) => _fadePage(
                 state,
-                const DiscoverScreen(),
+                const _DashboardBranchScreen(),
               ),
             ),
           ],
@@ -79,7 +89,7 @@ final GoRouter appRouter = GoRouter(
               name: AppRoutes.callsName,
               pageBuilder: (context, state) => _fadePage(
                 state,
-                const SavedHomesScreen(),
+                const _ListingsBranchScreen(),
               ),
             ),
           ],
@@ -91,7 +101,7 @@ final GoRouter appRouter = GoRouter(
               name: AppRoutes.chatName,
               pageBuilder: (context, state) => _fadePage(
                 state,
-                const InboxScreen(),
+                const _SupportBranchScreen(),
               ),
             ),
           ],
@@ -171,4 +181,37 @@ CustomTransitionPage<void> _fadePage(GoRouterState state, Widget child) {
       );
     },
   );
+}
+
+class _DashboardBranchScreen extends StatelessWidget {
+  const _DashboardBranchScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return context.watch<Property24State>().user?.role == AccountRole.admin
+        ? const AdminDashboardScreen()
+        : const DiscoverScreen();
+  }
+}
+
+class _ListingsBranchScreen extends StatelessWidget {
+  const _ListingsBranchScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return context.watch<Property24State>().user?.role == AccountRole.admin
+        ? const ListingsScreen()
+        : const SavedHomesScreen();
+  }
+}
+
+class _SupportBranchScreen extends StatelessWidget {
+  const _SupportBranchScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return context.watch<Property24State>().user?.role == AccountRole.admin
+        ? const AdminSupportScreen()
+        : const InboxScreen();
+  }
 }

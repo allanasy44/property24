@@ -9,7 +9,6 @@ import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
 import '../widgets/property_card.dart';
-import 'ai_search_screen.dart';
 import 'property_detail_screen.dart';
 
 class ListingsScreen extends StatefulWidget {
@@ -37,8 +36,8 @@ class _ListingsScreenState extends State<ListingsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
+    final isLandlord = state.user?.role == AccountRole.landlord;
     final displayName = state.user?.name.trim() ?? '';
-    final greeting = greetingForTime();
     final listings = state.snapshot.properties.where((property) {
       final haystack = [
         property.title,
@@ -71,36 +70,40 @@ class _ListingsScreenState extends State<ListingsScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$greeting,',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  height: 1.3,
-                                  color: _textMuted,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0.1,
+                          child: isLandlord
+                              ? const SizedBox.shrink()
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${greetingForTime()},',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        height: 1.3,
+                                        color: _textMuted,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.1,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      displayName.isEmpty
+                                          ? greetingForTime()
+                                          : displayName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 23,
+                                        height: 1.15,
+                                        color: _textDark,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                displayName.isEmpty ? greeting : displayName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 23,
-                                  height: 1.15,
-                                  color: _textDark,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                         InkWell(
                           borderRadius: BorderRadius.circular(24),
@@ -189,22 +192,6 @@ class _ListingsScreenState extends State<ListingsScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          tooltip: 'AI property matching',
-                          onPressed: _openAiSearch,
-                          style: IconButton.styleFrom(
-                            backgroundColor: _primary,
-                            foregroundColor: Colors.white,
-                            fixedSize: const Size.square(54),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 2,
-                            shadowColor: _primary.withValues(alpha: 0.25),
-                          ),
-                          icon: const Icon(CupertinoIcons.lightbulb),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 18),
@@ -266,21 +253,6 @@ class _ListingsScreenState extends State<ListingsScreen> {
         builder: (_) => PropertyEditor(property: property),
       ),
     );
-  }
-
-  Future<void> _openAiSearch() async {
-    final query = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        fullscreenDialog: true,
-        builder: (_) => AiSearchScreen(
-          initialQuery: _query,
-          searchScope: 'listings',
-        ),
-      ),
-    );
-    if (!mounted || query == null) return;
-    _searchController.text = query;
-    setState(() => _query = query);
   }
 
   Future<void> _delete(BuildContext context, PropertyListing property) async {
@@ -643,10 +615,22 @@ class _PropertyEditorState extends State<PropertyEditor> {
   final ImagePicker _picker = ImagePicker();
   final List<XFile> _newImages = <XFile>[];
   XFile? _newVideo;
+  late final Future<List<Map<String, dynamic>>> _adminLandlords;
+  String? _ownerId;
 
   @override
   void initState() {
     super.initState();
+    final state = context.read<Property24State>();
+    final token = state.token;
+    _adminLandlords = state.user?.role == AccountRole.admin && token != null
+        ? Property24Api()
+            .adminUsers(token)
+            .then((users) => users
+                .where((user) =>
+                    user['role'] == 'landlord' && user['active'] == true)
+                .toList(growable: false))
+        : Future.value(const <Map<String, dynamic>>[]);
     final property = widget.property;
     _title = TextEditingController(text: property?.title ?? '');
     _address = TextEditingController(text: property?.address ?? '');
@@ -837,6 +821,47 @@ class _PropertyEditorState extends State<PropertyEditor> {
               title: 'Property details',
               child: Column(
                 children: [
+                  if (context.read<Property24State>().user?.role ==
+                          AccountRole.admin &&
+                      widget.property == null)
+                    FutureBuilder<List<Map<String, dynamic>>>(
+                      future: _adminLandlords,
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              userFacingError(snapshot.error!),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          );
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: DropdownButtonFormField<String>(
+                            value: _ownerId,
+                            decoration: _inputDeco('Listing owner'),
+                            items: [
+                              for (final landlord
+                                  in snapshot.data ?? const [])
+                                DropdownMenuItem(
+                                  value: '${landlord['id']}',
+                                  child: Text(
+                                    '${landlord['name'] ?? landlord['email']}',
+                                  ),
+                                ),
+                            ],
+                            validator: (value) => value == null
+                                ? 'Select the landlord who owns this listing'
+                                : null,
+                            onChanged: (value) =>
+                                setState(() => _ownerId = value),
+                          ),
+                        );
+                      },
+                    ),
                   _field(_title, 'Title'),
                   _field(_description, 'Details', maxLines: 4),
                   Padding(
@@ -1442,6 +1467,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
       monthlyRent: _rent.text.trim(),
       depositRequired: isLandListing ? '' : _deposit.text.trim(),
       propertyType: _type,
+      ownerId: _ownerId,
       bedrooms: isLandListing || isCommercialProperty
           ? 0
           : int.tryParse(_beds.text) ?? 0,

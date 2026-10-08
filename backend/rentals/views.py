@@ -416,8 +416,8 @@ def auth_login(request):
     requested_role = data.get("account_type") or data.get("role")
     if requested_role:
         requested_role = normalise_choice(requested_role, User.Roles, requested_role)
-        if requested_role not in PUBLIC_ACCOUNT_ROLES:
-            return json_error("Only tenant or landlord accounts can sign in here", status=400)
+        if requested_role not in PUBLIC_ACCOUNT_ROLES | {User.Roles.ADMIN}:
+            return json_error("This account type cannot sign in here", status=400)
         if user.role != requested_role:
             return json_error("These credentials do not belong to a matching account type", status=403)
 
@@ -861,10 +861,212 @@ def users_collection(request):
     if not username:
         return json_error("username or email is required")
 
+    requested_role = normalise_choice(
+        data.get("account_type") or data.get("role") or User.Roles.TENANT,
+        User.Roles,
+        data.get("account_type") or data.get("role") or User.Roles.TENANT,
+    )
+    if requested_role == User.Roles.AGENT:
+        username = str(username).strip()
+        email = normalize_email(data.get("email"))
+        phone = normalize_phone(data.get("phone"))
+        full_name = str(data.get("name") or data.get("full_name") or "").strip()
+        password = data.get("password") or ""
+        landlord = User.objects.filter(
+            pk=data.get("parent_landlord_id"),
+            role=User.Roles.LANDLORD,
+            is_active=True,
+        ).first()
+        for error in (
+            validate_text_field(username, "Username", USERNAME_MAX_LENGTH, required=True),
+            validate_email_field(email, required=True),
+            validate_text_field(full_name, "Full name", NAME_MAX_LENGTH, required=True),
+            validate_phone_field(phone, required=False),
+            validate_account_password(password),
+        ):
+            if error:
+                return json_error(error)
+        if landlord is None:
+            return json_error("Choose an active landlord for this agent")
+        if User.objects.filter(
+            Q(username__iexact=username)
+            | Q(email__iexact=email)
+            | Q(phone__in=phone_lookup_values(phone))
+        ).exists():
+            return json_error("An account with these details already exists")
+        try:
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password,
+                full_name=full_name,
+                phone=phone,
+                role=User.Roles.AGENT,
+                parent_landlord=landlord,
+                agent_permissions=[
+                    "list_properties",
+                    "schedule_viewings",
+                    "track_applications",
+                    "track_commissions",
+                ],
+            )
+        except IntegrityError:
+            return json_error("An account with these details already exists")
+        return JsonResponse(serialize_user(user), status=201)
+
     user, error = create_public_account(data, require_password=False)
     if error:
         return json_error(error)
     return JsonResponse(serialize_user(user), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PATCH", "DELETE", "OPTIONS"])
+def user_detail(request, user_id):
+    acting_user, auth_response = require_roles(request, {User.Roles.ADMIN})
+    if auth_response:
+        return auth_response
+    user = get_object_or_404(User, pk=user_id)
+    if request.method == "GET":
+        return JsonResponse(serialize_user(user))
+    if request.method == "DELETE":
+        if user.pk == acting_user.pk:
+            return json_error("You cannot deactivate your own support account", status=400)
+        if user.is_superuser and User.objects.filter(
+            is_superuser=True, is_active=True
+        ).exclude(pk=user.pk).count() == 0:
+            return json_error("Keep at least one active superuser account", status=400)
+        user.is_active = False
+        user.save(update_fields=["is_active"])
+        return JsonResponse({"deactivated": True, "user": serialize_user(user)})
+
+    data = request_data(request)
+    if data is None:
+        return json_error("Invalid request body")
+    if user.role == User.Roles.ADMIN and user.pk == acting_user.pk:
+        if data.get("is_active") is False or data.get("role") not in (
+            None,
+            User.Roles.ADMIN,
+        ):
+            return json_error("You cannot disable or change your own support account", status=400)
+
+    changed_fields = []
+    field_values = {
+        "name": ("full_name", NAME_MAX_LENGTH),
+        "full_name": ("full_name", NAME_MAX_LENGTH),
+        "phone": ("phone", PHONE_MAX_LENGTH),
+    }
+    for key, (field, max_length) in field_values.items():
+        if key in data:
+            value = str(data[key] or "").strip()
+            if len(value) > max_length:
+                return json_error(f"{key} exceeds {max_length} characters")
+            if field == "phone":
+                phone_error = validate_phone_field(value, required=False)
+                if phone_error:
+                    return json_error(phone_error)
+            setattr(user, field, value)
+            changed_fields.append(field)
+    if "email" in data:
+        email = normalize_email(data["email"])
+        email_error = validate_email_field(email, required=True)
+        if email_error:
+            return json_error(email_error)
+        if User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists():
+            return json_error("An account with this email already exists")
+        user.email = email
+        changed_fields.append("email")
+    if "role" in data:
+        role = normalise_choice(data["role"], User.Roles, data["role"])
+        if role == User.Roles.ADMIN and not user.is_superuser:
+            return json_error("Support-admin access must be provisioned on the server", status=400)
+        if user.role == User.Roles.ADMIN and role != User.Roles.ADMIN:
+            return json_error("Support-admin roles cannot be changed here", status=400)
+        if role == User.Roles.AGENT and not (
+            data.get("parent_landlord_id") or user.parent_landlord_id
+        ):
+            return json_error("Agent accounts must be assigned to a landlord")
+        user.role = role
+        changed_fields.append("role")
+        if role != User.Roles.AGENT and user.parent_landlord_id:
+            user.parent_landlord = None
+            changed_fields.append("parent_landlord")
+    if "parent_landlord_id" in data:
+        parent_landlord_id = data.get("parent_landlord_id")
+        parent_landlord = None
+        if parent_landlord_id:
+            parent_landlord = User.objects.filter(
+                pk=parent_landlord_id,
+                role=User.Roles.LANDLORD,
+                is_active=True,
+            ).first()
+            if parent_landlord is None:
+                return json_error("Choose an active landlord for this agent")
+        if user.role == User.Roles.AGENT and parent_landlord is None:
+            return json_error("Agent accounts must be assigned to a landlord")
+        user.parent_landlord = parent_landlord
+        changed_fields.append("parent_landlord")
+    if "is_active" in data:
+        active = to_bool(data["is_active"])
+        if user.is_superuser and not active and User.objects.filter(
+            is_superuser=True, is_active=True
+        ).exclude(pk=user.pk).count() == 0:
+            return json_error("Keep at least one active superuser account", status=400)
+        user.is_active = active
+        changed_fields.append("is_active")
+    if "is_verified" in data:
+        user.is_verified = to_bool(data["is_verified"])
+        changed_fields.append("is_verified")
+    if changed_fields:
+        try:
+            user.save(update_fields=list(dict.fromkeys(changed_fields)))
+        except IntegrityError:
+            return json_error("An account with these details already exists")
+    return JsonResponse(serialize_user(user))
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def admin_dashboard_summary(request):
+    acting_user, auth_response = require_roles(request, {User.Roles.ADMIN})
+    if auth_response:
+        return auth_response
+    month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return JsonResponse(
+        {
+            "users": {
+                "total": User.objects.count(),
+                "active": User.objects.filter(is_active=True).count(),
+                "tenants": User.objects.filter(role=User.Roles.TENANT).count(),
+                "landlords": User.objects.filter(role=User.Roles.LANDLORD).count(),
+                "agents": User.objects.filter(role=User.Roles.AGENT).count(),
+            },
+            "listings": {
+                "total": Property.objects.count(),
+                "active": Property.objects.filter(is_active=True).count(),
+                "verified": Property.objects.filter(
+                    listing_status=Property.ListingStatus.VERIFIED
+                ).count(),
+                "created_this_month": Property.objects.filter(created_at__gte=month_start).count(),
+            },
+            "applications": Application.objects.count(),
+            "viewings": Viewing.objects.count(),
+            "pending_verifications": VerificationRequest.objects.filter(
+                status__in=[
+                    VerificationRequest.Status.PENDING,
+                    VerificationRequest.Status.SUBMITTED,
+                    VerificationRequest.Status.REVIEWING,
+                    VerificationRequest.Status.MANUAL_REVIEW,
+                ]
+            ).count(),
+            "open_reports": DisputeReport.objects.exclude(
+                status__in=[
+                    DisputeReport.Status.RESOLVED,
+                    DisputeReport.Status.DISMISSED,
+                ]
+            ).count(),
+            "users_created_this_month": User.objects.filter(date_joined__gte=month_start).count(),
+        }
+    )
 
 
 @csrf_exempt
@@ -877,6 +1079,8 @@ def properties_collection(request):
             acting_user, _ = current_user(request)
         if acting_user is not None and acting_user.role in {User.Roles.LANDLORD, User.Roles.AGENT} and not to_bool(request.GET.get("public_only")):
             properties = user_properties(acting_user).select_related("owner", "agent").prefetch_related("photos", "videos")
+        elif is_admin(acting_user):
+            pass
         else:
             properties = public_listings(properties)
         properties = apply_property_filters(properties, request.GET)
@@ -2681,6 +2885,8 @@ def conversations_collection(request):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
+    if acting_user.role == User.Roles.ADMIN:
+        return forbidden()
 
     if request.method == "GET":
         conversations = list_conversations_for_user(acting_user)
@@ -2764,7 +2970,7 @@ def conversation_detail(request, conversation_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+    if not conversation.participants.filter(id=acting_user.id).exists():
         return forbidden()
 
     if request.method == "GET":
@@ -2790,7 +2996,7 @@ def conversation_messages(request, conversation_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+    if not conversation.participants.filter(id=acting_user.id).exists():
         return forbidden()
 
     if request.method == "GET":
@@ -2842,7 +3048,7 @@ def conversation_message_detail(request, conversation_id, message_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+    if not conversation.participants.filter(id=acting_user.id).exists():
         return forbidden()
 
     try:
@@ -2883,7 +3089,7 @@ def conversation_delivered(request, conversation_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+    if not conversation.participants.filter(id=acting_user.id).exists():
         return forbidden()
 
     message_ids = mark_conversation_delivered(conversation, acting_user)
@@ -2926,7 +3132,7 @@ def conversation_report(request, conversation_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+    if not conversation.participants.filter(id=acting_user.id).exists():
         return forbidden()
 
     data = request_json(request)
@@ -2955,7 +3161,7 @@ def conversation_calls(request, conversation_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+    if not conversation.participants.filter(id=acting_user.id).exists():
         return forbidden()
 
     if request.method == "GET":
@@ -2983,7 +3189,7 @@ def conversation_call_detail(request, conversation_id, call_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+    if not conversation.participants.filter(id=acting_user.id).exists():
         return forbidden()
 
     call = get_object_or_404(CallSession, pk=call_id, conversation=conversation)
@@ -3066,7 +3272,7 @@ def media_assets_collection(request):
         assets = assets.filter(Q(source_model="property_photo", source_id__in=[str(item) for item in photo_ids]) | Q(source_model="property_video", source_id__in=[str(item) for item in video_ids]))
     if conversation_id:
         conversation = get_object_or_404(Conversation, pk=conversation_id)
-        if not (is_admin(acting_user) or conversation.participants.filter(id=acting_user.id).exists()):
+        if not conversation.participants.filter(id=acting_user.id).exists():
             return forbidden()
         message_ids = [str(item) for item in conversation.messages.values_list("id", flat=True)]
         assets = assets.filter(source_model="message", source_id__in=message_ids)
@@ -3200,7 +3406,7 @@ def reports_collection(request):
 
 
 @csrf_exempt
-@require_http_methods(["GET", "PATCH", "OPTIONS"])
+@require_http_methods(["GET", "PATCH", "DELETE", "OPTIONS"])
 def report_detail(request, report_id):
     report = get_object_or_404(DisputeReport.objects.select_related("reporter", "property", "assigned_admin"), pk=report_id)
     acting_user, auth_response = require_authenticated(request)
@@ -3214,6 +3420,9 @@ def report_detail(request, report_id):
 
     if not is_admin(acting_user):
         return forbidden()
+    if request.method == "DELETE":
+        report.delete()
+        return JsonResponse({"deleted": True, "report_id": report_id})
 
     data = request_json(request)
     if data is None:
@@ -4248,6 +4457,8 @@ def serialize_user(user):
         "verified": user.is_verified,
         "email_verified": user.email_verified,
         "phone_verified": user.phone_verified,
+        "active": user.is_active,
+        "parent_landlord_id": user.parent_landlord_id,
         "account_onboarding_complete": account_onboarding_complete(user),
         "profile_status": "verified" if user.is_verified else "account_ready" if account_onboarding_complete(user) else "onboarding_required",
         "verification_required": full_verification_required(user),
@@ -4308,7 +4519,7 @@ def serialize_account_context(user):
 def media_asset_queryset_for_user(user):
     assets = MediaAsset.objects.filter(status=MediaAsset.Status.ACTIVE)
     if is_admin(user):
-        return assets
+        return assets.exclude(scope=MediaAsset.Scope.CHAT)
     property_ids = [str(item) for item in user_properties(user).values_list("id", flat=True)] if user.role in {User.Roles.LANDLORD, User.Roles.AGENT} else []
     visible_property_photo_ids = [str(item) for item in PropertyPhoto.objects.filter(property_id__in=property_ids).values_list("id", flat=True)]
     visible_property_video_ids = [str(item) for item in PropertyVideo.objects.filter(property_id__in=property_ids).values_list("id", flat=True)]

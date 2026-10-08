@@ -66,6 +66,91 @@ class GoogleSignInConfigTests(TestCase):
         )
 
 
+class SupportAdminTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            username="support-admin",
+            email="support@example.test",
+            password="a-long-support-password-123",
+            role=User.Roles.ADMIN,
+        )
+        self.tenant = User.objects.create_user(
+            username="support-tenant",
+            email="tenant@example.test",
+            password="a-long-tenant-password-123",
+            role=User.Roles.TENANT,
+        )
+        self.admin_authorization = (
+            f"Bearer {issue_token_pair(self.admin)['access']}"
+        )
+
+    def test_admin_dashboard_is_admin_only_and_returns_aggregate_counts(self):
+        response = self.client.get("/api/admin/dashboard/")
+        self.assertEqual(response.status_code, 401)
+
+        self.client.defaults["HTTP_AUTHORIZATION"] = (
+            f"Bearer {issue_token_pair(self.tenant)['access']}"
+        )
+        response = self.client.get("/api/admin/dashboard/")
+        self.assertEqual(response.status_code, 403)
+
+        self.client.defaults["HTTP_AUTHORIZATION"] = self.admin_authorization
+        response = self.client.get("/api/admin/dashboard/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["users"]["total"], 2)
+
+    def test_admin_can_edit_and_deactivate_accounts_without_erasing_them(self):
+        self.client.defaults["HTTP_AUTHORIZATION"] = self.admin_authorization
+        response = self.client.patch(
+            f"/api/users/{self.tenant.id}/",
+            data=json.dumps({"name": "Updated Tenant", "is_verified": True}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.full_name, "Updated Tenant")
+        self.assertTrue(self.tenant.is_verified)
+
+        response = self.client.delete(f"/api/users/{self.tenant.id}/")
+        self.assertEqual(response.status_code, 200)
+        self.tenant.refresh_from_db()
+        self.assertFalse(self.tenant.is_active)
+
+    def test_admin_cannot_read_private_chat_messages(self):
+        conversation = Conversation.objects.create(title="Private support test")
+        conversation.participants.add(self.tenant)
+        self.client.defaults["HTTP_AUTHORIZATION"] = self.admin_authorization
+
+        self.assertEqual(
+            self.client.get("/api/conversations/").status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(
+                f"/api/conversations/{conversation.id}/messages/"
+            ).status_code,
+            403,
+        )
+
+    def test_admin_role_cannot_be_created_through_public_registration(self):
+        response = self.client.post(
+            "/api/auth/register/",
+            data=json.dumps(
+                {
+                    "account_type": "admin",
+                    "username": "public-admin@example.test",
+                    "email": "public-admin@example.test",
+                    "password": "a-long-public-password-123",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertNotEqual(response.status_code, 201)
+        self.assertFalse(
+            User.objects.filter(username="public-admin@example.test").exists()
+        )
+
+
 class PropertyAvailabilityTests(TestCase):
     def setUp(self):
         self.landlord = User.objects.create_user(

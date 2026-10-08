@@ -243,6 +243,7 @@ class _AppScaffoldState extends State<AppScaffold> {
           );
         },
         isLandlord: state.user?.role == AccountRole.landlord,
+        isAdmin: state.user?.role == AccountRole.admin,
         unreadMessages: state.unreadMessageCount,
       ),
     );
@@ -254,12 +255,14 @@ class _BottomNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     required this.isLandlord,
+    required this.isAdmin,
     required this.unreadMessages,
   });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
   final bool isLandlord;
+  final bool isAdmin;
   final int unreadMessages;
 
   @override
@@ -268,21 +271,29 @@ class _BottomNav extends StatelessWidget {
 
     // Navigation icons based on the reference design:
     // Home • Saved • Messages • Profile
-    final items = isLandlord
+    final items = isAdmin
         ? const [
             _NavItem(icon: CupertinoIcons.house, label: 'Dashboard'),
             _NavItem(icon: CupertinoIcons.building_2_fill, label: 'Listings'),
           ]
-        : const [
-            _NavItem(icon: CupertinoIcons.house, label: 'Home'),
-            _NavItem(icon: CupertinoIcons.heart, label: 'Saved'),
-          ];
+        : isLandlord
+            ? const [
+                _NavItem(icon: CupertinoIcons.house, label: 'Dashboard'),
+                _NavItem(
+                    icon: CupertinoIcons.building_2_fill, label: 'Listings'),
+              ]
+            : const [
+                _NavItem(icon: CupertinoIcons.house, label: 'Home'),
+                _NavItem(icon: CupertinoIcons.heart, label: 'Saved'),
+              ];
     final allItems = [
       ...items,
       _NavItem(
-        icon: CupertinoIcons.chat_bubble,
-        label: 'Messages',
-        badgeCount: unreadMessages,
+        icon: isAdmin
+            ? CupertinoIcons.checkmark_shield
+            : CupertinoIcons.chat_bubble,
+        label: isAdmin ? 'Support' : 'Messages',
+        badgeCount: isAdmin ? 0 : unreadMessages,
       ),
       const _NavItem(icon: CupertinoIcons.person_circle, label: 'Profile'),
     ];
