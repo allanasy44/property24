@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -15,53 +17,39 @@ class AdminSupportScreen extends StatefulWidget {
 }
 
 class _AdminSupportScreenState extends State<AdminSupportScreen> {
-  late Future<List<Map<String, dynamic>>> _reports;
+  late Future<List<VerificationItem>> _verifications;
 
   @override
   void initState() {
     super.initState();
-    _reports = _load();
+    _verifications = _load();
   }
 
-  Future<List<Map<String, dynamic>>> _load() {
+  Future<List<VerificationItem>> _load() {
     final token = context.read<Property24State>().token;
     if (token == null) {
       throw const ApiException('Sign in with a support-admin account.');
     }
-    return Property24Api().adminReports(token);
+    return Property24Api().adminFailedLandlordVerifications(token);
   }
 
   Future<void> _reload() async {
     final next = _load();
-    setState(() => _reports = next);
-    await context.read<Property24State>().refresh();
+    setState(() => _verifications = next);
     await next;
   }
 
-  Future<void> _updateReport(
-    Map<String, dynamic> report,
-    String status,
-  ) async {
-    final token = context.read<Property24State>().token;
-    if (token == null) return;
-    try {
-      await Property24Api().updateAdminReport(
-        token: token,
-        reportId: '${report['id']}',
-        data: {'status': status},
-      );
-      await _reload();
-    } catch (exception) {
-      _showError(exception);
-    }
-  }
-
-  Future<void> _deleteReport(Map<String, dynamic> report) async {
+  Future<void> _review(VerificationItem verification, String status) async {
+    final approved = status == 'approved';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete report?'),
-        content: Text('${report['subject'] ?? 'Support report'}'),
+        title: Text(approved ? 'Approve verification?' : 'Reject verification?'),
+        content: Text(
+          approved
+              ? 'This will mark ${verification.name} as verified.'
+              : 'This will keep ${verification.name} unverified and close this failed-check review.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -69,29 +57,12 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: Text(approved ? 'Approve' : 'Reject'),
           ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
-    final token = context.read<Property24State>().token;
-    if (token == null) return;
-    try {
-      await Property24Api().deleteAdminReport(
-        token: token,
-        reportId: '${report['id']}',
-      );
-      await _reload();
-    } catch (exception) {
-      _showError(exception);
-    }
-  }
-
-  Future<void> _reviewVerification(
-    VerificationItem verification,
-    String status,
-  ) async {
     final token = context.read<Property24State>().token;
     if (token == null) return;
     try {
@@ -101,39 +72,68 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
         status: status,
       );
       await _reload();
+      await context.read<Property24State>().refresh(silent: true);
     } catch (exception) {
       _showError(exception);
     }
   }
 
-  Future<void> _updateApplication(
-    ApplicationItem application,
-    String status,
+  Future<void> _previewDocument(
+    VerificationItem verification,
+    String documentType,
   ) async {
     final token = context.read<Property24State>().token;
     if (token == null) return;
-    try {
-      await Property24Api().updateAdminApplication(
-        token: token,
-        applicationId: application.id,
-        status: status,
-      );
-      await _reload();
-    } catch (exception) {
-      _showError(exception);
-    }
+    final future = Property24Api().adminVerificationDocument(
+      token: token,
+      verificationId: verification.id,
+      documentType: documentType,
+    );
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${verification.name} · ${_documentLabel(documentType)}'),
+        content: SizedBox(
+          width: 560,
+          child: FutureBuilder<Uint8List>(
+            future: future,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Text(userFacingError(snapshot.error!));
+              }
+              if (!snapshot.hasData) {
+                return const SizedBox(
+                  height: 180,
+                  child: Center(
+                    child: CircularProgressIndicator(color: AppTheme.accent),
+                  ),
+                );
+              }
+              return Image.memory(
+                snapshot.data!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Text(
+                  'The verification document could not be displayed.',
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<void> _updateViewing(ViewingItem viewing, String status) async {
-    final token = context.read<Property24State>().token;
-    if (token == null) return;
-    try {
-      await Property24Api().updateViewingStatus(token, viewing.id, status);
-      await _reload();
-    } catch (exception) {
-      _showError(exception);
-    }
-  }
+  String _documentLabel(String type) => switch (type) {
+        'id-front' => 'ID front',
+        'id-back' => 'ID back',
+        _ => 'Document',
+      };
 
   void _showError(Object exception) {
     if (!mounted) return;
@@ -144,20 +144,13 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final platform = context.watch<Property24State>().snapshot;
-    final verifications = platform.verifications;
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('Support queue'),
+        title: const Text('Failed landlord verification'),
         actions: [
           IconButton(
-            tooltip: 'Create support report',
-            onPressed: _createReport,
-            icon: const Icon(CupertinoIcons.plus),
-          ),
-          IconButton(
-            tooltip: 'Refresh support queue',
+            tooltip: 'Refresh verification queue',
             onPressed: _reload,
             icon: const Icon(CupertinoIcons.refresh),
           ),
@@ -165,8 +158,8 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _reload,
-        child: FutureBuilder<List<Map<String, dynamic>>>(
-          future: _reports,
+        child: FutureBuilder<List<VerificationItem>>(
+          future: _verifications,
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               return ListView(
@@ -184,52 +177,28 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
                 child: CircularProgressIndicator(color: AppTheme.accent),
               );
             }
-            final reports = snapshot.data!;
-            return ListView(
+            final verifications = snapshot.data!
+                .where((item) =>
+                    item.role.toLowerCase() == 'landlord' &&
+                    {'failed', 'rejected'}.contains(item.status.toLowerCase()))
+                .toList(growable: false);
+            if (verifications.isEmpty) {
+              return ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Text(
+                    'There are no failed landlord document checks to review.',
+                    style: TextStyle(color: AppTheme.textMuted),
+                  ),
+                ],
+              );
+            }
+            return ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-              children: [
-                _SectionTitle(
-                  title: 'Reports',
-                  count: reports.length,
-                ),
-                if (reports.isEmpty)
-                  const _EmptyCard(message: 'No support reports.'),
-                for (final report in reports) _reportCard(report),
-                const SizedBox(height: 20),
-                _SectionTitle(
-                  title: 'Applications',
-                  count: platform.applications.length,
-                ),
-                if (platform.applications.isEmpty)
-                  const _EmptyCard(message: 'No rental applications.'),
-                for (final application in platform.applications)
-                  _applicationCard(application),
-                const SizedBox(height: 20),
-                _SectionTitle(
-                  title: 'Viewings',
-                  count: platform.viewings.length,
-                ),
-                if (platform.viewings.isEmpty)
-                  const _EmptyCard(message: 'No viewing bookings.'),
-                for (final viewing in platform.viewings) _viewingCard(viewing),
-                const SizedBox(height: 20),
-                _SectionTitle(
-                  title: 'Identity verification',
-                  count: verifications.length,
-                ),
-                if (verifications.isEmpty)
-                  const _EmptyCard(message: 'No verification requests.'),
-                for (final verification in verifications)
-                  _verificationCard(verification),
-                const SizedBox(height: 12),
-                Text(
-                  'Private chats and call contents are not available in this support workspace.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: AppTheme.textMuted),
-                ),
-              ],
+              itemCount: verifications.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) =>
+                  _verificationCard(verifications[index]),
             );
           },
         ),
@@ -237,290 +206,109 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
     );
   }
 
-  Future<void> _createReport() async {
-    final data = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => const _ReportDialog(),
-    );
-    if (data == null || !mounted) return;
-    final token = context.read<Property24State>().token;
-    if (token == null) return;
-    try {
-      await Property24Api().createAdminReport(token: token, data: data);
-      await _reload();
-    } catch (exception) {
-      _showError(exception);
-    }
-  }
-
-  Widget _reportCard(Map<String, dynamic> report) {
-    final status = '${report['status'] ?? 'open'}';
+  Widget _verificationCard(VerificationItem verification) {
     return Card(
       color: AppTheme.bgCard,
-      margin: const EdgeInsets.only(top: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
         side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '${report['subject'] ?? 'Support report'}',
-              style: const TextStyle(fontWeight: FontWeight.w700),
+            Row(
+              children: [
+                const Icon(
+                  CupertinoIcons.doc_text_viewfinder,
+                  color: AppTheme.accent,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    verification.name,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  verification.status,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             Text(
-              '${report['description'] ?? ''}',
+              verification.failureReason.isNotEmpty
+                  ? verification.failureReason
+                  : 'Automated document verification failed.',
               style: TextStyle(color: AppTheme.textMuted),
             ),
-            const SizedBox(height: 6),
-            Text(
-              'From ${report['reporter'] ?? 'User'} · ${status.toUpperCase()}',
-              style: Theme.of(context).textTheme.bodySmall,
+            if (verification.verificationProvider.isNotEmpty ||
+                verification.verificationScore.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                [
+                  if (verification.verificationProvider.isNotEmpty)
+                    verification.verificationProvider,
+                  if (verification.verificationScore.isNotEmpty)
+                    'Score ${verification.verificationScore}',
+                ].join(' · '),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            if (verification.checks.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final check in verification.checks)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(
+                    '• $check',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppTheme.textMuted,
+                        ),
+                  ),
+                ),
+            ],
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                if (verification.frontDocumentUploaded)
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _previewDocument(verification, 'id-front'),
+                    icon: const Icon(CupertinoIcons.doc_text_search),
+                    label: const Text('View ID front'),
+                  ),
+                if (verification.backDocumentUploaded)
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _previewDocument(verification, 'id-back'),
+                    icon: const Icon(CupertinoIcons.doc_text_search),
+                    label: const Text('View ID back'),
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                if (status == 'open')
-                  TextButton(
-                    onPressed: () => _updateReport(report, 'reviewing'),
-                    child: const Text('Review'),
-                  ),
-                if (status != 'resolved')
-                  TextButton(
-                    onPressed: () => _updateReport(report, 'resolved'),
-                    child: const Text('Resolve'),
-                  ),
                 TextButton(
-                  onPressed: () => _deleteReport(report),
-                  child: const Text('Delete'),
+                  onPressed: () => _review(verification, 'rejected'),
+                  child: const Text('Reject'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () => _review(verification, 'approved'),
+                  child: const Text('Approve'),
                 ),
               ],
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _verificationCard(VerificationItem verification) {
-    final normalized = verification.status.toLowerCase();
-    final pending = !{'verified', 'approved', 'rejected', 'failed'}
-        .contains(normalized);
-    return Card(
-      color: AppTheme.bgCard,
-      margin: const EdgeInsets.only(top: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: AppTheme.border),
-      ),
-      child: ListTile(
-        leading: const Icon(
-          CupertinoIcons.checkmark_shield,
-          color: AppTheme.accent,
-        ),
-        title: Text(verification.name),
-        subtitle: Text('${verification.role} · ${verification.status}'),
-        trailing: pending
-            ? PopupMenuButton<String>(
-                tooltip: 'Review verification',
-                onSelected: (status) => _reviewVerification(
-                  verification,
-                  status,
-                ),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: 'approved',
-                    child: Text('Approve'),
-                  ),
-                  PopupMenuItem(
-                    value: 'rejected',
-                    child: Text('Reject'),
-                  ),
-                  PopupMenuItem(
-                    value: 'reviewing',
-                    child: Text('Mark reviewing'),
-                  ),
-                ],
-              )
-            : null,
-      ),
-    );
-  }
-
-  Widget _applicationCard(ApplicationItem application) {
-    return Card(
-      color: AppTheme.bgCard,
-      margin: const EdgeInsets.only(top: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: AppTheme.border),
-      ),
-      child: ListTile(
-        leading: const Icon(
-          CupertinoIcons.doc_text,
-          color: AppTheme.accent,
-        ),
-        title: Text(application.property),
-        subtitle: Text(
-          '${application.applicant} · ${application.status} · Score ${application.score}',
-        ),
-        trailing: PopupMenuButton<String>(
-          tooltip: 'Update application',
-          onSelected: (status) => _updateApplication(application, status),
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'submitted', child: Text('Submitted')),
-            PopupMenuItem(value: 'under_review', child: Text('Under review')),
-            PopupMenuItem(value: 'approved', child: Text('Approve')),
-            PopupMenuItem(value: 'declined', child: Text('Decline')),
-            PopupMenuItem(value: 'withdrawn', child: Text('Withdraw')),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _viewingCard(ViewingItem viewing) {
-    return Card(
-      color: AppTheme.bgCard,
-      margin: const EdgeInsets.only(top: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: AppTheme.border),
-      ),
-      child: ListTile(
-        leading: const Icon(
-          CupertinoIcons.calendar,
-          color: AppTheme.accent,
-        ),
-        title: Text(viewing.property),
-        subtitle: Text(
-          '${viewing.tenant} · ${viewing.scheduledFor} · ${viewing.status}',
-        ),
-        trailing: viewing.status.toLowerCase() == 'pending'
-            ? PopupMenuButton<String>(
-                tooltip: 'Update viewing',
-                onSelected: (status) => _updateViewing(viewing, status),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'confirmed', child: Text('Confirm')),
-                  PopupMenuItem(value: 'rejected', child: Text('Reject')),
-                ],
-              )
-            : null,
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, required this.count});
-
-  final String title;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 10, 4, 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-          ),
-          Text('$count', style: TextStyle(color: AppTheme.textMuted)),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyCard extends StatelessWidget {
-  const _EmptyCard({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: AppTheme.bgCard,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(message, style: TextStyle(color: AppTheme.textMuted)),
-      ),
-    );
-  }
-}
-
-class _ReportDialog extends StatefulWidget {
-  const _ReportDialog();
-
-  @override
-  State<_ReportDialog> createState() => _ReportDialogState();
-}
-
-class _ReportDialogState extends State<_ReportDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _subject = TextEditingController();
-  final _description = TextEditingController();
-
-  @override
-  void dispose() {
-    _subject.dispose();
-    _description.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    if (!_formKey.currentState!.validate()) return;
-    Navigator.pop(context, {
-      'subject': _subject.text.trim(),
-      'description': _description.text.trim(),
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('New support report'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _subject,
-              decoration: const InputDecoration(labelText: 'Subject'),
-              validator: (value) =>
-                  value == null || value.trim().isEmpty ? 'Add a subject' : null,
-            ),
-            TextFormField(
-              controller: _description,
-              minLines: 2,
-              maxLines: 5,
-              decoration: const InputDecoration(labelText: 'Details'),
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Add report details'
-                  : null,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _save, child: const Text('Create')),
-      ],
     );
   }
 }

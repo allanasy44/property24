@@ -389,9 +389,14 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       const SizedBox(height: 14),
                       _NeighborhoodCard(property: property),
                       const SizedBox(height: 14),
-                      _AffordabilityCard(property: property),
+                      if (!property.isStayOrVenue)
+                        _AffordabilityCard(property: property),
                       const SizedBox(height: 14),
                       _GuestChips(property: property),
+                      if (property.isStayOrVenue) ...[
+                        const SizedBox(height: 14),
+                        _StayVenueDetails(property: property),
+                      ],
                       const SizedBox(height: 18),
                       OsmMapPreview(
                         label: property.heroLocation,
@@ -632,6 +637,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
         if (property.petFriendly) 'Pet friendly',
       ],
       property.propertyType,
+      ...property.listingAmenities,
+      ...property.venueFeatures,
+      ...property.activities,
     ];
     return items
         .where((item) => item.trim().isNotEmpty)
@@ -1450,6 +1458,19 @@ class _GuestChips extends StatelessWidget {
             icon: CupertinoIcons.location,
             label: property.landServicingLabel,
           ),
+        ] else if (property.isVenue &&
+            !property.isStay &&
+            !property.listingCategories.contains('homes')) ...[
+          if (property.weddingCapacity > 0)
+            _Pill(
+              icon: CupertinoIcons.person_2,
+              label: '${property.weddingCapacity} wedding guests',
+            ),
+          if (property.conferenceCapacity > 0)
+            _Pill(
+              icon: CupertinoIcons.person_2,
+              label: '${property.conferenceCapacity} conference guests',
+            ),
         ] else ...[
           _Pill(
             icon: CupertinoIcons.drop,
@@ -1461,6 +1482,68 @@ class _GuestChips extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _StayVenueDetails extends StatelessWidget {
+  const _StayVenueDetails({required this.property});
+
+  final PropertyListing property;
+
+  @override
+  Widget build(BuildContext context) {
+    final capacities = <String>[
+      if (property.maxGuests > 0) 'Sleeps ${property.maxGuests} guests',
+      if (property.weddingCapacity > 0)
+        'Wedding capacity: ${property.weddingCapacity}',
+      if (property.conferenceCapacity > 0)
+        'Conference capacity: ${property.conferenceCapacity}',
+      if (property.cateringAvailable) 'Catering available',
+      if (property.guestAccommodation) 'Guest accommodation',
+    ];
+    final sections = <(String, List<String>)>[
+      if (property.isStay &&
+          property.isVenue &&
+          property.eventRate.isNotEmpty)
+        ('Venue pricing', ['From ${money(property.eventRate)} / event']),
+      ('Rooms', property.roomTypes),
+      ('Amenities', property.listingAmenities),
+      ('Activities', property.activities),
+      ('For events', [...property.venueFeatures, ...capacities]),
+    ].where((section) => section.$2.isNotEmpty).toList(growable: false);
+    if (sections.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.bgSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var index = 0; index < sections.length; index++) ...[
+            if (index > 0) const SizedBox(height: 14),
+            Text(
+              sections[index].$1,
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final item in sections[index].$2) _AmenityChip(item),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1751,7 +1834,7 @@ class _BottomActions extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (isTenant) ...[
+          if (isTenant && !property.isStayOrVenue) ...[
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
@@ -1769,7 +1852,7 @@ class _BottomActions extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => _holdAndOpenChat(context),
+                  onPressed: () => _contactHost(context),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
@@ -1782,14 +1865,20 @@ class _BottomActions extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
-                  onPressed: () => _holdAndOpenChat(context),
+                  onPressed: () => _contactHost(context),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  child: const Text('Reserve'),
+                  child: Text(
+                    property.isStay
+                        ? 'Enquire about stay'
+                        : property.isVenue
+                            ? 'Enquire about venue'
+                            : 'Reserve',
+                  ),
                 ),
               ),
             ],
@@ -1874,9 +1963,14 @@ class _BottomActions extends StatelessWidget {
     }
   }
 
-  Future<void> _holdAndOpenChat(BuildContext context) async {
+  Future<void> _contactHost(BuildContext context) async {
     try {
-      await context.read<Property24State>().holdProperty(property);
+      final state = context.read<Property24State>();
+      if (property.isStayOrVenue) {
+        await state.messageAboutProperty(property);
+      } else {
+        await state.holdProperty(property);
+      }
       if (context.mounted) context.go(AppRoutes.chatScreen);
     } catch (exception) {
       if (context.mounted) {

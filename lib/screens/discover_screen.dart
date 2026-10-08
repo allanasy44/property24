@@ -49,6 +49,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   static const _types = [
     'Popular',
+    'Stays',
+    'Venues',
     'Nearby',
     'Recommended',
     'Student stays',
@@ -184,6 +186,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         property.city,
         property.suburb,
         property.propertyType,
+        ...property.roomTypes,
+        ...property.listingAmenities,
+        ...property.activities,
+        ...property.venueFeatures,
         property.accommodationInstitution,
         property.description,
         property.rentLabel,
@@ -197,7 +203,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
       return matchesQuery;
     }).toList();
-    if (_type == 'Student stays') {
+    if (_type == 'Stays') {
+      properties = properties.where((property) => property.isStay).toList()
+        ..sort(_newestFirst);
+    } else if (_type == 'Venues') {
+      properties = properties.where((property) => property.isVenue).toList()
+        ..sort(_newestFirst);
+    } else if (_type == 'Student stays') {
       properties = properties
           .where((property) => property.isStudentAccommodation)
           .where(
@@ -532,6 +544,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ),
             if (_type != 'Nearby' &&
                 _type != 'Following' &&
+                _type != 'Stays' &&
+                _type != 'Venues' &&
                 _type != 'Student stays' &&
                 _type != 'Shared rooms') ...[
               _DiscoveryPropertySection(
@@ -572,6 +586,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   icon: CupertinoIcons.search,
                   title: _type == 'Following'
                       ? 'No followed listings yet'
+                      : _type == 'Stays'
+                          ? 'No stays listed yet'
+                          : _type == 'Venues'
+                              ? 'No event venues listed yet'
                       : _type == 'Student stays' &&
                               _studentMaxDistanceKm != null &&
                               _deviceLocation == null
@@ -585,6 +603,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                       : 'No matching listings',
                   body: _type == 'Following'
                       ? 'Follow a landlord or agent to see their listings here.'
+                      : _type == 'Stays'
+                          ? 'Browse lodges, guest houses, hotels, cottages, holiday homes, resorts and more.'
+                          : _type == 'Venues'
+                              ? 'Discover wedding, conference, party and other event venues.'
                       : _type == 'Student stays' &&
                               _studentMaxDistanceKm != null &&
                               _deviceLocation == null

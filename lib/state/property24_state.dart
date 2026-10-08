@@ -676,6 +676,20 @@ class Property24State extends ChangeNotifier {
     await refresh();
   }
 
+  Future<ConversationItem> messageAboutProperty(
+    PropertyListing property,
+  ) async {
+    final activeToken = _requireToken();
+    final conversation =
+        await _api.startConversation(activeToken, property.id);
+    _replaceSnapshot(await _api.snapshot(
+      token: activeToken,
+      isAdmin: user?.role == AccountRole.admin,
+    ));
+    notifyListeners();
+    return conversation;
+  }
+
   Future<ViewingItem> requestViewing(
     PropertyListing property,
     DateTime scheduledFor,

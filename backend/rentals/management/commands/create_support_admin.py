@@ -37,7 +37,7 @@ class Command(BaseCommand):
             validate_password(password, user=user)
         except ValidationError as exc:
             raise CommandError("; ".join(exc.messages)) from exc
-        user = User.objects.create_superuser(
+        user = User.objects.create_user(
             username=username,
             email=email,
             password=password,

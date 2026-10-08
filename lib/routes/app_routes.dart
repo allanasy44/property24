@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/rental_models.dart';
 import '../screens/admin_dashboard_screen.dart';
 import '../screens/admin_support_screen.dart';
+import '../screens/admin_users_screen.dart';
 import '../screens/activity_screen.dart';
 import '../screens/auth_screen.dart';
 import '../screens/calls_screen.dart';
@@ -200,7 +201,7 @@ class _ListingsBranchScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return context.watch<Property24State>().user?.role == AccountRole.admin
-        ? const ListingsScreen()
+        ? const AdminUsersScreen()
         : const SavedHomesScreen();
   }
 }

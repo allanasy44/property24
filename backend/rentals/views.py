@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import mimetypes
 import re
 import smtplib
 import uuid
@@ -24,7 +25,7 @@ from django.core.validators import validate_email as validate_email_value
 from django.db import IntegrityError, transaction
 from django.db import connection
 from django.db.models import Count, Q
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
@@ -168,11 +169,9 @@ ROLE_CAPABILITIES = {
         "message_clients",
     ],
     User.Roles.ADMIN: [
-        "verify_users",
-        "remove_fake_listings",
-        "resolve_disputes",
-        "review_reports",
-        "manage_all_accounts",
+        "view_user_counts",
+        "disable_user_accounts",
+        "review_failed_landlord_verifications",
     ],
 }
 
@@ -180,7 +179,7 @@ ROLE_VISIBLE_SECTIONS = {
     User.Roles.TENANT: ["search", "applications", "inbox", "profile", "verification"],
     User.Roles.LANDLORD: ["properties", "applications", "analytics", "inbox", "profile", "verification"],
     User.Roles.AGENT: ["properties", "viewings", "applications", "commissions", "inbox", "verification"],
-    User.Roles.ADMIN: ["verifications", "reports", "users", "properties", "analytics"],
+    User.Roles.ADMIN: ["dashboard", "users", "verifications", "profile"],
 }
 
 ROLE_ONBOARDING_REQUIREMENTS = {
@@ -268,6 +267,18 @@ def require_authenticated(request):
     user, error = current_user(request)
     if error:
         return None, json_error(error, status=401)
+    if user.role == User.Roles.ADMIN and request.method != "OPTIONS":
+        allowed_admin_access = {
+            ("admin_dashboard_summary", "GET"),
+            ("users_collection", "GET"),
+            ("user_detail", "DELETE"),
+            ("verifications_collection", "GET"),
+            ("verification_review", "POST"),
+            ("verification_document_preview", "GET"),
+        }
+        endpoint = getattr(request.resolver_match, "url_name", None)
+        if (endpoint, request.method) not in allowed_admin_access:
+            return None, forbidden()
     if request.method != "OPTIONS" and user.role in {User.Roles.LANDLORD, User.Roles.AGENT} and not account_onboarding_complete(user) and not verification_access_allowed(request):
         return None, json_error(
             "Identity verification is required before using this feature",
@@ -840,7 +851,7 @@ def landlord_agent_detail(request, agent_id):
     return JsonResponse(serialize_user(agent))
 
 @csrf_exempt
-@require_http_methods(["GET", "POST", "OPTIONS"])
+@require_http_methods(["GET", "OPTIONS"])
 def users_collection(request):
     acting_user, auth_response = require_roles(request, {User.Roles.ADMIN})
     if auth_response:
@@ -848,181 +859,38 @@ def users_collection(request):
 
     if request.method == "GET":
         role = request.GET.get("role")
-        users = User.objects.all().order_by("id")
+        users = User.objects.exclude(role=User.Roles.ADMIN).order_by("id")
         if role:
             users = users.filter(role=role)
         return JsonResponse({"results": [serialize_user(user) for user in users]})
-
-    data = request_data(request)
-    if data is None:
-        return json_error("Invalid request body")
-
-    username = data.get("username") or data.get("email")
-    if not username:
-        return json_error("username or email is required")
-
-    requested_role = normalise_choice(
-        data.get("account_type") or data.get("role") or User.Roles.TENANT,
-        User.Roles,
-        data.get("account_type") or data.get("role") or User.Roles.TENANT,
-    )
-    if requested_role == User.Roles.AGENT:
-        username = str(username).strip()
-        email = normalize_email(data.get("email"))
-        phone = normalize_phone(data.get("phone"))
-        full_name = str(data.get("name") or data.get("full_name") or "").strip()
-        password = data.get("password") or ""
-        landlord = User.objects.filter(
-            pk=data.get("parent_landlord_id"),
-            role=User.Roles.LANDLORD,
-            is_active=True,
-        ).first()
-        for error in (
-            validate_text_field(username, "Username", USERNAME_MAX_LENGTH, required=True),
-            validate_email_field(email, required=True),
-            validate_text_field(full_name, "Full name", NAME_MAX_LENGTH, required=True),
-            validate_phone_field(phone, required=False),
-            validate_account_password(password),
-        ):
-            if error:
-                return json_error(error)
-        if landlord is None:
-            return json_error("Choose an active landlord for this agent")
-        if User.objects.filter(
-            Q(username__iexact=username)
-            | Q(email__iexact=email)
-            | Q(phone__in=phone_lookup_values(phone))
-        ).exists():
-            return json_error("An account with these details already exists")
-        try:
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                password=password,
-                full_name=full_name,
-                phone=phone,
-                role=User.Roles.AGENT,
-                parent_landlord=landlord,
-                agent_permissions=[
-                    "list_properties",
-                    "schedule_viewings",
-                    "track_applications",
-                    "track_commissions",
-                ],
-            )
-        except IntegrityError:
-            return json_error("An account with these details already exists")
-        return JsonResponse(serialize_user(user), status=201)
-
-    user, error = create_public_account(data, require_password=False)
-    if error:
-        return json_error(error)
-    return JsonResponse(serialize_user(user), status=201)
-
+    return JsonResponse({})
 
 @csrf_exempt
-@require_http_methods(["GET", "PATCH", "DELETE", "OPTIONS"])
+@require_http_methods(["GET", "DELETE", "OPTIONS"])
 def user_detail(request, user_id):
     acting_user, auth_response = require_roles(request, {User.Roles.ADMIN})
     if auth_response:
         return auth_response
-    user = get_object_or_404(User, pk=user_id)
+    user = get_object_or_404(User.objects.exclude(role=User.Roles.ADMIN), pk=user_id)
     if request.method == "GET":
         return JsonResponse(serialize_user(user))
     if request.method == "DELETE":
-        if user.pk == acting_user.pk:
-            return json_error("You cannot deactivate your own support account", status=400)
-        if user.is_superuser and User.objects.filter(
-            is_superuser=True, is_active=True
-        ).exclude(pk=user.pk).count() == 0:
-            return json_error("Keep at least one active superuser account", status=400)
         user.is_active = False
         user.save(update_fields=["is_active"])
         return JsonResponse({"deactivated": True, "user": serialize_user(user)})
 
-    data = request_data(request)
-    if data is None:
-        return json_error("Invalid request body")
-    if user.role == User.Roles.ADMIN and user.pk == acting_user.pk:
-        if data.get("is_active") is False or data.get("role") not in (
-            None,
-            User.Roles.ADMIN,
-        ):
-            return json_error("You cannot disable or change your own support account", status=400)
+    return JsonResponse({})
 
-    changed_fields = []
-    field_values = {
-        "name": ("full_name", NAME_MAX_LENGTH),
-        "full_name": ("full_name", NAME_MAX_LENGTH),
-        "phone": ("phone", PHONE_MAX_LENGTH),
-    }
-    for key, (field, max_length) in field_values.items():
-        if key in data:
-            value = str(data[key] or "").strip()
-            if len(value) > max_length:
-                return json_error(f"{key} exceeds {max_length} characters")
-            if field == "phone":
-                phone_error = validate_phone_field(value, required=False)
-                if phone_error:
-                    return json_error(phone_error)
-            setattr(user, field, value)
-            changed_fields.append(field)
-    if "email" in data:
-        email = normalize_email(data["email"])
-        email_error = validate_email_field(email, required=True)
-        if email_error:
-            return json_error(email_error)
-        if User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists():
-            return json_error("An account with this email already exists")
-        user.email = email
-        changed_fields.append("email")
-    if "role" in data:
-        role = normalise_choice(data["role"], User.Roles, data["role"])
-        if role == User.Roles.ADMIN and not user.is_superuser:
-            return json_error("Support-admin access must be provisioned on the server", status=400)
-        if user.role == User.Roles.ADMIN and role != User.Roles.ADMIN:
-            return json_error("Support-admin roles cannot be changed here", status=400)
-        if role == User.Roles.AGENT and not (
-            data.get("parent_landlord_id") or user.parent_landlord_id
-        ):
-            return json_error("Agent accounts must be assigned to a landlord")
-        user.role = role
-        changed_fields.append("role")
-        if role != User.Roles.AGENT and user.parent_landlord_id:
-            user.parent_landlord = None
-            changed_fields.append("parent_landlord")
-    if "parent_landlord_id" in data:
-        parent_landlord_id = data.get("parent_landlord_id")
-        parent_landlord = None
-        if parent_landlord_id:
-            parent_landlord = User.objects.filter(
-                pk=parent_landlord_id,
-                role=User.Roles.LANDLORD,
-                is_active=True,
-            ).first()
-            if parent_landlord is None:
-                return json_error("Choose an active landlord for this agent")
-        if user.role == User.Roles.AGENT and parent_landlord is None:
-            return json_error("Agent accounts must be assigned to a landlord")
-        user.parent_landlord = parent_landlord
-        changed_fields.append("parent_landlord")
-    if "is_active" in data:
-        active = to_bool(data["is_active"])
-        if user.is_superuser and not active and User.objects.filter(
-            is_superuser=True, is_active=True
-        ).exclude(pk=user.pk).count() == 0:
-            return json_error("Keep at least one active superuser account", status=400)
-        user.is_active = active
-        changed_fields.append("is_active")
-    if "is_verified" in data:
-        user.is_verified = to_bool(data["is_verified"])
-        changed_fields.append("is_verified")
-    if changed_fields:
-        try:
-            user.save(update_fields=list(dict.fromkeys(changed_fields)))
-        except IntegrityError:
-            return json_error("An account with these details already exists")
-    return JsonResponse(serialize_user(user))
+
+def failed_landlord_verifications():
+    return VerificationRequest.objects.filter(
+        role=User.Roles.LANDLORD,
+        status__in=[
+            VerificationRequest.Status.FAILED,
+            VerificationRequest.Status.REJECTED,
+        ],
+        reviewed_at__isnull=True,
+    )
 
 
 @require_http_methods(["GET", "OPTIONS"])
@@ -1030,41 +898,18 @@ def admin_dashboard_summary(request):
     acting_user, auth_response = require_roles(request, {User.Roles.ADMIN})
     if auth_response:
         return auth_response
-    month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    customer_users = User.objects.exclude(role=User.Roles.ADMIN)
     return JsonResponse(
         {
             "users": {
-                "total": User.objects.count(),
-                "active": User.objects.filter(is_active=True).count(),
-                "tenants": User.objects.filter(role=User.Roles.TENANT).count(),
-                "landlords": User.objects.filter(role=User.Roles.LANDLORD).count(),
-                "agents": User.objects.filter(role=User.Roles.AGENT).count(),
+                "total": customer_users.count(),
+                "active": customer_users.filter(is_active=True).count(),
+                "deactivated": customer_users.filter(is_active=False).count(),
+                "tenants": customer_users.filter(role=User.Roles.TENANT).count(),
+                "landlords": customer_users.filter(role=User.Roles.LANDLORD).count(),
+                "agents": customer_users.filter(role=User.Roles.AGENT).count(),
             },
-            "listings": {
-                "total": Property.objects.count(),
-                "active": Property.objects.filter(is_active=True).count(),
-                "verified": Property.objects.filter(
-                    listing_status=Property.ListingStatus.VERIFIED
-                ).count(),
-                "created_this_month": Property.objects.filter(created_at__gte=month_start).count(),
-            },
-            "applications": Application.objects.count(),
-            "viewings": Viewing.objects.count(),
-            "pending_verifications": VerificationRequest.objects.filter(
-                status__in=[
-                    VerificationRequest.Status.PENDING,
-                    VerificationRequest.Status.SUBMITTED,
-                    VerificationRequest.Status.REVIEWING,
-                    VerificationRequest.Status.MANUAL_REVIEW,
-                ]
-            ).count(),
-            "open_reports": DisputeReport.objects.exclude(
-                status__in=[
-                    DisputeReport.Status.RESOLVED,
-                    DisputeReport.Status.DISMISSED,
-                ]
-            ).count(),
-            "users_created_this_month": User.objects.filter(date_joined__gte=month_start).count(),
+            "failed_landlord_verifications": failed_landlord_verifications().count(),
         }
     )
 
@@ -1079,8 +924,6 @@ def properties_collection(request):
             acting_user, _ = current_user(request)
         if acting_user is not None and acting_user.role in {User.Roles.LANDLORD, User.Roles.AGENT} and not to_bool(request.GET.get("public_only")):
             properties = user_properties(acting_user).select_related("owner", "agent").prefetch_related("photos", "videos")
-        elif is_admin(acting_user):
-            pass
         else:
             properties = public_listings(properties)
         properties = apply_property_filters(properties, request.GET)
@@ -1134,6 +977,16 @@ def properties_collection(request):
             status=400,
         )
     land_size = parse_decimal(data.get("land_size"), "land_size") if data.get("land_size") not in (None, "") else None
+    try:
+        listing_categories = normalize_listing_categories(data.get("listing_categories"))
+        listing_details = normalize_listing_details(data.get("listing_details"))
+    except ValueError as exc:
+        return json_error(str(exc), status=400)
+    if (
+        {"stays", "venues"} & set(listing_categories)
+        and listing_intent != Property.ListingIntent.RENT
+    ):
+        return json_error("Stays and venues must be listed for rent", status=400)
 
     prop = Property.objects.create(
         owner=owner,
@@ -1146,6 +999,8 @@ def properties_collection(request):
         latitude=latitude,
         longitude=longitude,
         show_exact_location=to_bool(data.get("show_exact_location")),
+        listing_categories=listing_categories,
+        listing_details=listing_details,
         listing_intent=listing_intent,
         availability_status=normalise_choice(data.get("availability_status"), Property.AvailabilityStatus, Property.AvailabilityStatus.AVAILABLE),
         monthly_rent=parse_decimal(data.get("monthly_rent") or data.get("price"), "monthly_rent"),
@@ -1236,7 +1091,10 @@ def property_detail(request, property_id):
         "monthly_rent": prop.monthly_rent,
         "is_live": _is_live_public_listing(prop),
     }
-    apply_property_updates(prop, data, owner, agent, acting_user)
+    try:
+        apply_property_updates(prop, data, owner, agent, acting_user)
+    except ValueError as exc:
+        return json_error(str(exc), status=400)
     if (
         prop.property_type == Property.PropertyType.STUDENT
         and not prop.accommodation_institution.strip()
@@ -1249,6 +1107,11 @@ def property_detail(request, property_id):
             "Choose the university, college, or polytechnic this accommodation serves.",
             status=400,
         )
+    if (
+        {"stays", "venues"} & set(prop.listing_categories)
+        and prop.listing_intent != Property.ListingIntent.RENT
+    ):
+        return json_error("Stays and venues must be listed for rent", status=400)
     prop.save()
     payload = serialize_property(prop)
     if settings.AI_ASSISTED_REVIEW_ENABLED:
@@ -2564,7 +2427,9 @@ def verifications_collection(request):
     if request.method == "GET":
         verifications = VerificationRequest.objects.select_related("user", "reviewed_by").order_by("-submitted_at")
         if is_admin(acting_user):
-            pass
+            verifications = verifications.filter(
+                pk__in=failed_landlord_verifications().values("pk")
+            )
         else:
             verifications = verifications.filter(user=acting_user)
         return JsonResponse({"results": [serialize_verification(item, acting_user=acting_user) for item in verifications]})
@@ -2692,6 +2557,13 @@ def verification_review(request, verification_id):
     if auth_response:
         return auth_response
     verification = get_verification_for_review(verification_id)
+    if (
+        verification.role != User.Roles.LANDLORD
+        or verification.status
+        not in {VerificationRequest.Status.FAILED, VerificationRequest.Status.REJECTED}
+        or verification.reviewed_at is not None
+    ):
+        return json_error("Only failed automated landlord verifications can be reviewed", status=404)
     data = request_json(request)
     if data is None:
         return json_error("Invalid JSON body")
@@ -2700,14 +2572,55 @@ def verification_review(request, verification_id):
     if status in {VerificationRequest.Status.APPROVED, VerificationRequest.Status.VERIFIED}:
         verification.approve(reviewer)
         audit_identity_event("identity_verification_admin_approved", verification.user, verification=verification, actor=reviewer)
-    else:
-        verification.status = status or VerificationRequest.Status.REVIEWING
+    elif status in {VerificationRequest.Status.REJECTED, VerificationRequest.Status.FAILED}:
+        verification.status = VerificationRequest.Status.REJECTED
         verification.reviewed_by = reviewer
         verification.notes = data.get("notes", verification.notes)
         verification.reviewed_at = timezone.now()
         verification.save()
+    else:
+        return json_error("Choose approved or rejected", status=400)
     notify_identity_status(verification.user, verification, actor=reviewer)
     return JsonResponse(serialize_verification(verification, acting_user=acting_user))
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def verification_document_preview(request, verification_id, document_type):
+    acting_user, auth_response = require_roles(request, {User.Roles.ADMIN})
+    if auth_response:
+        return auth_response
+    verification = get_verification_for_review(verification_id)
+    if (
+        verification.role != User.Roles.LANDLORD
+        or verification.status
+        not in {VerificationRequest.Status.FAILED, VerificationRequest.Status.REJECTED}
+        or verification.reviewed_at is not None
+    ):
+        return json_error("Only failed automated landlord verification documents are available", status=404)
+
+    field_name = {
+        "id-front": "id_front_document",
+        "id-back": "id_back_document",
+    }.get(document_type)
+    if field_name is None:
+        return json_error("Unknown verification document", status=404)
+    document = getattr(verification, field_name)
+    if not document:
+        return json_error("Verification document not found", status=404)
+
+    audit_identity_event(
+        "identity_document_admin_previewed",
+        verification.user,
+        verification=verification,
+        actor=acting_user,
+        metadata={"document_type": document_type},
+    )
+    content_type = mimetypes.guess_type(document.name)[0] or "application/octet-stream"
+    response = FileResponse(document.open("rb"), content_type=content_type)
+    response["Content-Disposition"] = "inline"
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @csrf_exempt
@@ -3572,6 +3485,81 @@ def json_error(message, status=400, errors=None):
     return JsonResponse(payload, status=status)
 
 
+def normalize_listing_categories(value):
+    allowed = {"homes", "stays", "venues"}
+    if value is None:
+        return ["homes"]
+    if not isinstance(value, list):
+        raise ValueError("listing_categories must be a list")
+    categories = list(dict.fromkeys(str(item).strip().lower() for item in value))
+    if not categories or any(category not in allowed for category in categories):
+        raise ValueError("Choose one or more valid listing categories")
+    return categories
+
+
+def normalize_listing_details(value):
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("listing_details must be an object")
+
+    allowed_fields = {
+        "nightly_rate",
+        "event_rate",
+        "room_types",
+        "amenities",
+        "activities",
+        "venue_features",
+        "max_guests",
+        "wedding_capacity",
+        "conference_capacity",
+        "catering_available",
+        "guest_accommodation",
+    }
+    if set(value) - allowed_fields:
+        raise ValueError("listing_details contains unsupported fields")
+
+    details = {}
+    for field in ("nightly_rate", "event_rate"):
+        raw_rate = value.get(field)
+        if raw_rate not in (None, ""):
+            try:
+                rate = Decimal(str(raw_rate).strip().replace(",", ""))
+            except InvalidOperation:
+                raise ValueError(f"{field} must be a valid number") from None
+            if not rate.is_finite() or rate < 0 or rate > Decimal("9999999999.99"):
+                raise ValueError(f"{field} must be between 0 and 9999999999.99")
+            details[field] = str(rate)
+
+    for field in ("room_types", "amenities", "activities", "venue_features"):
+        values = value.get(field, [])
+        if not isinstance(values, list):
+            raise ValueError(f"{field} must be a list")
+        normalized = []
+        for item in values:
+            text = str(item).strip()
+            if text:
+                normalized.append(text[:120])
+        details[field] = list(dict.fromkeys(normalized))[:40]
+
+    for field in ("max_guests", "wedding_capacity", "conference_capacity"):
+        raw_count = value.get(field)
+        if raw_count in (None, ""):
+            details[field] = 0
+            continue
+        try:
+            count = int(raw_count)
+        except (TypeError, ValueError):
+            raise ValueError(f"{field} must be a whole number") from None
+        if count < 0 or count > 100000:
+            raise ValueError(f"{field} must be between 0 and 100000")
+        details[field] = count
+
+    for field in ("catering_available", "guest_accommodation"):
+        details[field] = to_bool(value.get(field))
+    return details
+
+
 def parse_decimal(value, field):
     if value is None or value == "":
         return Decimal("0")
@@ -3669,6 +3657,10 @@ def apply_property_updates(prop, data, owner, agent, acting_user):
             setattr(prop, field, data[field])
     if data.get("property_type") is not None:
         prop.property_type = normalise_choice(data["property_type"], Property.PropertyType, prop.property_type)
+    if data.get("listing_categories") is not None:
+        prop.listing_categories = normalize_listing_categories(data["listing_categories"])
+    if data.get("listing_details") is not None:
+        prop.listing_details = normalize_listing_details(data["listing_details"])
     if data.get("accommodation_institution") is not None:
         prop.accommodation_institution = str(
             data["accommodation_institution"]
@@ -4626,6 +4618,8 @@ def serialize_property(prop):
         "latitude": str(prop.latitude) if prop.latitude is not None else "",
         "longitude": str(prop.longitude) if prop.longitude is not None else "",
         "show_exact_location": prop.show_exact_location,
+        "listing_categories": prop.listing_categories,
+        "listing_details": prop.listing_details,
         "listing_intent": prop.listing_intent,
         "availability_status": prop.availability_status,
         "available_from": prop.available_from.isoformat() if prop.available_from else None,

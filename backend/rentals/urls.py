@@ -58,6 +58,7 @@ urlpatterns = [
     path("verifications/id-extract/", views.verification_id_extract, name="verification_id_extract"),
     path("verifications/", views.verifications_collection, name="verifications_collection"),
     path("verifications/<str:verification_id>/review/", views.verification_review, name="verification_review"),
+    path("verifications/<str:verification_id>/documents/<str:document_type>/", views.verification_document_preview, name="verification_document_preview"),
     path("viewings/", views.viewings_collection, name="viewings_collection"),
     path("viewings/<int:viewing_id>/", views.viewing_detail, name="viewing_detail"),
     path("conversations/", views.conversations_collection, name="conversations_collection"),

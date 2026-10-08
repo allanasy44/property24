@@ -133,7 +133,7 @@ The local Django backend and Docker expose JSON endpoints under `http://localhos
 
 ### Private support administration
 
-Support-admin accounts are not available through public signup. Provision one on the server with `python3 manage.py create_support_admin` from `backend/`; the command prompts for account details and a password without echoing it. After migration, open the app's private `/support/login` route to sign in. The admin workspace provides platform insights, user account management, listings, reports, and verification review. Removing a user deactivates their account and retains their records. Admin accounts cannot access private chat or call contents.
+Support-admin accounts are not available through public signup. Provision one on the server with `python3 manage.py create_support_admin` from `backend/`; the command prompts for account details and a password without echoing it. After migration, open the app's private `/support/login` route to sign in. These accounts are not Django staff or superusers; their API access is limited to aggregate user counts, viewing and disabling user accounts, and reviewing failed automated landlord identity-document checks. Document previews are authenticated, limited to those failed landlord checks, and audited. Disabling an account preserves its records.
 
 ## Backend checks
 

@@ -290,6 +290,19 @@ class Property(models.Model):
         STUDENT = "student_accommodation", "Student accommodation"
         COMMERCIAL = "commercial_property", "Commercial property"
         LAND = "land", "Land / Stand"
+        LODGE = "lodge", "Lodge"
+        GUEST_HOUSE = "guest_house", "Guest house"
+        HOTEL = "hotel", "Hotel"
+        HOLIDAY_HOME = "holiday_home", "Holiday home"
+        RESORT = "resort", "Resort"
+        SELF_CATERING_APARTMENT = "self_catering_apartment", "Self-catering apartment"
+        CAMPING_GLAMPING = "camping_glamping", "Camping / glamping"
+        WEDDING_VENUE = "wedding_venue", "Wedding venue"
+        CONFERENCE_VENUE = "conference_venue", "Conference venue"
+        PARTY_VENUE = "party_venue", "Party venue"
+        GARDEN = "garden", "Garden"
+        FUNCTION_HALL = "function_hall", "Function hall"
+        CORPORATE_EVENT_SPACE = "corporate_event_space", "Corporate event space"
 
     class ListingStatus(models.TextChoices):
         DRAFT = "draft", "Draft"
@@ -318,6 +331,8 @@ class Property(models.Model):
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     show_exact_location = models.BooleanField(default=False)
+    listing_categories = models.JSONField(default=list, blank=True)
+    listing_details = models.JSONField(default=dict, blank=True)
     listing_intent = models.CharField(max_length=12, choices=ListingIntent.choices, default=ListingIntent.RENT, db_index=True)
     availability_status = models.CharField(max_length=16, choices=AvailabilityStatus.choices, default=AvailabilityStatus.AVAILABLE, db_index=True)
     available_from = models.DateField(null=True, blank=True)

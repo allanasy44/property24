@@ -46,6 +46,11 @@ class _ListingsScreenState extends State<ListingsScreen> {
         property.city,
         property.suburb,
         property.propertyType,
+        ...property.listingCategories,
+        ...property.roomTypes,
+        ...property.listingAmenities,
+        ...property.activities,
+        ...property.venueFeatures,
         property.rentLabel,
         property.parking,
         property.waterAvailability,
@@ -603,8 +608,18 @@ class _PropertyEditorState extends State<PropertyEditor> {
   late final TextEditingController _zoning;
   late final TextEditingController _roadAccess;
   late final TextEditingController _accommodationInstitution;
+  late final TextEditingController _nightlyRate;
+  late final TextEditingController _eventRate;
+  late final TextEditingController _roomTypes;
+  late final TextEditingController _listingAmenities;
+  late final TextEditingController _activities;
+  late final TextEditingController _venueFeatures;
+  late final TextEditingController _maxGuests;
+  late final TextEditingController _weddingCapacity;
+  late final TextEditingController _conferenceCapacity;
   String _intent = 'Rent';
   String _type = 'house';
+  Set<String> _listingCategories = {'homes'};
   bool _sharedRoom = false;
   bool _furnished = false;
   bool _solar = false;
@@ -612,6 +627,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
   bool _pets = false;
   bool _tour = false;
   bool _showExactLocation = false;
+  bool _cateringAvailable = false;
+  bool _guestAccommodation = false;
   final ImagePicker _picker = ImagePicker();
   final List<XFile> _newImages = <XFile>[];
   XFile? _newVideo;
@@ -648,6 +665,32 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _accommodationInstitution = TextEditingController(
       text: property?.accommodationInstitution ?? '',
     );
+    final listingDetails = property?.listingDetails ?? const {};
+    _nightlyRate = TextEditingController(
+      text: '${listingDetails['nightly_rate'] ?? ''}',
+    );
+    _eventRate = TextEditingController(
+      text: '${listingDetails['event_rate'] ?? ''}',
+    );
+    _roomTypes = TextEditingController(
+      text: property?.roomTypes.join('\n') ?? '',
+    );
+    _listingAmenities = TextEditingController(
+      text: property?.listingAmenities.join(', ') ?? '',
+    );
+    _activities = TextEditingController(
+      text: property?.activities.join(', ') ?? '',
+    );
+    _venueFeatures = TextEditingController(
+      text: property?.venueFeatures.join(', ') ?? '',
+    );
+    _maxGuests =
+        TextEditingController(text: '${property?.maxGuests ?? ''}');
+    _weddingCapacity =
+        TextEditingController(text: '${property?.weddingCapacity ?? ''}');
+    _conferenceCapacity = TextEditingController(
+      text: '${property?.conferenceCapacity ?? ''}',
+    );
     _deposit = TextEditingController(text: property?.depositRequired ?? '');
     _beds = TextEditingController(text: '${property?.bedrooms ?? ''}');
     _baths = TextEditingController(text: '${property?.bathrooms ?? ''}');
@@ -674,6 +717,16 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _tour = property?.has360Tour ?? false;
     _showExactLocation = property?.showExactLocation ?? false;
     _sharedRoom = property?.sharedRoom ?? false;
+    _listingCategories = {
+      ...?property?.listingCategories,
+    };
+    if (_listingCategories.isEmpty) _listingCategories = {'homes'};
+    if (_listingCategories.contains('stays') ||
+        _listingCategories.contains('venues')) {
+      _intent = 'Rent';
+    }
+    _cateringAvailable = property?.cateringAvailable ?? false;
+    _guestAccommodation = property?.guestAccommodation ?? false;
   }
 
   @override
@@ -700,6 +753,15 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _zoning.dispose();
     _roadAccess.dispose();
     _accommodationInstitution.dispose();
+    _nightlyRate.dispose();
+    _eventRate.dispose();
+    _roomTypes.dispose();
+    _listingAmenities.dispose();
+    _activities.dispose();
+    _venueFeatures.dispose();
+    _maxGuests.dispose();
+    _weddingCapacity.dispose();
+    _conferenceCapacity.dispose();
     super.dispose();
   }
 
@@ -708,6 +770,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
     final inset = MediaQuery.viewInsetsOf(context).bottom;
     final isLand = _type == 'land';
     final isCommercialProperty = _type == 'office' || _type == 'shop';
+    final hasHomes = _listingCategories.contains('homes');
+    final hasStays = _listingCategories.contains('stays');
+    final hasVenues = _listingCategories.contains('venues');
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
@@ -775,11 +840,12 @@ class _PropertyEditorState extends State<PropertyEditor> {
                   }
                   return SegmentedButton<String>(
                     segments: [
-                      const ButtonSegment(
-                        value: 'Sale',
-                        label: Text('For sale'),
-                        icon: Icon(CupertinoIcons.tag),
-                      ),
+                      if (!hasStays && !hasVenues)
+                        const ButtonSegment(
+                          value: 'Sale',
+                          label: Text('For sale'),
+                          icon: Icon(CupertinoIcons.tag),
+                        ),
                       if (_type != 'land')
                         const ButtonSegment(
                           value: 'Rent',
@@ -862,6 +928,48 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         );
                       },
                     ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Select every category that applies. One listing can appear in both Stays and Venues.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            for (final category in const {
+                              'homes': 'Homes',
+                              'stays': 'Stays',
+                              'venues': 'Venues',
+                            }.entries)
+                              FilterChip(
+                                label: Text(category.value),
+                                selected:
+                                    _listingCategories.contains(category.key),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _listingCategories.add(category.key);
+                                      if (category.key != 'homes') {
+                                        if (_type == 'land') _type = 'house';
+                                        _intent = 'Rent';
+                                      }
+                                    } else if (_listingCategories.length > 1) {
+                                      _listingCategories.remove(category.key);
+                                    }
+                                  });
+                                },
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                   _field(_title, 'Title'),
                   _field(_description, 'Details', maxLines: 4),
                   Padding(
@@ -894,12 +1002,91 @@ class _PropertyEditorState extends State<PropertyEditor> {
                           value: 'land',
                           child: Text('Land / Stand for sale'),
                         ),
+                        DropdownMenuItem(value: 'lodge', child: Text('Lodge')),
+                        DropdownMenuItem(
+                          value: 'guest_house',
+                          child: Text('Guest house'),
+                        ),
+                        DropdownMenuItem(value: 'hotel', child: Text('Hotel')),
+                        DropdownMenuItem(
+                          value: 'holiday_home',
+                          child: Text('Holiday home'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'resort',
+                          child: Text('Resort'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'self_catering_apartment',
+                          child: Text('Self-catering apartment'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'camping_glamping',
+                          child: Text('Camping / glamping'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'wedding_venue',
+                          child: Text('Wedding venue'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'conference_venue',
+                          child: Text('Conference venue'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'party_venue',
+                          child: Text('Party venue'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'garden',
+                          child: Text('Garden'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'function_hall',
+                          child: Text('Function hall'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'corporate_event_space',
+                          child: Text('Corporate event space'),
+                        ),
                       ],
                       onChanged: (value) {
                         final next = value ?? 'house';
                         setState(() {
                           _type = next;
-                          if (next == 'land') _intent = 'Sale';
+                          if (next == 'land') {
+                            _intent = 'Sale';
+                            _listingCategories = {'homes'};
+                          }
+                          if ({
+                            'lodge',
+                            'guest_house',
+                            'hotel',
+                            'holiday_home',
+                            'resort',
+                            'self_catering_apartment',
+                            'camping_glamping',
+                          }.contains(next)) {
+                            _intent = 'Rent';
+                            if (_listingCategories.length == 1 &&
+                                _listingCategories.contains('homes')) {
+                              _listingCategories.remove('homes');
+                            }
+                            _listingCategories.add('stays');
+                          } else if ({
+                            'wedding_venue',
+                            'conference_venue',
+                            'party_venue',
+                            'garden',
+                            'function_hall',
+                            'corporate_event_space',
+                          }.contains(next)) {
+                            _intent = 'Rent';
+                            if (_listingCategories.length == 1 &&
+                                _listingCategories.contains('homes')) {
+                              _listingCategories.remove('homes');
+                            }
+                            _listingCategories.add('venues');
+                          }
                         });
                       },
                     ),
@@ -975,37 +1162,54 @@ class _PropertyEditorState extends State<PropertyEditor> {
             _Section(
               title: isLand
                   ? 'Asking price'
-                  : isCommercialProperty
+                  : hasStays || hasVenues
+                      ? 'Rates and capacity'
+                      : isCommercialProperty
                       ? 'Rental details'
                       : 'Pricing and rooms',
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _field(
-                          _rent,
-                          isLand
-                              ? 'Asking price'
-                              : _intent == 'Sale'
-                                  ? 'Price'
-                                  : 'Monthly rent',
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      if (!isLand) ...[
-                        const SizedBox(width: 10),
+                  if (hasHomes || (!hasStays && !hasVenues))
+                    Row(
+                      children: [
                         Expanded(
                           child: _field(
-                            _deposit,
-                            'Deposit',
+                            _rent,
+                            isLand
+                                ? 'Asking price'
+                                : _intent == 'Sale'
+                                    ? 'Price'
+                                    : 'Monthly rent',
                             keyboardType: TextInputType.number,
                           ),
                         ),
+                        if (!isLand) ...[
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _field(
+                              _deposit,
+                              'Deposit',
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                  if (!isLand && !isCommercialProperty)
+                    ),
+                  if (hasStays)
+                    _field(
+                      _nightlyRate,
+                      'From price per night (USD)',
+                      keyboardType: TextInputType.number,
+                    ),
+                  if (hasVenues)
+                    _field(
+                      _eventRate,
+                      'From price per event (USD)',
+                      keyboardType: TextInputType.number,
+                    ),
+                  if (!isLand &&
+                      (!isCommercialProperty || hasStays) &&
+                      (hasHomes || hasStays || (!hasHomes && !hasVenues)))
                     Row(
                       children: [
                         Expanded(
@@ -1028,6 +1232,81 @@ class _PropertyEditorState extends State<PropertyEditor> {
                 ],
               ),
             ),
+            if (hasStays || hasVenues)
+              _Section(
+                title: 'Stay & venue details',
+                child: Column(
+                  children: [
+                    if (hasStays) ...[
+                      _field(
+                        _maxGuests,
+                        'Maximum guests',
+                        keyboardType: TextInputType.number,
+                        requiredField: false,
+                      ),
+                      _field(
+                        _roomTypes,
+                        'Rooms / accommodation types (one per line)',
+                        maxLines: 3,
+                        requiredField: false,
+                      ),
+                      _field(
+                        _listingAmenities,
+                        'Amenities (comma separated)',
+                        maxLines: 2,
+                        requiredField: false,
+                      ),
+                      _field(
+                        _activities,
+                        'Activities (comma separated)',
+                        maxLines: 2,
+                        requiredField: false,
+                      ),
+                    ],
+                    if (hasVenues) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _field(
+                              _weddingCapacity,
+                              'Wedding capacity',
+                              keyboardType: TextInputType.number,
+                              requiredField: false,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _field(
+                              _conferenceCapacity,
+                              'Conference capacity',
+                              keyboardType: TextInputType.number,
+                              requiredField: false,
+                            ),
+                          ),
+                        ],
+                      ),
+                      _field(
+                        _venueFeatures,
+                        'Venue features (comma separated)',
+                        maxLines: 2,
+                        requiredField: false,
+                      ),
+                      _switch(
+                        'Catering available',
+                        _cateringAvailable,
+                        (value) =>
+                            setState(() => _cateringAvailable = value),
+                      ),
+                      _switch(
+                        'Guest accommodation available',
+                        _guestAccommodation,
+                        (value) =>
+                            setState(() => _guestAccommodation = value),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             if (isLand)
               _Section(
                 title: 'Land / stand details',
@@ -1440,10 +1719,21 @@ class _PropertyEditorState extends State<PropertyEditor> {
     }
   }
 
+  List<String> _splitDetailList(String value, {bool linesOnly = false}) {
+    final parts = value.split(linesOnly ? '\n' : RegExp(r'[,\n]'));
+    return parts
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final isLandListing = _type == 'land';
     final isCommercialProperty = _type == 'office' || _type == 'shop';
+    final hasHomes = _listingCategories.contains('homes');
+    final hasStays = _listingCategories.contains('stays');
+    final hasVenues = _listingCategories.contains('venues');
     final hasLatitude = _latitude.text.trim().isNotEmpty;
     final hasLongitude = _longitude.text.trim().isNotEmpty;
     if (hasLatitude != hasLongitude) {
@@ -1461,17 +1751,42 @@ class _PropertyEditorState extends State<PropertyEditor> {
       longitude: _longitude.text.trim(),
       showExactLocation: _showExactLocation,
       listingIntent: _intent.toLowerCase(),
+      listingCategories: _listingCategories.toList(growable: false),
+      listingDetails: {
+        'nightly_rate': hasStays ? _nightlyRate.text.trim() : '',
+        'event_rate': hasVenues ? _eventRate.text.trim() : '',
+        'room_types': hasStays ? _splitDetailList(_roomTypes.text, linesOnly: true) : <String>[],
+        'amenities': hasStays ? _splitDetailList(_listingAmenities.text) : <String>[],
+        'activities': hasStays ? _splitDetailList(_activities.text) : <String>[],
+        'venue_features':
+            hasVenues ? _splitDetailList(_venueFeatures.text) : <String>[],
+        'max_guests': hasStays ? _maxGuests.text.trim() : '',
+        'wedding_capacity': hasVenues ? _weddingCapacity.text.trim() : '',
+        'conference_capacity':
+            hasVenues ? _conferenceCapacity.text.trim() : '',
+        'catering_available': hasVenues && _cateringAvailable,
+        'guest_accommodation': hasVenues && _guestAccommodation,
+      },
       accommodationInstitution: _accommodationInstitution.text.trim(),
       sharedRoom:
           _sharedRoom && (_type == 'room' || _type == 'student_accommodation'),
-      monthlyRent: _rent.text.trim(),
-      depositRequired: isLandListing ? '' : _deposit.text.trim(),
+      monthlyRent: hasHomes || (!hasStays && !hasVenues)
+          ? _rent.text.trim()
+          : hasStays
+              ? _nightlyRate.text.trim()
+              : _eventRate.text.trim(),
+      depositRequired:
+          isLandListing || !hasHomes ? '' : _deposit.text.trim(),
       propertyType: _type,
       ownerId: _ownerId,
-      bedrooms: isLandListing || isCommercialProperty
+      bedrooms: isLandListing ||
+              (isCommercialProperty && !hasStays) ||
+              (!hasHomes && !hasStays)
           ? 0
           : int.tryParse(_beds.text) ?? 0,
-      bathrooms: isLandListing || isCommercialProperty
+      bathrooms: isLandListing ||
+              (isCommercialProperty && !hasStays) ||
+              (!hasHomes && !hasStays)
           ? 0
           : num.tryParse(_baths.text) ?? 1,
       description: _description.text.trim(),

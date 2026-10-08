@@ -41,6 +41,12 @@ String textValue(
   return '$value';
 }
 
+List<String> _listingCategoriesFromJson(Object? value) {
+  if (value is! List) return const ['homes'];
+  final categories = value.whereType<String>().toList(growable: false);
+  return categories.isEmpty ? const ['homes'] : categories;
+}
+
 String titleize(Object? value) {
   final raw = '$value'.replaceAll('_', ' ').trim();
   if (raw.isEmpty || raw == 'null') return '';
@@ -254,6 +260,8 @@ class PropertyListing {
     required this.latitude,
     required this.longitude,
     required this.showExactLocation,
+    this.listingCategories = const ['homes'],
+    this.listingDetails = const {},
     required this.listingIntent,
     required this.availabilityStatus,
     required this.monthlyRent,
@@ -315,6 +323,10 @@ class PropertyListing {
       latitude: _coordinateValue(json, 'latitude', 0),
       longitude: _coordinateValue(json, 'longitude', 1),
       showExactLocation: json['show_exact_location'] == true,
+      listingCategories: _listingCategoriesFromJson(json['listing_categories']),
+      listingDetails: json['listing_details'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(json['listing_details'] as Map)
+          : const {},
       listingIntent: textValue(json, 'listing_intent', 'rent'),
       availabilityStatus: textValue(json, 'availability_status', 'available'),
       monthlyRent: textValue(json, 'monthly_rent', '0'),
@@ -389,6 +401,8 @@ class PropertyListing {
   final num? latitude;
   final num? longitude;
   final bool showExactLocation;
+  final List<String> listingCategories;
+  final Map<String, dynamic> listingDetails;
   final String listingIntent;
   final String availabilityStatus;
   final String monthlyRent;
@@ -439,9 +453,33 @@ class PropertyListing {
   final NeighborhoodData neighborhood;
 
   AccountUser? get supplier => agent ?? owner;
-  String get rentLabel => listingIntent == 'sale'
-      ? money(monthlyRent)
-      : money(monthlyRent, suffix: '/ month');
+  bool get isStay => listingCategories.contains('stays');
+  bool get isVenue => listingCategories.contains('venues');
+  bool get isStayOrVenue => isStay || isVenue;
+  String get nightlyRate => textValue(listingDetails, 'nightly_rate');
+  String get eventRate => textValue(listingDetails, 'event_rate');
+  List<String> get roomTypes => _listingDetailList('room_types');
+  List<String> get listingAmenities => _listingDetailList('amenities');
+  List<String> get activities => _listingDetailList('activities');
+  List<String> get venueFeatures => _listingDetailList('venue_features');
+  int get maxGuests => _listingDetailInt('max_guests');
+  int get weddingCapacity => _listingDetailInt('wedding_capacity');
+  int get conferenceCapacity => _listingDetailInt('conference_capacity');
+  bool get cateringAvailable =>
+      listingDetails['catering_available'] == true;
+  bool get guestAccommodation =>
+      listingDetails['guest_accommodation'] == true;
+  String get rentLabel {
+    if (isStay && nightlyRate.isNotEmpty) {
+      return money(nightlyRate, suffix: '/ night');
+    }
+    if (isVenue && eventRate.isNotEmpty) {
+      return money(eventRate, suffix: '/ event');
+    }
+    return listingIntent == 'sale'
+        ? money(monthlyRent)
+        : money(monthlyRent, suffix: '/ month');
+  }
   bool get isLand => propertyType.toLowerCase().contains('land');
   bool get isStudentAccommodation =>
       propertyType.toLowerCase().contains('student accommodation');
@@ -490,6 +528,19 @@ class PropertyListing {
   num get estimatedFees => 0;
   num get moveInTotal => monthlyRentValue + depositValue + estimatedFees;
   String get moveInTotalLabel => money(moveInTotal);
+
+  List<String> _listingDetailList(String key) {
+    final values = listingDetails[key];
+    if (values is! List) return const [];
+    return values
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  int _listingDetailInt(String key) =>
+      int.tryParse('${listingDetails[key] ?? 0}') ?? 0;
 
   int get trustScore {
     if (backendTrustScore != null) return backendTrustScore!.clamp(0, 100);
@@ -895,6 +946,11 @@ class VerificationItem {
     required this.ocrConfidence,
     required this.extractedDateOfBirth,
     required this.duplicateDocument,
+    this.failureReason = '',
+    this.verificationProvider = '',
+    this.verificationScore = '',
+    this.frontDocumentUploaded = false,
+    this.backDocumentUploaded = false,
   });
 
   factory VerificationItem.fromJson(Map<String, dynamic> json) {
@@ -912,6 +968,11 @@ class VerificationItem {
       ocrConfidence: textValue(json, 'ocr_confidence'),
       extractedDateOfBirth: textValue(json, 'extracted_date_of_birth'),
       duplicateDocument: json['duplicate_document'] == true,
+      failureReason: textValue(json, 'failure_reason'),
+      verificationProvider: textValue(json, 'verification_provider'),
+      verificationScore: textValue(json, 'verification_score'),
+      frontDocumentUploaded: json['id_front_document_uploaded'] == true,
+      backDocumentUploaded: json['id_back_document_uploaded'] == true,
     );
   }
 
@@ -923,6 +984,11 @@ class VerificationItem {
   final String ocrConfidence;
   final String extractedDateOfBirth;
   final bool duplicateDocument;
+  final String failureReason;
+  final String verificationProvider;
+  final String verificationScore;
+  final bool frontDocumentUploaded;
+  final bool backDocumentUploaded;
 }
 
 class ViewingItem {

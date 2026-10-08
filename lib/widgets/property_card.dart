@@ -187,7 +187,18 @@ class PropertyCard extends StatelessWidget {
                               : CupertinoIcons.money_dollar_circle,
                           label: property.isLand
                               ? property.standSummary
-                              : '${property.moveInTotalLabel} rent + deposit',
+                              : property.isStayOrVenue
+                                  ? property.maxGuests > 0
+                                      ? 'Sleeps ${property.maxGuests} guests'
+                                      : property.isVenue &&
+                                              property.weddingCapacity > 0
+                                          ? 'Up to ${property.weddingCapacity} guests'
+                                          : property.isVenue &&
+                                                  property.conferenceCapacity >
+                                                      0
+                                              ? 'Conference up to ${property.conferenceCapacity}'
+                                              : 'Stays & events'
+                                  : '${property.moveInTotalLabel} rent + deposit',
                         ),
                       ),
                     ],
@@ -226,7 +237,11 @@ class PropertyCard extends StatelessWidget {
                             icon: CupertinoIcons.drop,
                             label: 'Water',
                           ),
-                      ] else if (!isCommercialProperty) ...[
+                      ] else if (!isCommercialProperty &&
+                          (!property.isVenue ||
+                              property.isStay ||
+                              property.listingCategories
+                                  .contains('homes'))) ...[
                         _Pill(
                           icon: CupertinoIcons.bed_double,
                           label: '${property.bedrooms} beds',
@@ -262,6 +277,23 @@ class PropertyCard extends StatelessWidget {
                         const _Pill(
                           icon: CupertinoIcons.rotate_right,
                           label: '360 tour',
+                        ),
+                      if (property.isStay)
+                        const _Pill(
+                          icon: CupertinoIcons.bed_double,
+                          label: 'Stay',
+                        ),
+                      if (property.isVenue)
+                        const _Pill(
+                          icon: CupertinoIcons.calendar,
+                          label: 'Venue',
+                        ),
+                      if (property.isVenue &&
+                          !property.isStay &&
+                          property.conferenceCapacity > 0)
+                        _Pill(
+                          icon: CupertinoIcons.person_2,
+                          label: 'Conference ${property.conferenceCapacity}',
                         ),
                     ],
                   ),

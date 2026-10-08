@@ -1,12 +1,16 @@
 import json
+import tempfile
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from .auth import issue_token_pair
+from .ai import parse_search_intent
 from .models import (
     Conversation,
     Message,
@@ -17,14 +21,18 @@ from .models import (
     SavedSearch,
     SavedSearchMatch,
     SavedProperty,
+    SecurityAuditEvent,
     User,
     Viewing,
+    VerificationRequest,
 )
 from .property_search import normalize_search_requirements
 from .views import (
     _notify_property_lifecycle_events,
     _notify_saved_search_matches,
     apply_property_filters,
+    normalize_listing_categories,
+    normalize_listing_details,
     serialize_property,
 )
 from .gemini_service import GeminiConfigurationError, GeminiService
@@ -84,6 +92,29 @@ class SupportAdminTests(TestCase):
             f"Bearer {issue_token_pair(self.admin)['access']}"
         )
 
+    def test_provisioned_support_account_is_not_a_django_superuser(self):
+        password = "7-Wayland!PrivateSupport2026"
+        with (
+            patch(
+                "builtins.input",
+                side_effect=[
+                    "private-support",
+                    "private-support@example.test",
+                    "Support Operator",
+                ],
+            ),
+            patch(
+                "rentals.management.commands.create_support_admin.getpass",
+                side_effect=[password, password],
+            ),
+        ):
+            call_command("create_support_admin")
+
+        support_user = User.objects.get(username="private-support")
+        self.assertEqual(support_user.role, User.Roles.ADMIN)
+        self.assertFalse(support_user.is_staff)
+        self.assertFalse(support_user.is_superuser)
+
     def test_admin_dashboard_is_admin_only_and_returns_aggregate_counts(self):
         response = self.client.get("/api/admin/dashboard/")
         self.assertEqual(response.status_code, 401)
@@ -97,24 +128,110 @@ class SupportAdminTests(TestCase):
         self.client.defaults["HTTP_AUTHORIZATION"] = self.admin_authorization
         response = self.client.get("/api/admin/dashboard/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["users"]["total"], 2)
+        self.assertEqual(response.json()["users"]["total"], 1)
+        self.assertEqual(response.json()["users"]["active"], 1)
 
-    def test_admin_can_edit_and_deactivate_accounts_without_erasing_them(self):
+    def test_admin_can_list_and_deactivate_accounts_without_erasing_them(self):
         self.client.defaults["HTTP_AUTHORIZATION"] = self.admin_authorization
-        response = self.client.patch(
-            f"/api/users/{self.tenant.id}/",
-            data=json.dumps({"name": "Updated Tenant", "is_verified": True}),
+        response = self.client.get("/api/users/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([user["id"] for user in response.json()["results"]], [self.tenant.id])
+
+        response = self.client.post(
+            "/api/users/",
+            data=json.dumps({"email": "new@example.test", "password": "password"}),
             content_type="application/json",
         )
-        self.assertEqual(response.status_code, 200)
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.full_name, "Updated Tenant")
-        self.assertTrue(self.tenant.is_verified)
+        self.assertEqual(response.status_code, 405)
 
         response = self.client.delete(f"/api/users/{self.tenant.id}/")
         self.assertEqual(response.status_code, 200)
         self.tenant.refresh_from_db()
         self.assertFalse(self.tenant.is_active)
+
+    def test_verification_queue_is_limited_to_unreviewed_failed_landlord_checks(self):
+        landlord = User.objects.create_user(
+            username="failed-landlord",
+            email="failed-landlord@example.test",
+            password="password",
+            role=User.Roles.LANDLORD,
+        )
+        landlord_failure = VerificationRequest.objects.create(
+            user=landlord,
+            role=User.Roles.LANDLORD,
+            status=VerificationRequest.Status.FAILED,
+            failure_reason="Document could not be matched",
+        )
+        VerificationRequest.objects.create(
+            user=self.tenant,
+            role=User.Roles.TENANT,
+            status=VerificationRequest.Status.FAILED,
+        )
+        VerificationRequest.objects.create(
+            user=landlord,
+            role=User.Roles.LANDLORD,
+            status=VerificationRequest.Status.MANUAL_REVIEW,
+        )
+
+        self.client.defaults["HTTP_AUTHORIZATION"] = self.admin_authorization
+        response = self.client.get("/api/verifications/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.json()["results"]], [str(landlord_failure.public_id)])
+
+    def test_failed_landlord_documents_require_admin_and_are_audited(self):
+        landlord = User.objects.create_user(
+            username="document-landlord",
+            email="document-landlord@example.test",
+            password="password",
+            role=User.Roles.LANDLORD,
+        )
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(
+                MEDIA_ROOT=media_root,
+                STORAGES={
+                    "default": {
+                        "BACKEND": "django.core.files.storage.FileSystemStorage"
+                    },
+                    "staticfiles": {
+                        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+                    },
+                },
+            ):
+                verification = VerificationRequest.objects.create(
+                    user=landlord,
+                    role=User.Roles.LANDLORD,
+                    status=VerificationRequest.Status.FAILED,
+                    id_front_document=SimpleUploadedFile(
+                        "id-front.png",
+                        b"private-document-preview",
+                        content_type="image/png",
+                    ),
+                )
+                path = (
+                    f"/api/verifications/{verification.public_id}/"
+                    "documents/id-front/"
+                )
+                self.client.defaults["HTTP_AUTHORIZATION"] = self.admin_authorization
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response["Cache-Control"], "private, no-store")
+                self.assertEqual(
+                    b"".join(response.streaming_content),
+                    b"private-document-preview",
+                )
+                self.assertTrue(
+                    SecurityAuditEvent.objects.filter(
+                        actor=self.admin,
+                        event_type="identity_document_admin_previewed",
+                    ).exists()
+                )
+
+                self.client.defaults["HTTP_AUTHORIZATION"] = (
+                    f"Bearer {issue_token_pair(self.tenant)['access']}"
+                )
+                denied = self.client.get(path)
+                self.assertEqual(denied.status_code, 403)
 
     def test_admin_cannot_read_private_chat_messages(self):
         conversation = Conversation.objects.create(title="Private support test")
@@ -131,6 +248,17 @@ class SupportAdminTests(TestCase):
             ).status_code,
             403,
         )
+
+    def test_admin_cannot_access_unrelated_app_management_endpoints(self):
+        self.client.defaults["HTTP_AUTHORIZATION"] = self.admin_authorization
+        for path in (
+            "/api/applications/",
+            "/api/viewings/",
+            "/api/reports/",
+            "/api/media/",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 403)
 
     def test_admin_role_cannot_be_created_through_public_registration(self):
         response = self.client.post(
@@ -465,6 +593,105 @@ class StudentAndCommercialListingTests(TestCase):
         )
 
         self.assertEqual(requirements["property_type"], "room")
+
+
+class StayVenueListingTests(TestCase):
+    def setUp(self):
+        self.landlord = User.objects.create_user(
+            username="stay-venue-landlord",
+            role=User.Roles.LANDLORD,
+            is_verified=True,
+        )
+        self.authorization = f"Bearer {issue_token_pair(self.landlord)['access']}"
+
+    def test_lodging_types_and_venue_types_are_available(self):
+        self.assertIn("lodge", Property.PropertyType.values)
+        self.assertIn("hotel", Property.PropertyType.values)
+        self.assertIn("wedding_venue", Property.PropertyType.values)
+        self.assertIn("corporate_event_space", Property.PropertyType.values)
+
+    def test_ai_search_recognizes_stay_and_venue_listing_types(self):
+        self.assertEqual(
+            parse_search_intent("Find a lodge in Harare")["property_type"],
+            "lodge",
+        )
+        self.assertEqual(
+            parse_search_intent("Self catering apartment near Bulawayo")[
+                "property_type"
+            ],
+            "self_catering_apartment",
+        )
+
+    def test_listing_categories_allow_a_property_to_be_a_stay_and_venue(self):
+        self.assertEqual(
+            normalize_listing_categories(["stays", "venues", "stays"]),
+            ["stays", "venues"],
+        )
+
+    def test_listing_details_normalize_rates_capacity_and_features(self):
+        details = normalize_listing_details({
+            "nightly_rate": "80",
+            "event_rate": "1200",
+            "room_types": ["2 x Standard rooms", "Family cottage"],
+            "amenities": ["Wi-Fi", "Swimming pool"],
+            "activities": ["Game drives", "Hiking"],
+            "venue_features": ["Outdoor venue"],
+            "max_guests": "6",
+            "wedding_capacity": "150",
+            "conference_capacity": "80",
+            "catering_available": True,
+            "guest_accommodation": True,
+        })
+
+        self.assertEqual(details["nightly_rate"], "80")
+        self.assertEqual(details["event_rate"], "1200")
+        self.assertEqual(details["max_guests"], 6)
+        self.assertEqual(details["wedding_capacity"], 150)
+        self.assertEqual(details["conference_capacity"], 80)
+        self.assertEqual(details["amenities"], ["Wi-Fi", "Swimming pool"])
+        self.assertTrue(details["catering_available"])
+
+    def test_landlord_can_create_a_lodge_for_stays_and_venues(self):
+        response = self.client.post(
+            "/api/properties/",
+            data=json.dumps({
+                "title": "Lakeview Lodge",
+                "address": "1 Lake Road",
+                "city": "Harare",
+                "suburb": "Lake Chivero",
+                "monthly_rent": "80",
+                "deposit_required": "0",
+                "property_type": "lodge",
+                "listing_categories": ["stays", "venues"],
+                "listing_details": {
+                    "nightly_rate": "80",
+                    "event_rate": "1200",
+                    "room_types": ["2 x Standard rooms", "Family cottage"],
+                    "amenities": ["Wi-Fi", "Swimming pool"],
+                    "activities": ["Game drives", "Fishing"],
+                    "venue_features": ["Outdoor venue"],
+                    "max_guests": 6,
+                    "wedding_capacity": 150,
+                    "conference_capacity": 80,
+                    "catering_available": True,
+                    "guest_accommodation": True,
+                },
+            }),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=self.authorization,
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        payload = response.json()
+        self.assertEqual(payload["listing_categories"], ["stays", "venues"])
+        self.assertEqual(payload["listing_details"]["nightly_rate"], "80")
+        self.assertEqual(payload["listing_details"]["wedding_capacity"], 150)
+
+    def test_invalid_categories_and_capacities_are_rejected(self):
+        with self.assertRaises(ValueError):
+            normalize_listing_categories(["stays", "unknown"])
+        with self.assertRaises(ValueError):
+            normalize_listing_details({"max_guests": "-1"})
 
 
 class SavedSearchAlertTests(TestCase):

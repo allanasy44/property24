@@ -248,10 +248,10 @@ def parse_search_intent(query):
     stands = re.search(r"(\d+)\s+(?:[a-z]+\s+){0,3}(?:stands?|plots?)", text)
     property_type = "land" if land_query else None
     for value in PropertyTypeValues:
-        if value in text:
+        if value.replace("_", " ") in text:
             property_type = value
             break
-    if "apartment" in text:
+    if "apartment" in text and "self catering apartment" not in text:
         property_type = "flat"
     city = next((value for value in SEARCH_CITIES if value in text), None)
     if city:
@@ -296,10 +296,30 @@ def parse_search_intent(query):
     }
 
 
-PropertyTypeValues = {
-    "house", "flat", "cottage", "room", "office", "shop",
-    "student_accommodation", "commercial_property", "land",
-}
+PropertyTypeValues = (
+    "self_catering_apartment",
+    "corporate_event_space",
+    "camping_glamping",
+    "guest_house",
+    "conference_venue",
+    "wedding_venue",
+    "holiday_home",
+    "student_accommodation",
+    "commercial_property",
+    "function_hall",
+    "party_venue",
+    "lodge",
+    "hotel",
+    "resort",
+    "cottage",
+    "office",
+    "house",
+    "flat",
+    "room",
+    "shop",
+    "garden",
+    "land",
+)
 
 
 def _search_vector(text, dimensions=64):
@@ -335,6 +355,12 @@ def rank_property_candidates(query, properties, limit=20):
             "land" if prop.property_type == "land" else "",
             "electricity" if getattr(prop, "electricity_available", False) else "",
             "water" if getattr(prop, "land_water_available", False) else "",
+            " ".join(getattr(prop, "listing_categories", []) or []),
+            " ".join(
+                str(value)
+                for value in (getattr(prop, "listing_details", {}) or {}).values()
+                if value not in (None, "", False, 0)
+            ),
             "furnished" if prop.furnished else "",
             "solar" if prop.solar_power else "",
             "borehole" if prop.borehole else "",

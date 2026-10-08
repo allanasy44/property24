@@ -274,7 +274,7 @@ class _BottomNav extends StatelessWidget {
     final items = isAdmin
         ? const [
             _NavItem(icon: CupertinoIcons.house, label: 'Dashboard'),
-            _NavItem(icon: CupertinoIcons.building_2_fill, label: 'Listings'),
+            _NavItem(icon: CupertinoIcons.person_2, label: 'Accounts'),
           ]
         : isLandlord
             ? const [
@@ -292,7 +292,7 @@ class _BottomNav extends StatelessWidget {
         icon: isAdmin
             ? CupertinoIcons.checkmark_shield
             : CupertinoIcons.chat_bubble,
-        label: isAdmin ? 'Support' : 'Messages',
+        label: isAdmin ? 'Verify' : 'Messages',
         badgeCount: isAdmin ? 0 : unreadMessages,
       ),
       const _NavItem(icon: CupertinoIcons.person_circle, label: 'Profile'),
