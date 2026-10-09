@@ -57,18 +57,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Property24State? _listenedState;
   final Set<String> _seenPropertyNotificationIds = <String>{};
 
-  static const _primary = AppTheme.accent;
   static Color get _textDark => AppTheme.textPrimary;
   static Color get _textMuted => AppTheme.textMuted;
 
-  static const _types = [
-    'Popular',
-    'Nearby',
-    'Recommended',
-    'Student stays',
-    'Shared rooms',
-    'Following',
-  ];
+  static const _discoveryModes = ['Popular', 'Nearby', 'Recommended'];
+  static const _specialViews = ['Student stays', 'Shared rooms', 'Following'];
 
   @override
   void initState() {
@@ -228,8 +221,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         }),
       );
     }
-    final displayName = state.user?.name.trim() ?? '';
-    final greeting = greetingForTime();
+    final marketTitle = switch (_market) {
+      'stays' => 'Stays',
+      'venues' => 'Venues',
+      _ => 'Properties',
+    };
+    final activeFilterCount = [
+      _type != 'Popular',
+      _studentInstitution != null,
+      _studentSharedOnly,
+      _studentVerifiedOnly,
+      _studentMaxDistanceKm != null,
+    ].where((active) => active).length;
     final sourceProperties = _type == 'Following'
         ? state.followedProperties
         : state.snapshot.properties;
@@ -416,56 +419,44 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ─── Top bar: avatar + greeting + bell ───
                     Row(
                       children: [
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (displayName.isNotEmpty) ...[
-                                Text(
-                                  '$greeting,',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    height: 1.3,
-                                    color: _textMuted,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: 0.1,
-                                  ),
+                              Text(
+                                'Explore $marketTitle',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  height: 1.2,
+                                  color: _textDark,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.5,
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  displayName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 23,
-                                    height: 1.15,
-                                    color: _textDark,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.5,
-                                  ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                switch (_market) {
+                                  'stays' =>
+                                    'Find a place to stay, near or far.',
+                                  'venues' =>
+                                    'Discover spaces for your next occasion.',
+                                  _ => 'Find a home that feels right.',
+                                },
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _textMuted,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                              ] else
-                                Text(
-                                  greeting,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 23,
-                                    height: 1.15,
-                                    color: _textDark,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
+                              ),
                             ],
                           ),
                         ),
-                        _NotificationButton(state: state),
                       ],
                     ),
 
@@ -487,7 +478,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         style: TextStyle(color: _textDark, fontSize: 14),
                         decoration: InputDecoration(
                           filled: false,
-                          hintText: 'Search properties, stays or venues',
+                          hintText: switch (_market) {
+                            'stays' => 'Search stays or locations',
+                            'venues' => 'Search venues or locations',
+                            _ => 'Search properties or locations',
+                          },
                           hintStyle: TextStyle(
                             color: _textMuted,
                             fontSize: 12.5,
@@ -510,13 +505,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                 ),
                               ),
                               IconButton(
-                                tooltip: 'Filters',
-                                onPressed: () =>
-                                    _showTrustCenter(context, state),
-                                icon: Icon(
-                                  CupertinoIcons.slider_horizontal_3,
-                                  color: _textMuted,
-                                  size: 18,
+                                tooltip: 'Sort and filters',
+                                onPressed: _showExploreFilters,
+                                icon: Badge(
+                                  isLabelVisible: activeFilterCount > 0,
+                                  label: Text('$activeFilterCount'),
+                                  child: Icon(
+                                    CupertinoIcons.slider_horizontal_3,
+                                    color: _textMuted,
+                                    size: 18,
+                                  ),
                                 ),
                               ),
                               if (state.signedIn)
@@ -594,45 +592,42 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
                     const SizedBox(height: 22),
 
-                    // ─── Pill tabs ───
-                    SizedBox(
-                      height: 44,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _types.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 10),
-                        itemBuilder: (context, index) {
-                          final type = _types[index];
-                          final selected = _type == type;
-                          return GestureDetector(
-                            onTap: () => setState(() => _type = type),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: selected ? _primary : Colors.transparent,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  type,
-                                  style: TextStyle(
-                                    color: selected ? Colors.white : _textDark,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
-                                  ),
-                                ),
+                    if (_type != 'Popular')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Row(
+                          children: [
+                            Icon(
+                              CupertinoIcons.slider_horizontal_3,
+                              size: 15,
+                              color: _textMuted,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Showing $_type',
+                              style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          );
-                        },
-                      ),
-                    ),
-
-                    const SizedBox(height: 18),
+                            const Spacer(),
+                            TextButton(
+                              onPressed: () => setState(() {
+                                _type = 'Popular';
+                                _studentInstitution = null;
+                                _studentSharedOnly = false;
+                                _studentVerifiedOnly = false;
+                                _studentMaxDistanceKm = null;
+                                _selectedArea = null;
+                              }),
+                              child: const Text('Clear'),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      const SizedBox(height: 18),
                   ],
                 ),
               ),
@@ -1115,53 +1110,125 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     setState(() => _query = query);
   }
 
-  void _showTrustCenter(BuildContext context, Property24State state) {
-    showModalBottomSheet<void>(
+  Future<void> _showExploreFilters() async {
+    final selection = await showModalBottomSheet<(String, bool)>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: AppTheme.bgCard,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Filters',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: _textDark,
+      builder: (sheetContext) {
+        var draftMode = _type;
+        var resetAll = false;
+        return StatefulBuilder(
+          builder: (context, setSheetState) => SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Sort and filters',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: _textDark,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setSheetState(() {
+                            draftMode = 'Popular';
+                            resetAll = true;
+                          });
+                        },
+                        child: const Text('Reset'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Sort by',
+                    style: TextStyle(
+                      color: _textMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final mode in _discoveryModes)
+                        _ExploreModeChip(
+                          label: mode,
+                          selected: draftMode == mode,
+                          onSelected: () => setSheetState(() {
+                            draftMode = mode;
+                            resetAll = false;
+                          }),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'More ways to explore',
+                    style: TextStyle(
+                      color: _textMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final mode in _specialViews)
+                        _ExploreModeChip(
+                          label: mode,
+                          selected: draftMode == mode,
+                          onSelected: () => setSheetState(() {
+                            draftMode = mode;
+                            resetAll = false;
+                          }),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () =>
+                          Navigator.of(sheetContext).pop((draftMode, resetAll)),
+                      child: const Text('Show results'),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            _TrustLine(
-              label: 'Identity verified',
-              value: '${state.verifiedProperties} listings',
-            ),
-            const _TrustLine(
-              label: 'Contact verified',
-              value: 'Phone and email ready',
-            ),
-            const _TrustLine(
-              label: 'Authority verified',
-              value: 'Owner or agent evidence',
-            ),
-            const _TrustLine(
-              label: 'Property verified',
-              value: 'Location and facts checked',
-            ),
-            const _TrustLine(
-              label: 'Recently verified',
-              value: 'Availability confirmation flow',
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
+    if (!mounted || selection == null) return;
+    setState(() {
+      _type = selection.$1;
+      if (selection.$2) {
+        _studentInstitution = null;
+        _studentSharedOnly = false;
+        _studentVerifiedOnly = false;
+        _studentMaxDistanceKm = null;
+        _selectedArea = null;
+      }
+    });
   }
 }
 
@@ -1482,328 +1549,6 @@ class _DiscoveryPropertySection extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _NotificationButton extends StatelessWidget {
-  const _NotificationButton({required this.state});
-
-  final Property24State state;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 44,
-      width: 44,
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: IconButton(
-        padding: EdgeInsets.zero,
-        onPressed: () => _openNotificationPanel(context, state),
-        icon: Badge(
-          isLabelVisible: state.unreadNotificationCount > 0,
-          backgroundColor: AppTheme.accent,
-          textColor: Colors.white,
-          label: Text(
-            '${state.unreadNotificationCount}',
-            style: const TextStyle(fontSize: 10),
-          ),
-          child: Icon(
-            CupertinoIcons.bell,
-            color: AppTheme.textPrimary,
-            size: 24,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-void _openNotificationPanel(BuildContext context, Property24State state) {
-  final width = MediaQuery.sizeOf(context).width;
-  showGeneralDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: Colors.black.withAlpha(71),
-    transitionDuration: const Duration(milliseconds: 260),
-    pageBuilder: (context, animation, secondaryAnimation) {
-      return Align(
-        alignment: Alignment.centerRight,
-        child: SafeArea(
-          left: false,
-          child: Material(
-            color: AppTheme.bgCard,
-            elevation: 12,
-            borderRadius: const BorderRadius.horizontal(
-              left: Radius.circular(24),
-            ),
-            child: SizedBox(
-              width: width < 560 ? width * 0.92 : 440,
-              height: double.infinity,
-              child: ListenableBuilder(
-                listenable: state,
-                builder: (_, __) => _NotificationPanel(state: state),
-              ),
-            ),
-          ),
-        ),
-      );
-    },
-    transitionBuilder: (context, animation, secondaryAnimation, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      return SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(1, 0),
-          end: Offset.zero,
-        ).animate(curved),
-        child: child,
-      );
-    },
-  );
-}
-
-class _NotificationPanel extends StatelessWidget {
-  const _NotificationPanel({required this.state});
-
-  final Property24State state;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Notifications',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Mark all as read',
-                  onPressed: state.unreadNotificationCount == 0
-                      ? null
-                      : () async {
-                          try {
-                            await state.markAllNotificationsRead();
-                          } catch (exception) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(userFacingError(exception)),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                  icon: const Icon(CupertinoIcons.checkmark_circle),
-                ),
-                IconButton(
-                  tooltip: 'Clear all notifications',
-                  onPressed: state.allNotifications.isEmpty
-                      ? null
-                      : () => _clearAll(context),
-                  icon: const Icon(CupertinoIcons.trash),
-                ),
-                IconButton(
-                  tooltip: 'Close notifications',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(CupertinoIcons.xmark),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: state.allNotifications.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No new notifications',
-                        style: TextStyle(color: AppTheme.textMuted),
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: state.allNotifications.length,
-                      separatorBuilder: (_, __) =>
-                          Divider(color: AppTheme.border),
-                      itemBuilder: (context, index) {
-                        final notification = state.allNotifications[index];
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          onTap: notification.payload['property_id'] == null
-                              ? null
-                              : () => _openNotificationProperty(
-                                  context,
-                                  state,
-                                  notification,
-                                ),
-                          leading: Icon(
-                            notification.isRead
-                                ? CupertinoIcons.bell
-                                : CupertinoIcons.bell_fill,
-                            color: notification.isRead
-                                ? AppTheme.textMuted
-                                : AppTheme.accent,
-                          ),
-                          title: Text(
-                            notification.message,
-                            style: TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontWeight: notification.isRead
-                                  ? FontWeight.w400
-                                  : FontWeight.w700,
-                            ),
-                          ),
-                          subtitle: Text(
-                            notification.createdAt,
-                            style: TextStyle(color: AppTheme.textMuted),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (!notification.isRead)
-                                IconButton(
-                                  tooltip: 'Mark as read',
-                                  onPressed: () =>
-                                      _markAsRead(context, notification.id),
-                                  icon: const Icon(
-                                    CupertinoIcons.checkmark_circle,
-                                    color: AppTheme.accent,
-                                  ),
-                                ),
-                              IconButton(
-                                tooltip: 'Clear notification',
-                                onPressed: () =>
-                                    _clearOne(context, notification.id),
-                                icon: Icon(
-                                  CupertinoIcons.trash,
-                                  color: AppTheme.textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openNotificationProperty(
-    BuildContext context,
-    Property24State state,
-    NotificationItem notification,
-  ) async {
-    final propertyId = '${notification.payload['property_id'] ?? ''}';
-    if (propertyId.isEmpty) return;
-    try {
-      await state.refresh(silent: true);
-      if (!context.mounted) return;
-      final property = state.snapshot.properties.where(
-        (item) => item.id == propertyId,
-      );
-      if (property.isEmpty) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('This property is no longer available.'),
-          ),
-        );
-        return;
-      }
-      Navigator.of(context).pop();
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => PropertyDetailScreen(property: property.first),
-        ),
-      );
-    } catch (exception) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
-      }
-    }
-  }
-
-  Future<void> _markAsRead(BuildContext context, String notificationId) async {
-    try {
-      await state.markNotificationRead(notificationId);
-    } catch (exception) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
-      }
-    }
-  }
-
-  Future<void> _clearOne(BuildContext context, String notificationId) async {
-    try {
-      await state.clearNotification(notificationId);
-    } catch (exception) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
-      }
-    }
-  }
-
-  Future<void> _clearAll(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Clear notifications?'),
-        content: const Text(
-          'All notifications will be removed from this area.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Clear all'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-    try {
-      await state.clearAllNotifications();
-    } catch (exception) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
-      }
-    }
   }
 }
 
@@ -2162,28 +1907,33 @@ class _ComparisonTray extends StatelessWidget {
   }
 }
 
-class _TrustLine extends StatelessWidget {
-  const _TrustLine({required this.label, required this.value});
+class _ExploreModeChip extends StatelessWidget {
+  const _ExploreModeChip({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
 
   final String label;
-  final String value;
+  final bool selected;
+  final VoidCallback onSelected;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: const Icon(
-        CupertinoIcons.checkmark_circle,
-        color: AppTheme.accent,
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      onSelected: (_) => onSelected(),
+      selectedColor: AppTheme.accent,
+      backgroundColor: AppTheme.bgSurface,
+      side: BorderSide(color: selected ? AppTheme.accent : AppTheme.border),
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : AppTheme.textPrimary,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
       ),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textPrimary,
-        ),
-      ),
-      subtitle: Text(value),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     );
   }
 }

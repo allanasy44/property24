@@ -14,10 +14,7 @@ import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 
 class AppScaffold extends StatefulWidget {
-  const AppScaffold({
-    required this.navigationShell,
-    super.key,
-  });
+  const AppScaffold({required this.navigationShell, super.key});
 
   final StatefulNavigationShell navigationShell;
 
@@ -93,16 +90,12 @@ class _AppScaffoldState extends State<AppScaffold> {
         _showingIncomingCallId != null ||
         _answeringIncomingCallId != null) {
       try {
-        await state.endCall(
-          targetConversation.id,
-          call.id,
-          status: 'missed',
-        );
+        await state.endCall(targetConversation.id, call.id, status: 'missed');
       } catch (exception) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(exception.toString())),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(exception.toString())));
         }
       }
       return;
@@ -124,8 +117,9 @@ class _AppScaffoldState extends State<AppScaffold> {
         break;
       }
     }
-    final callerName =
-        caller?.name.isNotEmpty == true ? caller!.name : conversation.title;
+    final callerName = caller?.name.isNotEmpty == true
+        ? caller!.name
+        : conversation.title;
     final timeout = Timer(const Duration(seconds: 60), () {
       if (mounted && _showingIncomingCallId == call.id) {
         Navigator.of(context, rootNavigator: true).pop(false);
@@ -194,21 +188,17 @@ class _AppScaffoldState extends State<AppScaffold> {
         );
       } catch (exception) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(exception.toString())),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(exception.toString())));
         }
         try {
-          await state.endCall(
-            conversation.id,
-            call.id,
-            status: 'missed',
-          );
+          await state.endCall(conversation.id, call.id, status: 'missed');
         } catch (endException) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(endException.toString())),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(endException.toString())));
           }
         }
       } finally {
@@ -221,9 +211,9 @@ class _AppScaffoldState extends State<AppScaffold> {
         await state.endCall(conversation.id, call.id, status: 'missed');
       } catch (exception) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(exception.toString())),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(exception.toString())));
         }
       }
     }
@@ -246,6 +236,7 @@ class _AppScaffoldState extends State<AppScaffold> {
         },
         isAdmin: state.user?.role == AccountRole.admin,
         unreadMessages: state.unreadMessageCount,
+        unreadNotifications: state.unreadNotificationCount,
       ),
     );
   }
@@ -257,12 +248,14 @@ class _BottomNav extends StatelessWidget {
     required this.onTap,
     required this.isAdmin,
     required this.unreadMessages,
+    required this.unreadNotifications,
   });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
   final bool isAdmin;
   final int unreadMessages;
+  final int unreadNotifications;
 
   @override
   Widget build(BuildContext context) {
@@ -296,10 +289,11 @@ class _BottomNav extends StatelessWidget {
               label: 'Home',
               branchIndex: 0,
             ),
-            const _NavItem(
+            _NavItem(
               icon: CupertinoIcons.search,
               label: 'Explore',
               branchIndex: 1,
+              badgeCount: unreadNotifications,
             ),
             const _NavItem(
               icon: CupertinoIcons.add,
@@ -321,20 +315,13 @@ class _BottomNav extends StatelessWidget {
 
     return SafeArea(
       top: false,
-      minimum: const EdgeInsets.fromLTRB(
-        16,
-        0,
-        16,
-        14,
-      ),
+      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       child: Container(
         height: 72,
         decoration: BoxDecoration(
           color: colorScheme.surface,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: colorScheme.outlineVariant.withAlpha(80),
-          ),
+          border: Border.all(color: colorScheme.outlineVariant.withAlpha(80)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(22),
@@ -344,28 +331,22 @@ class _BottomNav extends StatelessWidget {
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 7,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
           child: Row(
-            children: List.generate(
-              items.length,
-              (index) {
-                final item = items[index];
-                final selected = item.branchIndex == currentIndex;
+            children: List.generate(items.length, (index) {
+              final item = items[index];
+              final selected = item.branchIndex == currentIndex;
 
-                return Expanded(
-                  child: _BottomNavItem(
-                    item: item,
-                    selected: selected,
-                    onTap: item.isCreate
-                        ? () => _showCreateActions(context)
-                        : () => onTap(item.branchIndex!),
-                  ),
-                );
-              },
-            ),
+              return Expanded(
+                child: _BottomNavItem(
+                  item: item,
+                  selected: selected,
+                  onTap: item.isCreate
+                      ? () => _showCreateActions(context)
+                      : () => onTap(item.branchIndex!),
+                ),
+              );
+            }),
           ),
         ),
       ),
@@ -416,13 +397,11 @@ class _BottomNavItem extends StatelessWidget {
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
           margin: const EdgeInsets.symmetric(horizontal: 3),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 5,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
-            color:
-                selected ? AppTheme.accent.withAlpha(25) : Colors.transparent,
+            color: selected
+                ? AppTheme.accent.withAlpha(25)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(18),
           ),
           child: Center(
@@ -443,9 +422,7 @@ class _BottomNavItem extends StatelessWidget {
                 );
               },
               child: Column(
-                key: ValueKey(
-                  '${item.label}-$selected',
-                ),
+                key: ValueKey('${item.label}-$selected'),
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Badge(
@@ -645,8 +622,8 @@ Future<void> _runCreateAction(
     );
   } catch (exception) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(userFacingError(exception))),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
   }
 }

@@ -75,43 +75,52 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     final state = context.watch<Property24State>();
     final signedIn = state.signedIn;
     final userId = state.user?.id;
-    final services = state.snapshot.services.where((service) {
-      if (service.status != 'active') return false;
-      if (_view == 'mine' && service.owner.id != userId) return false;
-      if (_serviceCategory.isNotEmpty &&
-          service.category.toLowerCase() != _serviceCategory.toLowerCase()) {
-        return false;
-      }
-      final searchText = [
-        service.title,
-        service.category,
-        service.description,
-        service.location,
-        service.owner.name,
-      ].join(' ').toLowerCase();
-      return _query.trim().isEmpty ||
-          searchText.contains(_query.trim().toLowerCase());
-    }).toList(growable: false);
-    final jobs = state.snapshot.jobs.where((job) {
-      if (job.status != 'active') return false;
-      if (_view == 'mine' && job.owner.id != userId) return false;
-      if (_jobType.isNotEmpty && job.employmentType != _jobType) return false;
-      final searchText = [
-        job.title,
-        job.category,
-        job.description,
-        job.location,
-        job.employmentType,
-        job.owner.name,
-      ].join(' ').toLowerCase();
-      return _query.trim().isEmpty ||
-          searchText.contains(_query.trim().toLowerCase());
-    }).toList(growable: false);
-    final applications = state.snapshot.jobApplications.where((application) {
-      if (_view == 'applications') return application.applicantId == userId;
-      if (_view == 'candidates') return application.ownerId == userId;
-      return true;
-    }).toList(growable: false);
+    final services = state.snapshot.services
+        .where((service) {
+          if (service.status != 'active') return false;
+          if (_view == 'mine' && service.owner.id != userId) return false;
+          if (_serviceCategory.isNotEmpty &&
+              service.category.toLowerCase() !=
+                  _serviceCategory.toLowerCase()) {
+            return false;
+          }
+          final searchText = [
+            service.title,
+            service.category,
+            service.description,
+            service.location,
+            service.owner.name,
+          ].join(' ').toLowerCase();
+          return _query.trim().isEmpty ||
+              searchText.contains(_query.trim().toLowerCase());
+        })
+        .toList(growable: false);
+    final jobs = state.snapshot.jobs
+        .where((job) {
+          if (job.status != 'active') return false;
+          if (_view == 'mine' && job.owner.id != userId) return false;
+          if (_jobType.isNotEmpty && job.employmentType != _jobType) {
+            return false;
+          }
+          final searchText = [
+            job.title,
+            job.category,
+            job.description,
+            job.location,
+            job.employmentType,
+            job.owner.name,
+          ].join(' ').toLowerCase();
+          return _query.trim().isEmpty ||
+              searchText.contains(_query.trim().toLowerCase());
+        })
+        .toList(growable: false);
+    final applications = state.snapshot.jobApplications
+        .where((application) {
+          if (_view == 'applications') return application.applicantId == userId;
+          if (_view == 'candidates') return application.ownerId == userId;
+          return true;
+        })
+        .toList(growable: false);
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -129,26 +138,50 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            _isServices ? 'Services' : 'Jobs',
-                            style: TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontSize: 23,
-                              fontWeight: FontWeight.w800,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _isServices ? 'Services' : 'Jobs',
+                                style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 24,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _isServices
+                                    ? 'Find trusted help for everyday tasks.'
+                                    : 'Discover opportunities that fit your skills.',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: AppTheme.textMuted,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        if (signedIn)
+                        if (signedIn) ...[
+                          const SizedBox(width: 12),
                           IconButton.filled(
-                            tooltip:
-                                _isServices ? 'Offer a service' : 'Post a job',
+                            tooltip: _isServices
+                                ? 'Offer a service'
+                                : 'Post a job',
                             onPressed: _openCreateForm,
                             style: IconButton.styleFrom(
                               backgroundColor: AppTheme.accent,
                               foregroundColor: Colors.white,
+                              fixedSize: const Size(44, 44),
                             ),
                             icon: const Icon(CupertinoIcons.add),
                           ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 14),
@@ -326,8 +359,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               service != null || job != null
                   ? 'Changes saved'
                   : _isServices
-                      ? 'Service published'
-                      : 'Job posted',
+                  ? 'Service published'
+                  : 'Job posted',
             ),
           ),
         );
@@ -351,9 +384,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     try {
       await context.read<Property24State>().requestService(service, message);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Service request sent')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Service request sent')));
       }
     } catch (exception) {
       _showError(exception);
@@ -374,9 +407,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     try {
       await context.read<Property24State>().applyToJob(job, coverMessage);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Application submitted')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Application submitted')));
       }
     } catch (exception) {
       _showError(exception);
@@ -444,9 +477,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     String status,
   ) async {
     try {
-      await context
-          .read<Property24State>()
-          .updateServiceRequest(request, status);
+      await context.read<Property24State>().updateServiceRequest(
+        request,
+        status,
+      );
     } catch (exception) {
       _showError(exception);
     }
@@ -457,9 +491,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     String status,
   ) async {
     try {
-      await context
-          .read<Property24State>()
-          .updateJobApplication(application, status);
+      await context.read<Property24State>().updateJobApplication(
+        application,
+        status,
+      );
     } catch (exception) {
       _showError(exception);
     }
@@ -495,9 +530,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   void _showError(Object exception) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(userFacingError(exception))),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
   }
 }
 
@@ -729,10 +764,12 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
     final service = widget.service;
     final job = widget.job;
     _title = TextEditingController(text: service?.title ?? job?.title ?? '');
-    _category =
-        TextEditingController(text: service?.category ?? job?.category ?? '');
-    _location =
-        TextEditingController(text: service?.location ?? job?.location ?? '');
+    _category = TextEditingController(
+      text: service?.category ?? job?.category ?? '',
+    );
+    _location = TextEditingController(
+      text: service?.location ?? job?.location ?? '',
+    );
     _description = TextEditingController(
       text: service?.description ?? job?.description ?? '',
     );
@@ -768,11 +805,11 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
               Text(
                 widget.isServices
                     ? widget.service == null
-                        ? 'Offer a service'
-                        : 'Edit service'
+                          ? 'Offer a service'
+                          : 'Edit service'
                     : widget.job == null
-                        ? 'Post a job'
-                        : 'Edit job post',
+                    ? 'Post a job'
+                    : 'Edit job post',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 20,
@@ -783,12 +820,7 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
               _input(_title, widget.isServices ? 'Service name' : 'Job title'),
               _input(_category, 'Category'),
               _input(_location, 'Location'),
-              _input(
-                _description,
-                'Description',
-                minLines: 3,
-                maxLines: 5,
-              ),
+              _input(_description, 'Description', minLines: 3, maxLines: 5),
               if (widget.isServices) ...[
                 _input(
                   _price,
@@ -857,11 +889,11 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
                       : Text(
                           widget.isServices
                               ? widget.service == null
-                                  ? 'Publish service'
-                                  : 'Save changes'
+                                    ? 'Publish service'
+                                    : 'Save changes'
                               : widget.job == null
-                                  ? 'Post job'
-                                  : 'Save changes',
+                              ? 'Post job'
+                              : 'Save changes',
                         ),
                 ),
               ),
@@ -978,10 +1010,7 @@ class _ServiceCard extends StatelessWidget {
                   IconButton(
                     tooltip: 'Remove service',
                     onPressed: onDelete,
-                    icon: Icon(
-                      CupertinoIcons.trash,
-                      color: AppTheme.textMuted,
-                    ),
+                    icon: Icon(CupertinoIcons.trash, color: AppTheme.textMuted),
                   ),
                 ],
               ],
@@ -1030,10 +1059,10 @@ class _ServiceCard extends StatelessWidget {
   }
 
   String _priceLabel(String value) => switch (value) {
-        'hourly' => 'per hour',
-        'quote' => 'quote',
-        _ => 'fixed',
-      };
+    'hourly' => 'per hour',
+    'quote' => 'quote',
+    _ => 'fixed',
+  };
 }
 
 class _JobCard extends StatelessWidget {
@@ -1099,10 +1128,7 @@ class _JobCard extends StatelessWidget {
                   IconButton(
                     tooltip: 'Remove job post',
                     onPressed: onDelete,
-                    icon: Icon(
-                      CupertinoIcons.trash,
-                      color: AppTheme.textMuted,
-                    ),
+                    icon: Icon(CupertinoIcons.trash, color: AppTheme.textMuted),
                   ),
                 ],
               ],
@@ -1268,10 +1294,7 @@ Widget? _requestActions(
     spacing: 8,
     children: [
       for (final (label, value) in actions)
-        TextButton(
-          onPressed: () => onStatusChange(value),
-          child: Text(label),
-        ),
+        TextButton(onPressed: () => onStatusChange(value), child: Text(label)),
     ],
   );
 }
@@ -1302,10 +1325,7 @@ class _RequestRow extends StatelessWidget {
             Text(subtitle),
             const SizedBox(height: 4),
             Text(message),
-            if (actions != null) ...[
-              const SizedBox(height: 4),
-              actions!,
-            ],
+            if (actions != null) ...[const SizedBox(height: 4), actions!],
           ],
         ),
       ),
@@ -1331,7 +1351,7 @@ class _MarketplaceEmpty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         border: Border.all(color: AppTheme.border),
@@ -1339,20 +1359,33 @@ class _MarketplaceEmpty extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(icon, size: 30, color: AppTheme.textMuted),
-          const SizedBox(height: 10),
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withAlpha(20),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 25, color: AppTheme.accent),
+          ),
+          const SizedBox(height: 14),
           Text(
             title,
             style: TextStyle(
               color: AppTheme.textPrimary,
+              fontSize: 15,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             body,
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+              height: 1.5,
+            ),
           ),
           if (actionLabel != null && onAction != null) ...[
             const SizedBox(height: 8),

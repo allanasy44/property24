@@ -37,7 +37,7 @@ class NotificationButton extends StatelessWidget {
           child: Icon(
             CupertinoIcons.bell,
             color: AppTheme.textPrimary,
-            size: 24,
+            size: 28,
           ),
         ),
       ),

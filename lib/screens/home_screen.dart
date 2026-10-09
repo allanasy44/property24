@@ -53,15 +53,32 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      '${greetingForTime()}${name.isEmpty ? '' : ', $name'} 👋',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          greetingForTime(),
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          name.isEmpty ? 'Welcome home' : name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 28,
+                            height: 1.1,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.6,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -147,14 +164,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     onSave: () async {
                       try {
                         await context.read<Property24State>().toggleSaved(
-                              property,
-                            );
+                          property,
+                        );
                       } catch (exception) {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(userFacingError(exception)),
-                            ),
+                            SnackBar(content: Text(userFacingError(exception))),
                           );
                         }
                       }
@@ -167,11 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openExplore(
-    BuildContext context,
-    String market, {
-    String? query,
-  }) {
+  void _openExplore(BuildContext context, String market, {String? query}) {
     context.go(
       Uri(
         path: AppRoutes.exploreScreen,
@@ -185,10 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _HomeSearch extends StatelessWidget {
-  const _HomeSearch({
-    required this.controller,
-    required this.onSubmitted,
-  });
+  const _HomeSearch({required this.controller, required this.onSubmitted});
 
   final TextEditingController controller;
   final ValueChanged<String> onSubmitted;
@@ -211,10 +219,7 @@ class _HomeSearch extends StatelessWidget {
           decoration: InputDecoration(
             hintText: 'What are you looking for?',
             hintStyle: TextStyle(color: AppTheme.textMuted, fontSize: 13),
-            prefixIcon: Icon(
-              CupertinoIcons.search,
-              color: AppTheme.textMuted,
-            ),
+            prefixIcon: Icon(CupertinoIcons.search, color: AppTheme.textMuted),
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
             focusedBorder: InputBorder.none,
@@ -316,7 +321,10 @@ class _EmptyRecommendations extends StatelessWidget {
             style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
           ),
           const SizedBox(height: 8),
-          TextButton(onPressed: onExplore, child: const Text('Explore listings')),
+          TextButton(
+            onPressed: onExplore,
+            child: const Text('Explore listings'),
+          ),
         ],
       ),
     );
