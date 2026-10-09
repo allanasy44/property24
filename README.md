@@ -28,6 +28,8 @@ Mobile-first Flutter property platform for Zimbabwean property discovery, applic
 
 Frontend:
 
+Use Flutter stable with Dart 3.10 or newer.
+
 ```bash
 flutter pub get
 flutter run -d chrome --web-port 8093 \

@@ -180,7 +180,7 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
             final verifications = snapshot.data!
                 .where((item) =>
                     item.role.toLowerCase() == 'landlord' &&
-                    {'failed', 'rejected'}.contains(item.status.toLowerCase()))
+                    {'failed', 'rejected'}.contains(item.status.toLowerCase()),)
                 .toList(growable: false);
             if (verifications.isEmpty) {
               return ListView(

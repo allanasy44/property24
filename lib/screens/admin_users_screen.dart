@@ -136,7 +136,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: AppTheme.accent.withValues(alpha: .12),
-                      child: Icon(
+                      child: const Icon(
                         CupertinoIcons.person,
                         color: AppTheme.accent,
                       ),

@@ -13,9 +13,14 @@ import '../theme/app_theme.dart';
 import '../widgets/inprop_brand.dart';
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({required this.role, super.key});
+  const AuthScreen({
+    required this.role,
+    this.initialIntent = 'explore',
+    super.key,
+  });
 
   final AccountRole role;
+  final String initialIntent;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -49,6 +54,12 @@ class _AuthScreenState extends State<AuthScreen> {
     _emailCode.dispose();
     super.dispose();
   }
+
+  List<String> get _propertyListingCapability =>
+      widget.initialIntent == 'list-property' &&
+              widget.role != AccountRole.admin
+          ? const ['list_properties']
+          : const [];
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +148,7 @@ class _AuthScreenState extends State<AuthScreen> {
         Text(
           widget.role == AccountRole.admin
               ? 'Property24\nSupport'
-              : 'Find a place\nthat feels like home.',
+              : 'One account.\nMany possibilities.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppTheme.textPrimary,
@@ -151,7 +162,7 @@ class _AuthScreenState extends State<AuthScreen> {
         Text(
           widget.role == AccountRole.admin
               ? 'Sign in to the private support workspace.'
-              : 'Discover the right property for your next chapter.',
+              : 'Explore properties, stays, venues, services and jobs—or share what you offer.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppTheme.textSecondary,
@@ -177,6 +188,17 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
           const SizedBox(height: 14),
           _socialButtons(),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ],
       ],
     );
@@ -274,14 +296,26 @@ class _AuthScreenState extends State<AuthScreen> {
       _error = null;
     });
     try {
-      await context.read<Property24State>().signInWithGoogle(widget.role);
+      await context.read<Property24State>().signInWithGoogle(
+            _registering && widget.role != AccountRole.admin
+                ? widget.role
+                : null,
+            marketplaceCapabilities: _propertyListingCapability,
+          );
       if (mounted) context.go(AppRoutes.homeScreen);
     } catch (exception) {
       if (mounted) {
+        final message = exception is ApiException
+            ? exception.message
+            : userFacingError(exception);
         setState(() {
-          _error = exception is ApiException
-              ? exception.message
-              : userFacingError(exception);
+          if (message.toLowerCase().contains('choose an account type')) {
+            _registering = true;
+            _showForm = true;
+            _error = 'Choose Sign up to create your marketplace account.';
+          } else {
+            _error = message;
+          }
         });
       }
     } finally {
@@ -311,7 +345,9 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 8),
           Center(
             child: Text(
-              '${widget.role.label} account',
+              _registering
+                  ? 'One account to explore the marketplace and get started with what you need.'
+                  : 'Sign in to continue where you left off.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppTheme.textSecondary,
@@ -522,7 +558,9 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (widget.role == AccountRole.admin && _registering) {
-      setState(() => _error = 'Support accounts are provisioned on the server.');
+      setState(
+        () => _error = 'Support accounts are provisioned on the server.',
+      );
       return;
     }
     setState(() {
@@ -546,6 +584,7 @@ class _AuthScreenState extends State<AuthScreen> {
           name: _name.text.trim(),
           email: _email.text.trim(),
           password: _password.text,
+          marketplaceCapabilities: _propertyListingCapability,
         );
         if (!mounted) return;
         setState(() => _showForm = true);
@@ -556,11 +595,7 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         );
       } else {
-        await state.signIn(
-          _email.text.trim(),
-          _password.text,
-          role: widget.role,
-        );
+        await state.signIn(_email.text.trim(), _password.text);
         if (mounted) context.go(AppRoutes.homeScreen);
       }
     } catch (exception) {

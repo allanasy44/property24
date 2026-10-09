@@ -24,7 +24,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final PageController _pageController = PageController();
 
   int _currentPage = 0;
-  bool _showRoleSelection = true;
+  bool _showIntentSelection = true;
 
   late AnimationController _fadeController;
   late AnimationController _slideController;
@@ -40,30 +40,30 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg',
       semanticLabel:
           'Modern luxury apartment interior with floor-to-ceiling windows and contemporary furniture in Lagos',
-      headline: 'Find Your\nPerfect Home',
+      headline: 'Find Your\nNext Place',
       subtitle:
-          'Discover thousands of verified properties across Lagos — from cozy studios to luxury penthouses.',
-      accentWord: 'Perfect',
+          'Explore homes, short stays, event venues, local services, and work opportunities in one marketplace.',
+      accentWord: 'Next',
     ),
     const _OnboardSlide(
       imageUrl:
           'https://images.pexels.com/photos/2029694/pexels-photo-2029694.jpeg',
       semanticLabel:
           'Elegant modern house with trust verification shield overlay concept',
-      headline: 'Trust Before\nYou Rent',
+      headline: 'Find What\nFits Your Plans',
       subtitle:
-          'Every property has a Trust Score. Know exactly who you\'re dealing with before signing anything.',
-      accentWord: 'Trust',
+          'Compare property and accommodation options, discover useful services, and connect with the right people.',
+      accentWord: 'Fits',
     ),
     const _OnboardSlide(
       imageUrl:
           'https://images.pexels.com/photos/3288103/pexels-photo-3288103.jpeg',
       semanticLabel:
           'Luxury penthouse with city views representing premium property listing',
-      headline: 'List & Earn\nMore',
+      headline: 'Build Your\nMarketplace',
       subtitle:
-          'Landlords and agents — get verified, list your properties, and connect with serious tenants.',
-      accentWord: 'Earn',
+          'List a property, stay, or venue, offer a service, or share a job opportunity when you are ready.',
+      accentWord: 'Marketplace',
     ),
   ];
 
@@ -116,13 +116,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       );
     } else {
       setState(() {
-        _showRoleSelection = true;
+        _showIntentSelection = true;
       });
     }
   }
 
-  void _selectRole(String role) {
-    context.go('/auth/$role');
+  void _selectIntent(String intent) {
+    context.go('/auth/$intent');
   }
 
   void _redirectSignedInUser() {
@@ -162,9 +162,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       backgroundColor: AppTheme.bg,
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 500),
-        child: _showRoleSelection
-            ? _RoleSelectionView(
-                onRoleSelected: _selectRole,
+        child: _showIntentSelection
+            ? _GettingStartedView(
+                onIntentSelected: _selectIntent,
               )
             : _OnboardingView(
                 slides: _slides,
@@ -186,7 +186,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 onNext: _nextPage,
                 onSkip: () {
                   setState(() {
-                    _showRoleSelection = true;
+                    _showIntentSelection = true;
                   });
                 },
               ),
@@ -207,14 +207,14 @@ class _BrandLaunchScreen extends StatefulWidget {
 class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
     with SingleTickerProviderStateMixin {
   static const _headlines = [
-    'Find rentals across Zimbabwe.',
-    'Know before you go.',
-    'Find your fit. List your space.',
+    'One marketplace for your next step.',
+    'Find places, stays, services and work.',
+    'Share what you have to offer.',
   ];
   static const _descriptions = [
-    'Explore houses, flats and rooms in cities and towns.',
-    'Compare rent and location, contact landlords and request viewings.',
-    'Find student stays and shared rooms. List homes, shops and offices.',
+    'Explore property, accommodation, events, local services, and jobs.',
+    'Search in one place and connect directly with people.',
+    'List a property, offer a service, or post a job when you are ready.',
   ];
 
   late final AnimationController _controller;
@@ -720,20 +720,20 @@ class _OnboardingView extends StatelessWidget {
   }
 }
 
-class _RoleSelectionView extends StatefulWidget {
-  final ValueChanged<String> onRoleSelected;
+class _GettingStartedView extends StatefulWidget {
+  final ValueChanged<String> onIntentSelected;
 
-  const _RoleSelectionView({
-    required this.onRoleSelected,
+  const _GettingStartedView({
+    required this.onIntentSelected,
   });
 
   @override
-  State<_RoleSelectionView> createState() => _RoleSelectionViewState();
+  State<_GettingStartedView> createState() => _GettingStartedViewState();
 }
 
-class _RoleSelectionViewState extends State<_RoleSelectionView>
+class _GettingStartedViewState extends State<_GettingStartedView>
     with SingleTickerProviderStateMixin {
-  String? _selectedRole;
+  String? _selectedIntent;
 
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
@@ -790,16 +790,34 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Tenant card
-                    _RoleCard(
-                      role: 'tenant',
-                      title: "I'm looking for properties",
-                      subtitle: '',
+                    Text(
+                      'What would you like to do first?',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        color: AppTheme.textPrimary,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Choose a starting point. You can still explore every marketplace after creating your account.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        color: AppTheme.textSecondary,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _IntentCard(
+                      title: 'Find a place, stay, service or job',
+                      subtitle: 'Explore all the ways this marketplace can help.',
                       icon: CupertinoIcons.search,
-                      isSelected: _selectedRole == 'tenant',
+                      isSelected: _selectedIntent == 'explore',
                       onTap: () {
                         setState(() {
-                          _selectedRole = 'tenant';
+                          _selectedIntent = 'explore';
                         });
                       },
                       gradientColors: const [
@@ -810,16 +828,14 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
 
                     const SizedBox(height: 16),
 
-                    // Landlord card
-                    _RoleCard(
-                      role: 'landlord',
-                      title: "I'm providing properties",
-                      subtitle: '',
+                    _IntentCard(
+                      title: 'List a property, stay or venue',
+                      subtitle: 'Connect your listing with people looking for it.',
                       icon: CupertinoIcons.building_2_fill,
-                      isSelected: _selectedRole == 'landlord',
+                      isSelected: _selectedIntent == 'list-property',
                       onTap: () {
                         setState(() {
-                          _selectedRole = 'landlord';
+                          _selectedIntent = 'list-property';
                         });
                       },
                       gradientColors: const [
@@ -830,47 +846,45 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
 
                     const SizedBox(height: 20),
 
-                    // Continue button
+                    _IntentCard(
+                      title: 'Offer a service or post a job',
+                      subtitle: 'Share what you offer or the opportunity you have.',
+                      icon: CupertinoIcons.briefcase,
+                      isSelected: _selectedIntent == 'offer-service',
+                      onTap: () {
+                        setState(() {
+                          _selectedIntent = 'offer-service';
+                        });
+                      },
+                      gradientColors: const [
+                        AppTheme.accent,
+                        AppTheme.accentTeal,
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
                     AnimatedOpacity(
-                      opacity: _selectedRole != null ? 1.0 : 0.4,
+                      opacity: _selectedIntent != null ? 1.0 : 0.4,
                       duration: const Duration(milliseconds: 300),
-                      child: GestureDetector(
-                        onTap: _selectedRole != null
-                            ? () => widget.onRoleSelected(
-                                  _selectedRole!,
-                                )
-                            : null,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 18,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                AppTheme.accent,
-                                AppTheme.accentTeal,
-                              ],
+                      child: SizedBox(
+                        height: 56,
+                        child: FilledButton(
+                          onPressed: _selectedIntent == null
+                              ? null
+                              : () => widget.onIntentSelected(_selectedIntent!),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppTheme.accent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: _selectedRole != null
-                                ? [
-                                    BoxShadow(
-                                      color: AppTheme.accent.withAlpha(77),
-                                      blurRadius: 24,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ]
-                                : [],
                           ),
-                          child: Center(
-                            child: Text(
-                              'Continue',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          child: Text(
+                            'Continue',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -887,24 +901,7 @@ class _RoleSelectionViewState extends State<_RoleSelectionView>
   }
 }
 
-class _SessionGateView extends StatelessWidget {
-  const _SessionGateView();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.bg,
-      body: const SafeArea(
-        child: Center(
-          child: InPropBrand(),
-        ),
-      ),
-    );
-  }
-}
-
-class _RoleCard extends StatelessWidget {
-  final String role;
+class _IntentCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final IconData icon;
@@ -912,8 +909,7 @@ class _RoleCard extends StatelessWidget {
   final VoidCallback onTap;
   final List<Color> gradientColors;
 
-  const _RoleCard({
-    required this.role,
+  const _IntentCard({
     required this.title,
     required this.subtitle,
     required this.icon,
@@ -927,10 +923,8 @@ class _RoleCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(
-          milliseconds: 250,
-        ),
-        padding: const EdgeInsets.all(24),
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: isSelected ? gradientColors[0].withAlpha(26) : AppTheme.bgCard,
           borderRadius: BorderRadius.circular(20),
@@ -950,25 +944,16 @@ class _RoleCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Icon container
             Container(
-              width: 56,
-              height: 56,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: gradientColors,
-                ),
-                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(colors: gradientColors),
+                borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(
-                icon,
-                color: Colors.white,
-                size: 26,
-              ),
+              child: Icon(icon, color: Colors.white, size: 24),
             ),
-
-            const SizedBox(width: 18),
-
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -976,32 +961,26 @@ class _RoleCard extends StatelessWidget {
                   Text(
                     title,
                     style: GoogleFonts.poppins(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: AppTheme.textPrimary,
                     ),
                   ),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        color: AppTheme.textSecondary,
-                        height: 1.4,
-                      ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                      height: 1.35,
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
-
-            const SizedBox(width: 12),
-
+            const SizedBox(width: 10),
             AnimatedContainer(
-              duration: const Duration(
-                milliseconds: 250,
-              ),
+              duration: const Duration(milliseconds: 250),
               width: 22,
               height: 22,
               decoration: BoxDecoration(
@@ -1021,6 +1000,22 @@ class _RoleCard extends StatelessWidget {
                   : null,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionGateView extends StatelessWidget {
+  const _SessionGateView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: const SafeArea(
+        child: Center(
+          child: InPropBrand(),
         ),
       ),
     );

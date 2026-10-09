@@ -197,16 +197,15 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 26),
-                  Text(
-                    [supplier.role.label, supplier.email]
-                        .where((value) => value.trim().isNotEmpty)
-                        .join(' at '),
-                    style: TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
+                  if (supplier.email.isNotEmpty)
+                    Text(
+                      supplier.email,
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
                   if (supplier.bio.trim().isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Text(

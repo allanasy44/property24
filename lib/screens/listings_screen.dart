@@ -12,7 +12,14 @@ import '../widgets/property_card.dart';
 import 'property_detail_screen.dart';
 
 class ListingsScreen extends StatefulWidget {
-  const ListingsScreen({super.key});
+  const ListingsScreen({
+    this.initialCategories = const ['homes'],
+    this.openComposerOnOpen = false,
+    super.key,
+  });
+
+  final List<String> initialCategories;
+  final bool openComposerOnOpen;
 
   @override
   State<ListingsScreen> createState() => _ListingsScreenState();
@@ -28,6 +35,16 @@ class _ListingsScreenState extends State<ListingsScreen> {
   static Color get _textMuted => AppTheme.textMuted;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.openComposerOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openEditor(context);
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -36,9 +53,14 @@ class _ListingsScreenState extends State<ListingsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    final isLandlord = state.user?.role == AccountRole.landlord;
+    final isLandlord = state.canManageListings;
     final displayName = state.user?.name.trim() ?? '';
-    final listings = state.snapshot.properties.where((property) {
+    final accountListings = state.snapshot.properties.where(
+      (property) =>
+          property.owner?.id == state.user?.id ||
+          property.agent?.id == state.user?.id,
+    );
+    final listings = accountListings.where((property) {
       final haystack = [
         property.title,
         property.description,
@@ -205,7 +227,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
               ),
             ),
             const SliverToBoxAdapter(child: ErrorBanner()),
-            if (state.snapshot.properties.isEmpty)
+            if (listings.isEmpty && accountListings.isEmpty)
               const SliverFillRemaining(
                 child: EmptyState(
                   icon: CupertinoIcons.house,
@@ -255,7 +277,10 @@ class _ListingsScreenState extends State<ListingsScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (_) => PropertyEditor(property: property),
+        builder: (_) => PropertyEditor(
+          property: property,
+          initialCategories: widget.initialCategories,
+        ),
       ),
     );
   }
@@ -566,9 +591,14 @@ class _ListingMetric extends StatelessWidget {
 }
 
 class PropertyEditor extends StatefulWidget {
-  const PropertyEditor({this.property, super.key});
+  const PropertyEditor({
+    this.property,
+    this.initialCategories = const ['homes'],
+    super.key,
+  });
 
   final PropertyListing? property;
+  final List<String> initialCategories;
 
   @override
   State<PropertyEditor> createState() => _PropertyEditorState();
@@ -641,12 +671,14 @@ class _PropertyEditorState extends State<PropertyEditor> {
     final state = context.read<Property24State>();
     final token = state.token;
     _adminLandlords = state.user?.role == AccountRole.admin && token != null
-        ? Property24Api()
-            .adminUsers(token)
-            .then((users) => users
-                .where((user) =>
-                    user['role'] == 'landlord' && user['active'] == true)
-                .toList(growable: false))
+        ? Property24Api().adminUsers(token).then(
+              (users) => users
+                  .where(
+                    (user) =>
+                        user['role'] == 'landlord' && user['active'] == true,
+                  )
+                  .toList(growable: false),
+            )
         : Future.value(const <Map<String, dynamic>>[]);
     final property = widget.property;
     _title = TextEditingController(text: property?.title ?? '');
@@ -684,8 +716,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _venueFeatures = TextEditingController(
       text: property?.venueFeatures.join(', ') ?? '',
     );
-    _maxGuests =
-        TextEditingController(text: '${property?.maxGuests ?? ''}');
+    _maxGuests = TextEditingController(text: '${property?.maxGuests ?? ''}');
     _weddingCapacity =
         TextEditingController(text: '${property?.weddingCapacity ?? ''}');
     _conferenceCapacity = TextEditingController(
@@ -717,9 +748,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _tour = property?.has360Tour ?? false;
     _showExactLocation = property?.showExactLocation ?? false;
     _sharedRoom = property?.sharedRoom ?? false;
-    _listingCategories = {
-      ...?property?.listingCategories,
-    };
+    _listingCategories = property == null
+        ? widget.initialCategories.toSet()
+        : {...property.listingCategories};
     if (_listingCategories.isEmpty) _listingCategories = {'homes'};
     if (_listingCategories.contains('stays') ||
         _listingCategories.contains('venues')) {
@@ -907,11 +938,10 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: DropdownButtonFormField<String>(
-                            value: _ownerId,
+                            initialValue: _ownerId,
                             decoration: _inputDeco('Listing owner'),
                             items: [
-                              for (final landlord
-                                  in snapshot.data ?? const [])
+                              for (final landlord in snapshot.data ?? const [])
                                 DropdownMenuItem(
                                   value: '${landlord['id']}',
                                   child: Text(
@@ -1165,8 +1195,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
                   : hasStays || hasVenues
                       ? 'Rates and capacity'
                       : isCommercialProperty
-                      ? 'Rental details'
-                      : 'Pricing and rooms',
+                          ? 'Rental details'
+                          : 'Pricing and rooms',
               child: Column(
                 children: [
                   if (hasHomes || (!hasStays && !hasVenues))
@@ -1294,14 +1324,12 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       _switch(
                         'Catering available',
                         _cateringAvailable,
-                        (value) =>
-                            setState(() => _cateringAvailable = value),
+                        (value) => setState(() => _cateringAvailable = value),
                       ),
                       _switch(
                         'Guest accommodation available',
                         _guestAccommodation,
-                        (value) =>
-                            setState(() => _guestAccommodation = value),
+                        (value) => setState(() => _guestAccommodation = value),
                       ),
                     ],
                   ],
@@ -1488,8 +1516,10 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       ),
                       OutlinedButton.icon(
                         onPressed: _pickPhoto,
-                        icon: const Icon(CupertinoIcons.photo_on_rectangle,
-                            size: 18),
+                        icon: const Icon(
+                          CupertinoIcons.photo_on_rectangle,
+                          size: 18,
+                        ),
                         label: const Text('Photos'),
                       ),
                     ],
@@ -1537,8 +1567,10 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
-                        leading: const Icon(CupertinoIcons.photo,
-                            color: AppTheme.accent),
+                        leading: const Icon(
+                          CupertinoIcons.photo,
+                          color: AppTheme.accent,
+                        ),
                         title: Text(
                           file.name,
                           maxLines: 1,
@@ -1578,8 +1610,10 @@ class _PropertyEditorState extends State<PropertyEditor> {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,
-                      leading: const Icon(CupertinoIcons.film,
-                          color: AppTheme.accent),
+                      leading: const Icon(
+                        CupertinoIcons.film,
+                        color: AppTheme.accent,
+                      ),
                       title: Text(
                         _newVideo!.name,
                         maxLines: 1,
@@ -1755,15 +1789,18 @@ class _PropertyEditorState extends State<PropertyEditor> {
       listingDetails: {
         'nightly_rate': hasStays ? _nightlyRate.text.trim() : '',
         'event_rate': hasVenues ? _eventRate.text.trim() : '',
-        'room_types': hasStays ? _splitDetailList(_roomTypes.text, linesOnly: true) : <String>[],
-        'amenities': hasStays ? _splitDetailList(_listingAmenities.text) : <String>[],
-        'activities': hasStays ? _splitDetailList(_activities.text) : <String>[],
+        'room_types': hasStays
+            ? _splitDetailList(_roomTypes.text, linesOnly: true)
+            : <String>[],
+        'amenities':
+            hasStays ? _splitDetailList(_listingAmenities.text) : <String>[],
+        'activities':
+            hasStays ? _splitDetailList(_activities.text) : <String>[],
         'venue_features':
             hasVenues ? _splitDetailList(_venueFeatures.text) : <String>[],
         'max_guests': hasStays ? _maxGuests.text.trim() : '',
         'wedding_capacity': hasVenues ? _weddingCapacity.text.trim() : '',
-        'conference_capacity':
-            hasVenues ? _conferenceCapacity.text.trim() : '',
+        'conference_capacity': hasVenues ? _conferenceCapacity.text.trim() : '',
         'catering_available': hasVenues && _cateringAvailable,
         'guest_accommodation': hasVenues && _guestAccommodation,
       },
@@ -1775,8 +1812,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
           : hasStays
               ? _nightlyRate.text.trim()
               : _eventRate.text.trim(),
-      depositRequired:
-          isLandListing || !hasHomes ? '' : _deposit.text.trim(),
+      depositRequired: isLandListing || !hasHomes ? '' : _deposit.text.trim(),
       propertyType: _type,
       ownerId: _ownerId,
       bedrooms: isLandListing ||

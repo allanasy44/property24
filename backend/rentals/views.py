@@ -41,6 +41,8 @@ from .models import (
     Conversation,
     DisputeReport,
     EmailVerificationOTP,
+    JobApplication,
+    JobPosting,
     MediaAsset,
     NeighborhoodProfile,
     Message,
@@ -60,6 +62,8 @@ from .models import (
     SavedSearch,
     SavedSearchMatch,
     SecurityAuditEvent,
+    ServiceListing,
+    ServiceRequest,
     SupplierFollow,
     Notification,
     VerificationRequest,
@@ -188,6 +192,16 @@ ROLE_ONBOARDING_REQUIREMENTS = {
     User.Roles.AGENT: ["identity_verification"],
     User.Roles.ADMIN: [],
 }
+MARKETPLACE_CAPABILITIES = {"list_properties"}
+
+
+def validated_marketplace_capabilities(value):
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError("marketplace_capabilities must be a list of supported capabilities")
+    requested = set(value)
+    if requested - MARKETPLACE_CAPABILITIES:
+        raise ValueError("One or more marketplace capabilities are not supported")
+    return sorted(requested)
 
 
 def health_check(request):
@@ -279,12 +293,6 @@ def require_authenticated(request):
         endpoint = getattr(request.resolver_match, "url_name", None)
         if (endpoint, request.method) not in allowed_admin_access:
             return None, forbidden()
-    if request.method != "OPTIONS" and user.role in {User.Roles.LANDLORD, User.Roles.AGENT} and not account_onboarding_complete(user) and not verification_access_allowed(request):
-        return None, json_error(
-            "Identity verification is required before using this feature",
-            status=403,
-            errors={"account_onboarding_required": True, "next_endpoint": "/api/verifications/"},
-        )
     return user, None
 
 
@@ -312,21 +320,29 @@ def can_manage_property(user, prop):
     )
 
 
+def account_capabilities(user):
+    capabilities = set(ROLE_CAPABILITIES.get(user.role, []))
+    capabilities.update(getattr(user, "marketplace_capabilities", []) or [])
+    return capabilities
+
+
+def can_list_properties(user):
+    capabilities = account_capabilities(user) if user else set()
+    return bool(user and (is_admin(user) or {"list_properties", "add_properties"} & capabilities))
+
+
 def allowed_conversation_participant_ids(user, prop, requested_ids):
     if is_admin(user):
         ids = {int(value) for value in requested_ids if str(value).isdigit()}
         return ids or {prop.agent_id or prop.owner_id}
-
-    if user.role == User.Roles.TENANT:
-        if not is_publicly_contactable_listing(prop):
-            return None
-        return {prop.agent_id or prop.owner_id}
 
     if can_manage_property(user, prop):
         requested = {int(value) for value in requested_ids if str(value).isdigit()}
         allowed_tenants = set(Application.objects.filter(property=prop).values_list("tenant_id", flat=True))
         allowed_tenants.update(Viewing.objects.filter(property=prop).values_list("tenant_id", flat=True))
         if not requested or not requested.issubset(allowed_tenants):
+            if is_publicly_contactable_listing(prop):
+                return {prop.agent_id or prop.owner_id}
             return None
         return requested
 
@@ -352,13 +368,13 @@ def public_listings(properties):
 def user_properties(user):
     if is_admin(user):
         return Property.objects.all()
-    if user.role == User.Roles.LANDLORD:
-        return Property.objects.filter(owner=user)
     if user.role == User.Roles.AGENT:
         landlord_id = getattr(user, "parent_landlord_id", None)
         if not landlord_id or not getattr(user, "agent_is_active", True):
             return Property.objects.none()
         return Property.objects.filter(owner_id=landlord_id, agent=user)
+    if user.role == User.Roles.LANDLORD or can_list_properties(user):
+        return Property.objects.filter(owner=user)
     return Property.objects.none()
 
 
@@ -475,6 +491,16 @@ def auth_profile(request):
         return json_error("Invalid request body")
 
     changed_fields = []
+    if "marketplace_capabilities" in data:
+        try:
+            capabilities = validated_marketplace_capabilities(data["marketplace_capabilities"])
+        except ValueError as exc:
+            return json_error(str(exc), status=400)
+        if user.role in {User.Roles.AGENT, User.Roles.ADMIN} and capabilities:
+            return json_error("This account cannot change property-listing capabilities", status=400)
+        if user.marketplace_capabilities != capabilities:
+            user.marketplace_capabilities = capabilities
+            changed_fields.append("marketplace_capabilities")
     username = data.get("username")
     if username is not None:
         username = str(username).strip()
@@ -922,8 +948,13 @@ def properties_collection(request):
         acting_user = None
         if request.headers.get("Authorization"):
             acting_user, _ = current_user(request)
-        if acting_user is not None and acting_user.role in {User.Roles.LANDLORD, User.Roles.AGENT} and not to_bool(request.GET.get("public_only")):
-            properties = user_properties(acting_user).select_related("owner", "agent").prefetch_related("photos", "videos")
+        if acting_user is not None and can_list_properties(acting_user) and not to_bool(request.GET.get("public_only")):
+            owned_properties = user_properties(acting_user)
+            available_public_properties = public_listings(properties)
+            properties = properties.filter(
+                Q(pk__in=owned_properties.values("pk"))
+                | Q(pk__in=available_public_properties.values("pk"))
+            )
         else:
             properties = public_listings(properties)
         properties = apply_property_filters(properties, request.GET)
@@ -933,11 +964,13 @@ def properties_collection(request):
     if data is None:
         return json_error("Invalid request body")
 
-    acting_user, auth_response = require_roles(request, {User.Roles.LANDLORD, User.Roles.AGENT, User.Roles.ADMIN})
+    acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
+    if not can_list_properties(acting_user):
+        return json_error("Enable property listings in your account before creating a listing", status=403)
 
-    if acting_user.role == User.Roles.LANDLORD:
+    if acting_user.role in {User.Roles.LANDLORD, User.Roles.TENANT}:
         owner = acting_user
         agent = assigned_agent_for_landlord(acting_user, data.get("agent_id"))
         if data.get("agent_id") and agent is None:
@@ -1043,6 +1076,385 @@ def properties_collection(request):
             f"New property listed: {prop.title}",
         )
     return JsonResponse(payload, status=201)
+
+
+def marketplace_authenticated_user(request):
+    user, error = current_user(request)
+    if error:
+        return None, json_error(error, status=401)
+    return user, None
+
+
+def marketplace_payload(request):
+    data = request_json(request)
+    if not isinstance(data, dict):
+        return None, json_error("Invalid JSON body")
+    return data, None
+
+
+def marketplace_text(data, field, max_length, required=True, current_value=""):
+    if field not in data:
+        return (None, json_error(f"{field} is required")) if required else (current_value, None)
+    value = data[field]
+    if value is None and not required:
+        return "", None
+    if not isinstance(value, str):
+        return None, json_error(f"{field} must be text")
+    value = value.strip()
+    if required and not value:
+        return None, json_error(f"{field} is required")
+    if len(value) > max_length:
+        return None, json_error(f"{field} must be {max_length} characters or fewer")
+    return value, None
+
+
+def marketplace_service_data(data, service=None, partial=False):
+    values = {}
+    for field, max_length in (("title", 180), ("category", 80), ("description", 4000), ("location", 160)):
+        value, error = marketplace_text(
+            data,
+            field,
+            max_length,
+            required=not partial or service is None,
+            current_value=getattr(service, field, ""),
+        )
+        if error:
+            return None, error
+        if field in data:
+            values[field] = value
+
+    if "price" in data:
+        raw_price = data["price"]
+        if raw_price in (None, ""):
+            values["price"] = None
+        else:
+            try:
+                price = Decimal(str(raw_price))
+            except (InvalidOperation, ValueError):
+                return None, json_error("price must be a valid non-negative number")
+            if not price.is_finite() or price < 0 or price >= Decimal("10000000000"):
+                return None, json_error("price must be a valid non-negative number")
+            values["price"] = price
+    elif service is None or not partial:
+        values["price"] = None
+
+    if "price_type" in data:
+        price_type = data["price_type"]
+        if not isinstance(price_type, str):
+            return None, json_error("price_type must be text")
+        price_type = price_type.strip()
+        if price_type and price_type not in ServiceListing.PriceType.values:
+            return None, json_error("price_type must be one of: " + ", ".join(ServiceListing.PriceType.values))
+        values["price_type"] = price_type
+    elif service is None or not partial:
+        values["price_type"] = ""
+    return values, None
+
+
+def marketplace_job_data(data, job=None, partial=False):
+    values = {}
+    for field, max_length in (("title", 180), ("category", 80), ("description", 4000), ("location", 160)):
+        value, error = marketplace_text(
+            data,
+            field,
+            max_length,
+            required=not partial or job is None,
+            current_value=getattr(job, field, ""),
+        )
+        if error:
+            return None, error
+        if field in data:
+            values[field] = value
+
+    if "employment_type" in data:
+        employment_type = data["employment_type"]
+        if not isinstance(employment_type, str) or employment_type not in JobPosting.EmploymentType.values:
+            return None, json_error("employment_type must be one of: " + ", ".join(JobPosting.EmploymentType.values))
+        values["employment_type"] = employment_type
+    elif job is None:
+        return None, json_error("employment_type is required")
+
+    compensation, error = marketplace_text(
+        data,
+        "compensation",
+        160,
+        required=False,
+        current_value=getattr(job, "compensation", ""),
+    )
+    if error:
+        return None, error
+    if "compensation" in data or job is None or not partial:
+        values["compensation"] = compensation
+    return values, None
+
+
+def submit_service_request(service, requester, message):
+    if not service.is_active:
+        return None, json_error("This service is closed", status=409)
+    if service.owner_id == requester.id:
+        return None, json_error("You cannot request your own service")
+    if ServiceRequest.objects.filter(service=service, requester=requester).exists():
+        return None, json_error("You have already requested this service", status=409)
+    try:
+        with transaction.atomic():
+            result = ServiceRequest.objects.create(service=service, requester=requester, message=message)
+    except IntegrityError:
+        return None, json_error("You have already requested this service", status=409)
+    return result, None
+
+
+def submit_job_application(job, applicant, cover_message):
+    if not job.is_active:
+        return None, json_error("This job is closed", status=409)
+    if job.owner_id == applicant.id:
+        return None, json_error("You cannot apply to your own job")
+    if JobApplication.objects.filter(job=job, applicant=applicant).exists():
+        return None, json_error("You have already applied to this job", status=409)
+    try:
+        with transaction.atomic():
+            result = JobApplication.objects.create(job=job, applicant=applicant, cover_message=cover_message)
+    except IntegrityError:
+        return None, json_error("You have already applied to this job", status=409)
+    return result, None
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST", "OPTIONS"])
+def services_collection(request):
+    if request.method == "GET":
+        services = ServiceListing.objects.select_related("owner")
+        acting_user = current_user(request)[0] if request.headers.get("Authorization") else None
+        services = services.filter(Q(is_active=True) | Q(owner=acting_user)) if acting_user else services.filter(is_active=True)
+        return JsonResponse({"results": [serialize_service_listing(item) for item in services]})
+
+    acting_user, auth_response = marketplace_authenticated_user(request)
+    if auth_response:
+        return auth_response
+    data, error = marketplace_payload(request)
+    if error:
+        return error
+    values, error = marketplace_service_data(data)
+    if error:
+        return error
+    service = ServiceListing.objects.create(owner=acting_user, **values)
+    return JsonResponse(serialize_service_listing(service), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PATCH", "PUT", "DELETE", "OPTIONS"])
+def service_detail(request, service_id):
+    service = get_object_or_404(ServiceListing.objects.select_related("owner"), pk=service_id)
+    if request.method == "GET":
+        acting_user = current_user(request)[0] if request.headers.get("Authorization") else None
+        if not service.is_active and (not acting_user or acting_user.id != service.owner_id):
+            return json_error("Service listing was not found", status=404)
+        return JsonResponse(serialize_service_listing(service))
+
+    acting_user, auth_response = marketplace_authenticated_user(request)
+    if auth_response:
+        return auth_response
+    if service.owner_id != acting_user.id:
+        return forbidden()
+    if request.method == "DELETE":
+        service.is_active = False
+        service.save(update_fields=["is_active", "updated_at"])
+        return JsonResponse(serialize_service_listing(service))
+    data, error = marketplace_payload(request)
+    if error:
+        return error
+    values, error = marketplace_service_data(data, service=service, partial=request.method == "PATCH")
+    if error:
+        return error
+    for field, value in values.items():
+        setattr(service, field, value)
+    service.save()
+    return JsonResponse(serialize_service_listing(service))
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST", "OPTIONS"])
+def service_requests_collection(request):
+    acting_user, auth_response = marketplace_authenticated_user(request)
+    if auth_response:
+        return auth_response
+    if request.method == "GET":
+        requests = ServiceRequest.objects.select_related("service", "service__owner", "requester").filter(
+            Q(requester=acting_user) | Q(service__owner=acting_user)
+        )
+        return JsonResponse({"results": [serialize_service_request(item) for item in requests]})
+    data, error = marketplace_payload(request)
+    if error:
+        return error
+    try:
+        service = ServiceListing.objects.get(pk=int(data.get("service_id")))
+    except (ServiceListing.DoesNotExist, TypeError, ValueError):
+        return json_error("Service listing was not found", status=404)
+    message, error = marketplace_text(data, "message", 2000)
+    if error:
+        return error
+    result, error = submit_service_request(service, acting_user, message)
+    if error:
+        return error
+    return JsonResponse(serialize_service_request(result), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["PATCH", "OPTIONS"])
+def service_request_detail(request, request_id):
+    acting_user, auth_response = marketplace_authenticated_user(request)
+    if auth_response:
+        return auth_response
+    service_request = get_object_or_404(
+        ServiceRequest.objects.select_related("service", "service__owner", "requester"),
+        pk=request_id,
+    )
+    data, error = marketplace_payload(request)
+    if error:
+        return error
+    status = data.get("status")
+    if not isinstance(status, str) or status not in ServiceRequest.Status.values:
+        return json_error("status must be one of: " + ", ".join(ServiceRequest.Status.values))
+    if service_request.service.owner_id == acting_user.id:
+        allowed_statuses = {ServiceRequest.Status.ACCEPTED, ServiceRequest.Status.DECLINED}
+    elif service_request.requester_id == acting_user.id:
+        allowed_statuses = {ServiceRequest.Status.CANCELLED}
+    else:
+        return forbidden()
+    if status not in allowed_statuses:
+        return forbidden()
+    service_request.status = status
+    service_request.save(update_fields=["status"])
+    return JsonResponse(serialize_service_request(service_request))
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def service_request_create(request, service_id):
+    acting_user, auth_response = marketplace_authenticated_user(request)
+    if auth_response:
+        return auth_response
+    service = get_object_or_404(ServiceListing, pk=service_id)
+    data, error = marketplace_payload(request)
+    if error:
+        return error
+    message, error = marketplace_text(data, "message", 2000)
+    if error:
+        return error
+    result, error = submit_service_request(service, acting_user, message)
+    if error:
+        return error
+    return JsonResponse(serialize_service_request(result), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST", "OPTIONS"])
+def jobs_collection(request):
+    if request.method == "GET":
+        jobs = JobPosting.objects.select_related("owner")
+        acting_user = current_user(request)[0] if request.headers.get("Authorization") else None
+        jobs = jobs.filter(Q(is_active=True) | Q(owner=acting_user)) if acting_user else jobs.filter(is_active=True)
+        return JsonResponse({"results": [serialize_job_posting(item) for item in jobs]})
+    acting_user, auth_response = marketplace_authenticated_user(request)
+    if auth_response:
+        return auth_response
+    data, error = marketplace_payload(request)
+    if error:
+        return error
+    values, error = marketplace_job_data(data)
+    if error:
+        return error
+    job = JobPosting.objects.create(owner=acting_user, **values)
+    return JsonResponse(serialize_job_posting(job), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PATCH", "PUT", "DELETE", "OPTIONS"])
+def job_detail(request, job_id):
+    job = get_object_or_404(JobPosting.objects.select_related("owner"), pk=job_id)
+    if request.method == "GET":
+        acting_user = current_user(request)[0] if request.headers.get("Authorization") else None
+        if not job.is_active and (not acting_user or acting_user.id != job.owner_id):
+            return json_error("Job posting was not found", status=404)
+        return JsonResponse(serialize_job_posting(job))
+    acting_user, auth_response = marketplace_authenticated_user(request)
+    if auth_response:
+        return auth_response
+    if job.owner_id != acting_user.id:
+        return forbidden()
+    if request.method == "DELETE":
+        job.is_active = False
+        job.save(update_fields=["is_active", "updated_at"])
+        return JsonResponse(serialize_job_posting(job))
+    data, error = marketplace_payload(request)
+    if error:
+        return error
+    values, error = marketplace_job_data(data, job=job, partial=request.method == "PATCH")
+    if error:
+        return error
+    for field, value in values.items():
+        setattr(job, field, value)
+    job.save()
+    return JsonResponse(serialize_job_posting(job))
+
+
+@csrf_exempt
+@require_http_methods(["GET", "OPTIONS"])
+def job_applications_collection(request):
+    acting_user, auth_response = marketplace_authenticated_user(request)
+    if auth_response:
+        return auth_response
+    applications = JobApplication.objects.select_related("job", "job__owner", "applicant").filter(
+        Q(applicant=acting_user) | Q(job__owner=acting_user)
+    )
+    return JsonResponse({"results": [serialize_job_application(item) for item in applications]})
+
+
+@csrf_exempt
+@require_http_methods(["PATCH", "OPTIONS"])
+def job_application_detail(request, application_id):
+    acting_user, auth_response = marketplace_authenticated_user(request)
+    if auth_response:
+        return auth_response
+    application = get_object_or_404(
+        JobApplication.objects.select_related("job", "job__owner", "applicant"),
+        pk=application_id,
+    )
+    data, error = marketplace_payload(request)
+    if error:
+        return error
+    status = data.get("status")
+    if not isinstance(status, str) or status not in JobApplication.Status.values:
+        return json_error("status must be one of: " + ", ".join(JobApplication.Status.values))
+    if application.job.owner_id == acting_user.id:
+        allowed_statuses = {JobApplication.Status.ACCEPTED, JobApplication.Status.DECLINED}
+    elif application.applicant_id == acting_user.id:
+        allowed_statuses = {JobApplication.Status.WITHDRAWN}
+    else:
+        return forbidden()
+    if status not in allowed_statuses:
+        return forbidden()
+    application.status = status
+    application.save(update_fields=["status"])
+    return JsonResponse(serialize_job_application(application))
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def job_application_create(request, job_id):
+    acting_user, auth_response = marketplace_authenticated_user(request)
+    if auth_response:
+        return auth_response
+    job = get_object_or_404(JobPosting, pk=job_id)
+    data, error = marketplace_payload(request)
+    if error:
+        return error
+    cover_message, error = marketplace_text(data, "cover_message", 2000)
+    if error:
+        return error
+    result, error = submit_job_application(job, acting_user, cover_message)
+    if error:
+        return error
+    return JsonResponse(serialize_job_application(result), status=201)
 
 
 @csrf_exempt
@@ -1299,7 +1711,7 @@ def property_videos_collection(request, property_id):
 @require_http_methods(["GET", "POST", "DELETE", "OPTIONS"])
 def saved_properties_collection(request, property_id):
     prop = get_object_or_404(Property, pk=property_id)
-    acting_user, auth_response = require_roles(request, {User.Roles.TENANT})
+    acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
     saved = SavedProperty.objects.filter(property=prop, tenant=acting_user).first()
@@ -1324,8 +1736,6 @@ def saved_reserved_properties_collection(request):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if acting_user.role != User.Roles.TENANT:
-        return JsonResponse({"results": []})
     now = timezone.now()
     PropertyHold.objects.filter(
         tenant=acting_user,
@@ -1351,12 +1761,7 @@ def saved_reserved_properties_collection(request):
 
 
 def _require_tenant(request):
-    acting_user, auth_response = require_authenticated(request)
-    if auth_response:
-        return None, auth_response
-    if acting_user.role != User.Roles.TENANT:
-        return None, forbidden()
-    return acting_user, None
+    return require_authenticated(request)
 
 
 def _is_live_public_listing(prop):
@@ -1738,7 +2143,7 @@ def property_comparisons_collection(request):
     tenant, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if tenant.role != User.Roles.TENANT:
+    if tenant.role not in PUBLIC_ACCOUNT_ROLES:
         if request.method == "GET":
             return JsonResponse({"results": [], "suggestions": []})
         return forbidden()
@@ -1930,7 +2335,7 @@ def saved_searches_collection(request):
     tenant, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if tenant.role != User.Roles.TENANT:
+    if tenant.role not in PUBLIC_ACCOUNT_ROLES:
         if request.method == "GET":
             return JsonResponse({"results": []})
         return forbidden()
@@ -2080,22 +2485,19 @@ def applications_collection(request):
 
     if request.method == "GET":
         applications = Application.objects.select_related("property", "tenant").order_by("-created_at")
-        if acting_user.role == User.Roles.TENANT:
-            applications = applications.filter(tenant=acting_user)
-        elif acting_user.role in {User.Roles.LANDLORD, User.Roles.AGENT}:
-            applications = applications.filter(property__in=user_properties(acting_user))
-        elif not is_admin(acting_user):
-            return forbidden()
+        if not is_admin(acting_user):
+            applications = applications.filter(
+                Q(tenant=acting_user) | Q(property__in=user_properties(acting_user))
+            )
         return JsonResponse({"results": [serialize_application(item) for item in applications]})
-
-    if acting_user.role != User.Roles.TENANT:
-        return forbidden()
 
     data = request_json(request)
     if data is None:
         return json_error("Invalid JSON body")
     prop = get_object_or_404(Property, pk=data.get("property_id"))
     tenant = acting_user
+    if prop.owner_id == acting_user.id:
+        return json_error("You cannot apply to your own listing", status=400)
     active_hold = PropertyHold.objects.filter(
         property=prop,
         released_at__isnull=True,
@@ -2148,7 +2550,7 @@ def application_detail(request, application_id):
     if data is None:
         return json_error("Invalid JSON body")
 
-    if acting_user.role == User.Roles.TENANT:
+    if application.tenant_id == acting_user.id:
         allowed = {"message", "status"}
         if set(data.keys()) - allowed:
             return forbidden()
@@ -2170,9 +2572,11 @@ def application_detail(request, application_id):
 @csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])
 def ai_listing_review(request):
-    acting_user, auth_response = require_roles(request, {User.Roles.LANDLORD, User.Roles.AGENT, User.Roles.ADMIN})
+    acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
+    if not can_list_properties(acting_user) and not is_admin(acting_user):
+        return json_error("Enable property listings before reviewing a listing", status=403)
     data = request_json(request)
     if data is None:
         return json_error("Invalid JSON body")
@@ -2184,7 +2588,7 @@ def ai_listing_review(request):
 @csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])
 def ai_application_score(request):
-    acting_user, auth_response = require_roles(request, {User.Roles.LANDLORD, User.Roles.AGENT, User.Roles.ADMIN})
+    acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
     data = request_json(request)
@@ -2632,21 +3036,18 @@ def viewings_collection(request):
 
     if request.method == "GET":
         viewings = Viewing.objects.select_related("property", "tenant", "agent").order_by("-scheduled_for")
-        if acting_user.role == User.Roles.TENANT:
-            viewings = viewings.filter(tenant=acting_user)
-        elif acting_user.role in {User.Roles.LANDLORD, User.Roles.AGENT}:
-            viewings = viewings.filter(property__in=user_properties(acting_user))
-        elif not is_admin(acting_user):
-            return forbidden()
+        if not is_admin(acting_user):
+            viewings = viewings.filter(
+                Q(tenant=acting_user) | Q(property__in=user_properties(acting_user))
+            )
         return JsonResponse({"results": [serialize_viewing(item) for item in viewings]})
-
-    if acting_user.role != User.Roles.TENANT:
-        return forbidden()
 
     data = request_json(request)
     if data is None:
         return json_error("Invalid JSON body")
     prop = get_object_or_404(Property.objects.select_related("owner", "agent"), pk=data.get("property_id"))
+    if prop.owner_id == acting_user.id:
+        return json_error("You cannot request a viewing for your own listing", status=400)
     if not _is_live_public_listing(prop):
         return json_error("This property is not available for viewing requests", status=409)
     scheduled_for = parse_datetime(str(data.get("scheduled_for") or ""))
@@ -2830,14 +3231,13 @@ def property_hold(request, property_id):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
-    if acting_user.role != User.Roles.TENANT:
-        return forbidden()
-
     with transaction.atomic():
         prop = get_object_or_404(
             Property.objects.select_for_update(of=("self",)).select_related("owner", "agent"),
             pk=property_id,
         )
+        if prop.owner_id == acting_user.id:
+            return json_error("You cannot reserve your own listing", status=400)
         now = timezone.now()
         PropertyHold.objects.filter(
             property=prop,
@@ -3218,8 +3618,8 @@ def supplier_follow(request, supplier_id):
     if auth_response:
         return auth_response
     supplier = get_object_or_404(User, pk=supplier_id)
-    if supplier.role not in {User.Roles.LANDLORD, User.Roles.AGENT} or not supplier.is_verified:
-        return json_error("Only verified landlords and agents can be followed", status=400)
+    if not (can_list_properties(supplier) or supplier.role == User.Roles.AGENT) or not supplier.is_verified:
+        return json_error("Only verified property listers and agents can be followed", status=400)
     if supplier.id == acting_user.id:
         return json_error("You cannot follow your own supplier account", status=400)
 
@@ -3267,16 +3667,9 @@ def reviews_collection(request):
 
     if request.method == "GET":
         reviews = Review.objects.select_related("tenant", "landlord").order_by("-created_at")
-        if acting_user.role == User.Roles.TENANT:
-            reviews = reviews.filter(tenant=acting_user)
-        elif acting_user.role == User.Roles.LANDLORD:
-            reviews = reviews.filter(landlord=acting_user)
-        elif not is_admin(acting_user):
-            return forbidden()
+        if not is_admin(acting_user):
+            reviews = reviews.filter(Q(tenant=acting_user) | Q(landlord=acting_user))
         return JsonResponse({"results": [serialize_review(item) for item in reviews]})
-
-    if acting_user.role != User.Roles.TENANT:
-        return forbidden()
 
     data = request_json(request)
     if data is None:
@@ -3583,8 +3976,8 @@ def parse_coordinates(data):
 
 
 def validate_listing_participants(owner, agent, listing_status):
-    if owner.role not in {User.Roles.LANDLORD, User.Roles.AGENT}:
-        return "owner_id must belong to a landlord or estate agent"
+    if owner.role not in PUBLIC_ACCOUNT_ROLES | {User.Roles.AGENT}:
+        return "Listing owners must have a public marketplace account"
     if agent and agent.role != User.Roles.AGENT:
         return "agent_id must belong to an estate agent"
     if listing_status == Property.ListingStatus.VERIFIED:
@@ -4135,6 +4528,12 @@ def validate_public_registration_payload(data):
 
     if role not in PUBLIC_ACCOUNT_ROLES:
         return None, "Public registration only supports tenant or landlord accounts"
+    try:
+        marketplace_capabilities = validated_marketplace_capabilities(
+            data.get("marketplace_capabilities", [])
+        )
+    except ValueError as exc:
+        return None, str(exc)
     for error in (
         validate_text_field(username, "Username", USERNAME_MAX_LENGTH, required=True),
         validate_email_field(email, required=True),
@@ -4162,6 +4561,7 @@ def validate_public_registration_payload(data):
         "password": password,
         "full_name": data.get("name") or data.get("full_name", ""),
         "role": role,
+        "marketplace_capabilities": marketplace_capabilities,
     }, ""
 
 
@@ -4182,6 +4582,7 @@ def create_registration_otp_challenge(data):
         phone=cleaned["phone"],
         full_name=cleaned["full_name"],
         role=cleaned["role"],
+        marketplace_capabilities=cleaned["marketplace_capabilities"],
         password_hash=make_password(cleaned["password"]),
         code_hash=hash_otp(otp_code),
         sent_to=cleaned["email"],
@@ -4242,6 +4643,7 @@ def create_public_account_from_otp(challenge):
             full_name=challenge.full_name,
             phone=challenge.phone,
             role=challenge.role,
+            marketplace_capabilities=challenge.marketplace_capabilities,
             is_verified=False,
             email_verified=True,
         )
@@ -4259,6 +4661,12 @@ def create_public_account(data, require_password=True):
     role = normalise_choice(role, User.Roles, role)
     if role not in PUBLIC_ACCOUNT_ROLES:
         return None, "Public registration only supports tenant or landlord accounts"
+    try:
+        marketplace_capabilities = validated_marketplace_capabilities(
+            data.get("marketplace_capabilities", [])
+        )
+    except ValueError as exc:
+        return None, str(exc)
 
     email = normalize_email(data.get("email"))
     phone = normalize_phone(data.get("phone"))
@@ -4295,6 +4703,7 @@ def create_public_account(data, require_password=True):
             full_name=full_name,
             phone=phone,
             role=role,
+            marketplace_capabilities=marketplace_capabilities,
             is_verified=False,
             profile_picture_url=data.get("profile_picture_url") or data.get("profile_picture", ""),
             cover_photo_url=data.get("cover_photo_url") or data.get("cover_photo", ""),
@@ -4310,6 +4719,12 @@ def create_google_account(claims, data):
     role = normalise_choice(requested_role, User.Roles, requested_role) if requested_role else None
     if requested_role and role not in PUBLIC_ACCOUNT_ROLES:
         return None, "Google registration only supports tenant or landlord accounts"
+    try:
+        marketplace_capabilities = validated_marketplace_capabilities(
+            data.get("marketplace_capabilities", [])
+        )
+    except ValueError as exc:
+        return None, str(exc)
 
     subject = claims["sub"]
     email = claims.get("email", "")
@@ -4345,7 +4760,8 @@ def create_google_account(claims, data):
                     password=get_random_string(32),
                     full_name=name,
                     phone=phone,
-                    role=role,
+                    role=role or User.Roles.TENANT,
+                    marketplace_capabilities=marketplace_capabilities,
                     is_verified=False,
                     auth_provider="google",
                     google_subject=subject,
@@ -4359,9 +4775,6 @@ def create_google_account(claims, data):
             )
         except IntegrityError:
             return None, "A Google account with these details already exists"
-
-    if requested_role and user.role != role:
-        return None, "This Google account is already linked to a different account type"
 
     changed_fields = []
     updates = {
@@ -4463,6 +4876,72 @@ def serialize_user(user):
     }
 
 
+def serialize_service_listing(service):
+    return {
+        "id": service.id,
+        "owner_id": service.owner_id,
+        "owner": serialize_user(service.owner),
+        "title": service.title,
+        "category": service.category,
+        "description": service.description,
+        "location": service.location,
+        "price": str(service.price) if service.price is not None else None,
+        "price_type": service.price_type,
+        "active": service.is_active,
+        "status": "active" if service.is_active else "closed",
+        "created_at": service.created_at.isoformat(),
+        "updated_at": service.updated_at.isoformat(),
+    }
+
+
+def serialize_service_request(service_request):
+    return {
+        "id": service_request.id,
+        "service_id": service_request.service_id,
+        "service_title": service_request.service.title,
+        "owner_id": service_request.service.owner_id,
+        "owner": serialize_user(service_request.service.owner),
+        "requester_id": service_request.requester_id,
+        "requester": serialize_user(service_request.requester),
+        "message": service_request.message,
+        "status": service_request.status,
+        "created_at": service_request.created_at.isoformat(),
+    }
+
+
+def serialize_job_posting(job):
+    return {
+        "id": job.id,
+        "owner_id": job.owner_id,
+        "owner": serialize_user(job.owner),
+        "title": job.title,
+        "category": job.category,
+        "description": job.description,
+        "location": job.location,
+        "employment_type": job.employment_type,
+        "compensation": job.compensation,
+        "active": job.is_active,
+        "status": "active" if job.is_active else "closed",
+        "created_at": job.created_at.isoformat(),
+        "updated_at": job.updated_at.isoformat(),
+    }
+
+
+def serialize_job_application(application):
+    return {
+        "id": application.id,
+        "job_id": application.job_id,
+        "job_title": application.job.title,
+        "owner_id": application.job.owner_id,
+        "owner": serialize_user(application.job.owner),
+        "applicant_id": application.applicant_id,
+        "applicant": serialize_user(application.applicant),
+        "cover_message": application.cover_message,
+        "status": application.status,
+        "created_at": application.created_at.isoformat(),
+    }
+
+
 def serialize_notification(notification):
     return {
         "id": str(notification.id),
@@ -4488,6 +4967,10 @@ def account_media_url(user, field_name):
 
 
 def serialize_account_context(user):
+    capabilities = account_capabilities(user)
+    visible_sections = list(ROLE_VISIBLE_SECTIONS.get(user.role, []))
+    if can_list_properties(user) and "properties" not in visible_sections:
+        visible_sections.append("properties")
     return {
         "account_type": user.role,
         "is_verified": user.is_verified,
@@ -4495,9 +4978,9 @@ def serialize_account_context(user):
         "email_verified": user.email_verified,
         "phone_verified": user.phone_verified,
         "can_switch_account_type": False,
-        "visible_sections": ROLE_VISIBLE_SECTIONS.get(user.role, []),
-        "capabilities": ROLE_CAPABILITIES.get(user.role, []),
-        "hidden_sections": sorted({section for sections in ROLE_VISIBLE_SECTIONS.values() for section in sections} - set(ROLE_VISIBLE_SECTIONS.get(user.role, []))),
+        "visible_sections": visible_sections,
+        "capabilities": sorted(capabilities),
+        "hidden_sections": sorted({section for sections in ROLE_VISIBLE_SECTIONS.values() for section in sections} - set(visible_sections)),
         "onboarding": {
             "required": user.role in VERIFICATION_REQUIRED_ROLES and not account_onboarding_complete(user),
             "requirements": [] if account_onboarding_complete(user) else ROLE_ONBOARDING_REQUIREMENTS.get(user.role, []),
@@ -4512,7 +4995,7 @@ def media_asset_queryset_for_user(user):
     assets = MediaAsset.objects.filter(status=MediaAsset.Status.ACTIVE)
     if is_admin(user):
         return assets.exclude(scope=MediaAsset.Scope.CHAT)
-    property_ids = [str(item) for item in user_properties(user).values_list("id", flat=True)] if user.role in {User.Roles.LANDLORD, User.Roles.AGENT} else []
+    property_ids = [str(item) for item in user_properties(user).values_list("id", flat=True)] if can_list_properties(user) else []
     visible_property_photo_ids = [str(item) for item in PropertyPhoto.objects.filter(property_id__in=property_ids).values_list("id", flat=True)]
     visible_property_video_ids = [str(item) for item in PropertyVideo.objects.filter(property_id__in=property_ids).values_list("id", flat=True)]
     conversation_message_ids = [str(item) for item in Message.objects.filter(conversation__participants=user).values_list("id", flat=True)]

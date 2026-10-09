@@ -22,6 +22,10 @@ from .models import (
     SavedSearchMatch,
     SavedProperty,
     SecurityAuditEvent,
+    JobApplication,
+    JobPosting,
+    ServiceListing,
+    ServiceRequest,
     User,
     Viewing,
     VerificationRequest,
@@ -39,7 +43,469 @@ from .gemini_service import GeminiConfigurationError, GeminiService
 from .gemini_service import GeminiServiceError
 
 
+class ServiceAndJobMarketplaceTests(TestCase):
+    def setUp(self):
+        self.owner = self.make_user("market-owner", User.Roles.TENANT)
+        self.applicant = self.make_user("market-applicant", User.Roles.TENANT)
+        self.other = self.make_user("market-other", User.Roles.TENANT)
+        self.service_payload = {
+            "title": "Plumbing repairs",
+            "category": "Home services",
+            "description": "Residential plumbing and leak repairs.",
+            "location": "Harare",
+            "price": "25.00",
+            "price_type": "hourly",
+        }
+        self.job_payload = {
+            "title": "Maintenance assistant",
+            "category": "Facilities",
+            "description": "Support our property maintenance team.",
+            "location": "Harare",
+            "employment_type": "full_time",
+            "compensation": "Negotiable",
+        }
+
+    def make_user(self, username, role):
+        return User.objects.create_user(
+            username=username,
+            email=f"{username}@example.test",
+            password="test-password",
+            role=role,
+        )
+
+    def authorize(self, user):
+        self.client.defaults["HTTP_AUTHORIZATION"] = (
+            f"Bearer {issue_token_pair(user)['access']}"
+        )
+
+    def post_json(self, path, payload):
+        return self.client.post(
+            path,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+    def create_service(self, owner=None):
+        self.authorize(owner or self.owner)
+        response = self.post_json("/api/services/", self.service_payload)
+        self.assertEqual(response.status_code, 201, response.content)
+        return response.json()
+
+    def create_job(self, owner=None):
+        self.authorize(owner or self.owner)
+        response = self.post_json("/api/jobs/", self.job_payload)
+        self.assertEqual(response.status_code, 201, response.content)
+        return response.json()
+
+    def test_public_browsing_and_authenticated_role_neutral_create(self):
+        response = self.client.get("/api/services/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], [])
+        response = self.client.get("/api/jobs/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], [])
+
+        response = self.post_json("/api/services/", self.service_payload)
+        self.assertEqual(response.status_code, 401)
+        self.authorize(self.owner)
+        service_response = self.post_json("/api/services/", self.service_payload)
+        job_response = self.post_json("/api/jobs/", self.job_payload)
+        self.assertEqual(service_response.status_code, 201, service_response.content)
+        self.assertEqual(job_response.status_code, 201, job_response.content)
+        self.assertEqual(service_response.json()["price_type"], "hourly")
+        self.assertEqual(service_response.json()["owner"]["id"], self.owner.id)
+        self.assertEqual(service_response.json()["owner_id"], self.owner.id)
+        self.assertEqual(job_response.json()["owner_id"], self.owner.id)
+        self.assertEqual(len(self.client.get("/api/services/").json()["results"]), 1)
+        self.assertEqual(len(self.client.get("/api/jobs/").json()["results"]), 1)
+
+    def test_listing_validation_rejects_missing_and_disallowed_choices(self):
+        self.authorize(self.owner)
+        response = self.post_json("/api/services/", {"title": "Missing fields"})
+        self.assertEqual(response.status_code, 400)
+        response = self.post_json("/api/services/", {**self.service_payload, "price_type": "weekly"})
+        self.assertEqual(response.status_code, 400)
+        response = self.post_json("/api/services/", {**self.service_payload, "price_type": "daily"})
+        self.assertEqual(response.status_code, 400)
+        response = self.post_json("/api/services/", {**self.service_payload, "price_type": "quote"})
+        self.assertEqual(response.status_code, 201, response.content)
+        response = self.post_json("/api/jobs/", {**self.job_payload, "employment_type": "volunteer"})
+        self.assertEqual(response.status_code, 400)
+        response = self.post_json("/api/jobs/", {**self.job_payload, "employment_type": "casual"})
+        self.assertEqual(response.status_code, 400)
+        response = self.post_json("/api/jobs/", {**self.job_payload, "employment_type": "temporary"})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(ServiceListing.objects.count(), 1)
+        self.assertEqual(JobPosting.objects.count(), 1)
+        self.assertEqual(
+            set(ServiceListing.PriceType.values),
+            {"fixed", "hourly", "quote"},
+        )
+        self.assertEqual(
+            set(JobPosting.EmploymentType.values),
+            {"full_time", "part_time", "contract", "temporary"},
+        )
+
+    def test_owner_only_listing_update_and_delete(self):
+        service = self.create_service()
+        job = self.create_job()
+        self.authorize(self.other)
+        for path in (
+            f"/api/services/{service['id']}/",
+            f"/api/jobs/{job['id']}/",
+        ):
+            response = self.client.patch(
+                path,
+                data=json.dumps({"title": "Hijacked"}),
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(self.client.delete(path).status_code, 403)
+
+        self.authorize(self.owner)
+        response = self.client.patch(
+            f"/api/services/{service['id']}/",
+            data=json.dumps({"title": "Updated plumbing"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["title"], "Updated plumbing")
+        service_delete = self.client.delete(f"/api/services/{service['id']}/")
+        self.assertEqual(service_delete.status_code, 200)
+        self.assertEqual(service_delete.json()["status"], "closed")
+        self.assertFalse(ServiceListing.objects.get(pk=service["id"]).is_active)
+
+        response = self.client.put(
+            f"/api/jobs/{job['id']}/",
+            data=json.dumps({**self.job_payload, "title": "Updated job"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["title"], "Updated job")
+        job_delete = self.client.delete(f"/api/jobs/{job['id']}/")
+        self.assertEqual(job_delete.status_code, 200)
+        self.assertEqual(job_delete.json()["status"], "closed")
+        self.assertFalse(JobPosting.objects.get(pk=job["id"]).is_active)
+        self.client.defaults.pop("HTTP_AUTHORIZATION", None)
+        self.assertEqual(self.client.get("/api/services/").json()["results"], [])
+        self.assertEqual(self.client.get("/api/jobs/").json()["results"], [])
+        self.assertEqual(self.client.get(f"/api/services/{service['id']}/").status_code, 404)
+        self.assertEqual(self.client.get(f"/api/jobs/{job['id']}/").status_code, 404)
+
+    def test_service_requests_and_job_applications_reject_self_and_duplicates(self):
+        service = self.create_service()
+        job = self.create_job()
+
+        self.authorize(self.owner)
+        self.assertEqual(
+            self.post_json(
+                f"/api/services/{service['id']}/requests/",
+                {"message": "Please help"},
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.post_json(
+                f"/api/jobs/{job['id']}/applications/",
+                {"cover_message": "I am interested"},
+            ).status_code,
+            400,
+        )
+
+        self.authorize(self.applicant)
+        request_response = self.post_json(
+            f"/api/services/{service['id']}/requests/",
+            {"message": "Please repair a leak"},
+        )
+        application_response = self.post_json(
+            f"/api/jobs/{job['id']}/applications/",
+            {"cover_message": "I have relevant experience"},
+        )
+        self.assertEqual(request_response.status_code, 201, request_response.content)
+        self.assertEqual(application_response.status_code, 201, application_response.content)
+        self.assertEqual(request_response.json()["service_id"], service["id"])
+        self.assertEqual(request_response.json()["owner_id"], self.owner.id)
+        self.assertEqual(request_response.json()["requester"]["id"], self.applicant.id)
+        self.assertEqual(request_response.json()["requester_id"], self.applicant.id)
+        self.assertEqual(application_response.json()["job_id"], job["id"])
+        self.assertEqual(application_response.json()["owner_id"], self.owner.id)
+        self.assertEqual(application_response.json()["applicant"]["id"], self.applicant.id)
+        self.assertEqual(application_response.json()["applicant_id"], self.applicant.id)
+        self.assertEqual(
+            self.post_json(
+                f"/api/services/{service['id']}/requests/",
+                {"message": "Another request"},
+            ).status_code,
+            409,
+        )
+        self.assertEqual(
+            self.post_json(
+                f"/api/jobs/{job['id']}/applications/",
+                {"cover_message": "Another application"},
+            ).status_code,
+            409,
+        )
+        another_service = ServiceListing.objects.create(
+            owner=self.owner,
+            title="Painting",
+            category="Home services",
+            description="Interior painting.",
+            location="Harare",
+        )
+        collection_response = self.post_json(
+            "/api/service-requests/",
+            {"service_id": another_service.id, "message": "Please paint a room"},
+        )
+        self.assertEqual(collection_response.status_code, 201, collection_response.content)
+        self.assertEqual(ServiceRequest.objects.count(), 2)
+        self.assertEqual(JobApplication.objects.count(), 1)
+
+    def test_request_and_application_lists_are_scoped_to_participant_or_owner(self):
+        first_service = self.create_service()
+        self.authorize(self.other)
+        second_service_response = self.post_json("/api/services/", self.service_payload)
+        self.assertEqual(second_service_response.status_code, 201)
+        first_job = self.create_job(self.owner)
+        self.authorize(self.applicant)
+        second_job_response = self.post_json("/api/jobs/", self.job_payload)
+        self.assertEqual(second_job_response.status_code, 201)
+
+        ServiceRequest.objects.create(
+            service_id=first_service["id"],
+            requester=self.applicant,
+            message="Request to first owner",
+        )
+        ServiceRequest.objects.create(
+            service_id=second_service_response.json()["id"],
+            requester=self.other,
+            message="Unrelated request",
+        )
+        JobApplication.objects.create(
+            job_id=first_job["id"],
+            applicant=self.applicant,
+            cover_message="Application to first owner",
+        )
+        JobApplication.objects.create(
+            job_id=second_job_response.json()["id"],
+            applicant=self.other,
+            cover_message="Unrelated application",
+        )
+
+        self.authorize(self.applicant)
+        response = self.client.get("/api/service-requests/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["results"]), 1)
+        self.assertEqual(response.json()["results"][0]["message"], "Request to first owner")
+        response = self.client.get("/api/job-applications/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["results"]), 2)
+        self.assertEqual(
+            {item["cover_message"] for item in response.json()["results"]},
+            {"Application to first owner", "Unrelated application"},
+        )
+
+        self.authorize(self.owner)
+        self.assertEqual(len(self.client.get("/api/service-requests/").json()["results"]), 1)
+        self.assertEqual(len(self.client.get("/api/job-applications/").json()["results"]), 1)
+
+    def test_service_request_lifecycle_is_limited_to_allowed_participant_statuses(self):
+        service = self.create_service()
+        request_from_applicant = ServiceRequest.objects.create(
+            service_id=service["id"],
+            requester=self.applicant,
+            message="First service request",
+        )
+        request_for_owner = ServiceRequest.objects.create(
+            service_id=service["id"],
+            requester=self.other,
+            message="Second service request",
+        )
+
+        path = f"/api/service-requests/{request_from_applicant.id}/"
+        self.authorize(self.applicant)
+        response = self.client.patch(
+            path,
+            data=json.dumps({"status": "cancelled"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["status"], "cancelled")
+        self.assertEqual(response.json()["service_id"], service["id"])
+        self.assertEqual(
+            self.client.patch(
+                path,
+                data=json.dumps({"status": "accepted"}),
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+
+        owner_path = f"/api/service-requests/{request_for_owner.id}/"
+        self.authorize(self.owner)
+        response = self.client.patch(
+            owner_path,
+            data=json.dumps({"status": "accepted"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["status"], "accepted")
+        self.assertEqual(
+            self.client.patch(
+                owner_path,
+                data=json.dumps({"status": "cancelled"}),
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.patch(
+                owner_path,
+                data=json.dumps({"status": "unknown"}),
+                content_type="application/json",
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.patch(owner_path, data="{", content_type="application/json").status_code,
+            400,
+        )
+
+        self.authorize(self.other)
+        self.assertEqual(
+            self.client.patch(
+                path,
+                data=json.dumps({"status": "cancelled"}),
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+
+    def test_job_application_lifecycle_is_limited_to_allowed_participant_statuses(self):
+        job = self.create_job()
+        application_from_applicant = JobApplication.objects.create(
+            job_id=job["id"],
+            applicant=self.applicant,
+            cover_message="First job application",
+        )
+        application_for_owner = JobApplication.objects.create(
+            job_id=job["id"],
+            applicant=self.other,
+            cover_message="Second job application",
+        )
+
+        path = f"/api/job-applications/{application_from_applicant.id}/"
+        self.authorize(self.applicant)
+        response = self.client.patch(
+            path,
+            data=json.dumps({"status": "withdrawn"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["status"], "withdrawn")
+        self.assertEqual(response.json()["job_id"], job["id"])
+        self.assertEqual(
+            self.client.patch(
+                path,
+                data=json.dumps({"status": "accepted"}),
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+
+        owner_path = f"/api/job-applications/{application_for_owner.id}/"
+        self.authorize(self.owner)
+        response = self.client.patch(
+            owner_path,
+            data=json.dumps({"status": "declined"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["status"], "declined")
+        self.assertEqual(
+            self.client.patch(
+                owner_path,
+                data=json.dumps({"status": "withdrawn"}),
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.patch(
+                owner_path,
+                data=json.dumps({"status": "unknown"}),
+                content_type="application/json",
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.patch(owner_path, data="{", content_type="application/json").status_code,
+            400,
+        )
+
+        self.authorize(self.other)
+        self.assertEqual(
+            self.client.patch(
+                path,
+                data=json.dumps({"status": "withdrawn"}),
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+
+
 class GoogleSignInConfigTests(TestCase):
+    def test_password_login_does_not_require_an_account_type(self):
+        user = User.objects.create_user(
+            username="role-neutral-login",
+            email="role-neutral-login@example.test",
+            password="A-strong-password-123!",
+            role=User.Roles.LANDLORD,
+        )
+        response = self.client.post(
+            "/api/auth/login/",
+            data=json.dumps(
+                {
+                    "username": user.email,
+                    "password": "A-strong-password-123!",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["account"]["account_type"], User.Roles.LANDLORD)
+
+    def test_google_sign_in_keeps_existing_account_role(self):
+        user = User.objects.create_user(
+            username="existing-google-user",
+            email="existing-google@example.test",
+            password="A-strong-password-123!",
+            role=User.Roles.TENANT,
+        )
+        claims = {
+            "sub": "google-subject-existing-user",
+            "email": user.email,
+            "email_verified": True,
+            "name": "Existing Google User",
+            "picture": "",
+        }
+        with patch("rentals.views.verify_google_id_token", return_value=claims):
+            response = self.client.post(
+                "/api/auth/google/",
+                data=json.dumps(
+                    {
+                        "id_token": "valid-test-token",
+                        "account_type": User.Roles.LANDLORD,
+                    }
+                ),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        user.refresh_from_db()
+        self.assertEqual(user.role, User.Roles.TENANT)
+        self.assertEqual(response.json()["account"]["account_type"], User.Roles.TENANT)
+
     def test_public_config_returns_first_allowed_google_client_id(self):
         from django.test import override_settings
 
@@ -71,6 +537,161 @@ class GoogleSignInConfigTests(TestCase):
         self.assertEqual(
             response.json(),
             {"error": "Google sign-in is not configured"},
+        )
+
+
+class MarketplaceCapabilityTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="capability-member",
+            email="capability-member@example.test",
+            password="A-strong-password-123!",
+            role=User.Roles.TENANT,
+            marketplace_capabilities=["list_properties"],
+        )
+        self.authorization = "Bearer " + issue_token_pair(self.user)["access"]
+        self.client.defaults["HTTP_AUTHORIZATION"] = self.authorization
+        self.listing_payload = {
+            "title": "My mixed-use lodge",
+            "address": "1 Lake Road",
+            "city": "Harare",
+            "suburb": "Lake Chivero",
+            "monthly_rent": "80",
+            "deposit_required": "0",
+            "property_type": "lodge",
+            "listing_categories": ["stays", "venues"],
+        }
+
+    def test_member_can_create_and_manage_listing_without_landlord_role(self):
+        response = self.client.post(
+            "/api/properties/",
+            data=json.dumps(self.listing_payload),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["owner"]["id"], self.user.id)
+        self.assertEqual(response.json()["listing_categories"], ["stays", "venues"])
+
+        own_listings = self.client.get("/api/properties/").json()["results"]
+        self.assertEqual([item["id"] for item in own_listings], [response.json()["id"]])
+
+    def test_listing_capability_keeps_public_browsing_and_own_drafts_available(self):
+        public_owner = User.objects.create_user(
+            username="public-listing-owner",
+            email="public-listing-owner@example.test",
+            password="A secure password 2026!",
+            role=User.Roles.LANDLORD,
+            is_verified=True,
+        )
+        public_property = Property.objects.create(
+            owner=public_owner,
+            title="Public rental",
+            address="2 Lake Road",
+            city="Harare",
+            suburb="Avondale",
+            monthly_rent=Decimal("600.00"),
+            deposit_required=Decimal("600.00"),
+            property_type=Property.PropertyType.HOUSE,
+            listing_status=Property.ListingStatus.VERIFIED,
+        )
+        own_property = Property.objects.create(
+            owner=self.user,
+            title="My draft",
+            address="3 Lake Road",
+            city="Harare",
+            suburb="Avondale",
+            monthly_rent=Decimal("700.00"),
+            deposit_required=Decimal("700.00"),
+            property_type=Property.PropertyType.HOUSE,
+            listing_status=Property.ListingStatus.PENDING_VERIFICATION,
+        )
+
+        response = self.client.get("/api/properties/")
+
+        self.assertEqual(response.status_code, 200)
+        ids = {item["id"] for item in response.json()["results"]}
+        self.assertEqual(ids, {public_property.id, own_property.id})
+
+    def test_property_listing_capability_can_be_enabled_from_account(self):
+        self.user.marketplace_capabilities = []
+        self.user.save(update_fields=["marketplace_capabilities"])
+        response = self.client.patch(
+            "/api/auth/profile/",
+            data=json.dumps({"marketplace_capabilities": ["list_properties"]}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn("list_properties", response.json()["account"]["capabilities"])
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.marketplace_capabilities, ["list_properties"])
+
+    def test_property_listing_is_denied_until_capability_is_enabled(self):
+        self.user.marketplace_capabilities = []
+        self.user.save(update_fields=["marketplace_capabilities"])
+        response = self.client.post(
+            "/api/properties/",
+            data=json.dumps(self.listing_payload),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Enable property listings", response.json()["error"])
+
+    def test_landlord_can_save_searches_and_compare_listings(self):
+        owner = User.objects.create_user(
+            username="marketplace-owner",
+            email="marketplace-owner@example.test",
+            password="A secure password 2026!",
+            role=User.Roles.LANDLORD,
+            is_verified=True,
+        )
+        prop = Property.objects.create(
+            owner=owner,
+            title="Verified rental",
+            address="2 Example Road",
+            city="Harare",
+            suburb="Avondale",
+            monthly_rent=Decimal("500.00"),
+            deposit_required=Decimal("500.00"),
+            property_type=Property.PropertyType.HOUSE,
+            listing_status=Property.ListingStatus.VERIFIED,
+        )
+        landlord = User.objects.create_user(
+            username="marketplace-landlord",
+            email="marketplace-landlord@example.test",
+            password="Another secure password 2026!",
+            role=User.Roles.LANDLORD,
+            is_verified=True,
+        )
+        self.client.defaults["HTTP_AUTHORIZATION"] = (
+            "Bearer " + issue_token_pair(landlord)["access"]
+        )
+
+        saved_search = self.client.post(
+            "/api/tenant/saved-searches/",
+            data=json.dumps({
+                "query": "rental homes in Harare",
+                "criteria": {"location": "Harare"},
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(saved_search.status_code, 201, saved_search.content)
+        self.assertEqual(
+            self.client.get("/api/tenant/saved-searches/").json()["results"][0]["id"],
+            saved_search.json()["id"],
+        )
+
+        comparison = self.client.post(
+            "/api/tenant/comparisons/",
+            data=json.dumps({"property_id": prop.id}),
+            content_type="application/json",
+        )
+        self.assertEqual(comparison.status_code, 200, comparison.content)
+        self.assertEqual(
+            self.client.get("/api/tenant/comparisons/").json()["results"][0]["id"],
+            prop.id,
         )
 
 

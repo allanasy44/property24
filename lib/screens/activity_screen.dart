@@ -17,64 +17,67 @@ class ActivityScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    final isLandlord = state.user?.role == AccountRole.landlord;
+    final canManageListings = state.canManageListings;
     final greetingPrefix = greetingForTime();
     final userName = state.user?.name.trim() ?? '';
-    final properties = state.snapshot.properties;
+    final allProperties = state.snapshot.properties;
+    final properties = canManageListings
+        ? allProperties
+              .where(
+                (property) =>
+                    property.owner?.id == state.user?.id ||
+                    property.agent?.id == state.user?.id,
+              )
+              .toList(growable: false)
+        : allProperties;
     final listingPurposes = properties
         .map((property) => property.listingIntent.toLowerCase())
         .toSet();
-    final listingPurposeSummary = listingPurposes.contains('rent') &&
-            listingPurposes.contains('sale')
+    final listingPurposeSummary =
+        listingPurposes.contains('rent') && listingPurposes.contains('sale')
         ? 'Rent + sale'
         : listingPurposes.contains('rent')
-            ? 'Rent'
-            : listingPurposes.contains('sale')
-                ? 'Sale'
-                : '';
+        ? 'Rent'
+        : listingPurposes.contains('sale')
+        ? 'Sale'
+        : '';
     final savedProperties = state.snapshot.savedProperties;
     final bookings = state.snapshot.viewings
         .where((item) => item.isAvailableBooking)
         .take(5)
         .toList(growable: false);
     final theme = Theme.of(context);
-    final metrics = isLandlord
-        ? <Widget>[
-            MetricTile(
-              icon: CupertinoIcons.house,
-              label: listingPurposeSummary.isEmpty
-                  ? 'Total listings'
-                  : 'Listings · $listingPurposeSummary',
-              value: '${properties.length}',
-            ),
-            MetricTile(
-              icon: CupertinoIcons.checkmark_seal,
-              label: 'Verified',
-              value: '${state.verifiedProperties}',
-            ),
-            MetricTile(
-              icon: CupertinoIcons.person_2,
-              label: 'Applications',
-              value: '${state.snapshot.applications.length}',
-            ),
-          ]
-        : <Widget>[
-            MetricTile(
-              icon: CupertinoIcons.heart,
-              label: 'Saved homes',
-              value: '${savedProperties.length}',
-            ),
-            MetricTile(
-              icon: CupertinoIcons.doc_text,
-              label: 'Applications',
-              value: '${state.snapshot.applications.length}',
-            ),
-            MetricTile(
-              icon: CupertinoIcons.calendar,
-              label: 'Bookings',
-              value: '${bookings.length}',
-            ),
-          ];
+    final metrics = <Widget>[
+      if (canManageListings) ...[
+        MetricTile(
+          icon: CupertinoIcons.house,
+          label: listingPurposeSummary.isEmpty
+              ? 'Total listings'
+              : 'Listings · $listingPurposeSummary',
+          value: '${properties.length}',
+        ),
+        MetricTile(
+          icon: CupertinoIcons.checkmark_seal,
+          label: 'Verified',
+          value: '${properties.where((property) => property.verified).length}',
+        ),
+      ],
+      MetricTile(
+        icon: CupertinoIcons.heart,
+        label: 'Saved homes',
+        value: '${savedProperties.length}',
+      ),
+      MetricTile(
+        icon: CupertinoIcons.doc_text,
+        label: 'Applications',
+        value: '${state.snapshot.applications.length}',
+      ),
+      MetricTile(
+        icon: CupertinoIcons.calendar,
+        label: 'Bookings',
+        value: '${bookings.length}',
+      ),
+    ];
 
     return LoadingOverlay(
       child: RefreshIndicator(
@@ -89,17 +92,16 @@ class ActivityScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (!isLandlord)
-                        Text(
-                          'Home',
-                          style: TextStyle(
-                            fontSize: 14,
-                            height: 1.3,
-                            color: AppTheme.textMuted,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.1,
-                          ),
+                      Text(
+                        'Home',
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.3,
+                          color: AppTheme.textMuted,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.1,
                         ),
+                      ),
                       Text(
                         greetingPrefix,
                         style: TextStyle(
@@ -123,13 +125,11 @@ class ActivityScreen extends StatelessWidget {
                             letterSpacing: -0.5,
                           ),
                         ),
-                      if (!isLandlord) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Live updates from your applications, bookings, and home care.',
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ],
+                      const SizedBox(height: 4),
+                      Text(
+                        'Live updates from your listings, applications, bookings, and messages.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
                     ],
                   ),
                 ),
@@ -148,7 +148,8 @@ class ActivityScreen extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             const ErrorBanner(),
-            if (isLandlord && state.user?.accountOnboardingComplete != true)
+            if (canManageListings &&
+                state.user?.accountOnboardingComplete != true)
               Card(
                 color: theme.colorScheme.primaryContainer,
                 shape: RoundedRectangleBorder(
@@ -169,7 +170,7 @@ class ActivityScreen extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 18),
-            if (isLandlord) ...[
+            if (canManageListings) ...[
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Text('Portfolio', style: theme.textTheme.titleLarge),
@@ -181,7 +182,7 @@ class ActivityScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     side: BorderSide(color: AppTheme.border),
                   ),
-                  child: ListTile(
+                  child: const ListTile(
                     leading: Icon(CupertinoIcons.house),
                     title: Text('No listings yet'),
                     subtitle: Text(
@@ -192,72 +193,76 @@ class ActivityScreen extends StatelessWidget {
               else
                 for (final property in properties.take(3))
                   _PortfolioRow(property: property),
-            ] else ...[
-              _Section(
-                title: 'Saved homes',
-                empty: 'Save a property to see it here.',
-                children: [
-                  for (final property in savedProperties.take(5))
-                    _SavedPropertyRow(property: property),
-                ],
-              ),
-              _Section(
-                title: 'Bookings',
-                empty: 'No pending or reserved bookings.',
-                children: [
-                  for (final booking in bookings)
-                    _BookingRow(booking: booking, isLandlord: false),
-                ],
-              ),
             ],
-            if (!isLandlord) ...[
-              _Section(
-                title: 'Applications',
-                empty: 'No applications yet.',
-                children: [
-                  for (final item in state.snapshot.applications.take(5))
-                    ListTile(
-                      leading: const Icon(CupertinoIcons.doc_text),
-                      title: Text(item.property),
-                      subtitle: Text('${item.createdAt} / score ${item.score}'),
-                      trailing: Text(item.status),
-                    ),
-                ],
-              ),
-              _Section(
-                title: 'Messages',
-                empty: 'No conversations yet.',
-                children: [
-                  for (final item in state.snapshot.conversations.take(5))
-                    ListTile(
-                      leading: const Icon(CupertinoIcons.chat_bubble),
-                      title: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.title,
-                              style: TextStyle(
-                                fontWeight: item.unreadCount > 0
-                                    ? FontWeight.w800
-                                    : FontWeight.w500,
-                              ),
+            _Section(
+              title: 'Saved homes',
+              empty: 'Save a property to see it here.',
+              children: [
+                for (final property in savedProperties.take(5))
+                  _SavedPropertyRow(property: property),
+              ],
+            ),
+            _Section(
+              title: 'Bookings',
+              empty: 'No pending or reserved bookings.',
+              children: [
+                for (final booking in bookings)
+                  _BookingRow(
+                    booking: booking,
+                    isLandlord:
+                        canManageListings &&
+                        properties.any(
+                          (property) => property.id == booking.propertyId,
+                        ),
+                  ),
+              ],
+            ),
+            _Section(
+              title: 'Applications',
+              empty: 'No applications yet.',
+              children: [
+                for (final item in state.snapshot.applications.take(5))
+                  ListTile(
+                    leading: const Icon(CupertinoIcons.doc_text),
+                    title: Text(item.property),
+                    subtitle: Text('${item.createdAt} / score ${item.score}'),
+                    trailing: Text(item.status),
+                  ),
+              ],
+            ),
+            _Section(
+              title: 'Messages',
+              empty: 'No conversations yet.',
+              children: [
+                for (final item in state.snapshot.conversations.take(5))
+                  ListTile(
+                    leading: const Icon(CupertinoIcons.chat_bubble),
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.title,
+                            style: TextStyle(
+                              fontWeight: item.unreadCount > 0
+                                  ? FontWeight.w800
+                                  : FontWeight.w500,
                             ),
                           ),
-                          if (item.unreadCount > 0)
-                            _ActivityUnreadBadge(count: item.unreadCount),
-                        ],
-                      ),
-                      subtitle: Text(
-                        item.preview,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: Text(item.updatedAt),
-                      onTap: () => _openConversation(context, state, item),
+                        ),
+                        if (item.unreadCount > 0)
+                          _ActivityUnreadBadge(count: item.unreadCount),
+                      ],
                     ),
-                ],
-              ),
-            ],
+                    subtitle: Text(
+                      item.preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Text(item.updatedAt),
+                    onTap: () => _openConversation(context, state, item),
+                  ),
+              ],
+            ),
           ],
         ),
       ),
@@ -278,10 +283,8 @@ class ActivityScreen extends StatelessWidget {
     }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ConversationScreen(
-          conversation: conversation,
-          property: property,
-        ),
+        builder: (_) =>
+            ConversationScreen(conversation: conversation, property: property),
       ),
     );
   }
@@ -349,9 +352,7 @@ class _BookingRow extends StatelessWidget {
                 } catch (exception) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(userFacingError(exception)),
-                      ),
+                      SnackBar(content: Text(userFacingError(exception))),
                     );
                   }
                 }
@@ -361,10 +362,7 @@ class _BookingRow extends StatelessWidget {
                   value: 'confirmed',
                   child: Text('Accept request'),
                 ),
-                PopupMenuItem(
-                  value: 'rejected',
-                  child: Text('Reject request'),
-                ),
+                PopupMenuItem(value: 'rejected', child: Text('Reject request')),
               ],
             )
           : Text(
@@ -511,8 +509,10 @@ void _openLandlordNotifications(BuildContext context, Property24State state) {
         reverseCurve: Curves.easeInCubic,
       );
       return SlideTransition(
-        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-            .animate(curved),
+        position: Tween<Offset>(
+          begin: const Offset(1, 0),
+          end: Offset.zero,
+        ).animate(curved),
         child: child,
       );
     },
@@ -614,10 +614,8 @@ class _LandlordNotificationPanel extends StatelessWidget {
                               if (!notification.isRead)
                                 IconButton(
                                   tooltip: 'Mark as read',
-                                  onPressed: () => _markAsRead(
-                                    context,
-                                    notification.id,
-                                  ),
+                                  onPressed: () =>
+                                      _markAsRead(context, notification.id),
                                   icon: Icon(
                                     CupertinoIcons.checkmark_circle,
                                     color: theme.colorScheme.primary,
@@ -625,10 +623,8 @@ class _LandlordNotificationPanel extends StatelessWidget {
                                 ),
                               IconButton(
                                 tooltip: 'Clear notification',
-                                onPressed: () => _clearOne(
-                                  context,
-                                  notification.id,
-                                ),
+                                onPressed: () =>
+                                    _clearOne(context, notification.id),
                                 icon: Icon(
                                   CupertinoIcons.trash,
                                   color: theme.colorScheme.onSurfaceVariant,
@@ -651,9 +647,9 @@ class _LandlordNotificationPanel extends StatelessWidget {
       await state.markNotificationRead(notificationId);
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -663,9 +659,9 @@ class _LandlordNotificationPanel extends StatelessWidget {
       await state.clearNotification(notificationId);
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -675,8 +671,9 @@ class _LandlordNotificationPanel extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Clear notifications?'),
-        content:
-            const Text('All notifications will be removed from this area.'),
+        content: const Text(
+          'All notifications will be removed from this area.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -694,9 +691,9 @@ class _LandlordNotificationPanel extends StatelessWidget {
       await state.clearAllNotifications();
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -729,7 +726,7 @@ class _PortfolioRow extends StatelessWidget {
                     color: AppTheme.bgSurface,
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     CupertinoIcons.house,
                     color: AppTheme.accent,
                   ),
@@ -742,15 +739,18 @@ class _PortfolioRow extends StatelessWidget {
                       color: AppTheme.bgSurface,
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: Icon(
+                    child: const Icon(
                       CupertinoIcons.house,
                       color: AppTheme.accent,
                     ),
                   ),
                 ),
         ),
-        title:
-            Text(property.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(
+          property.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         subtitle: Text(
           '${property.listingIntent == 'sale' ? 'For sale' : 'For rent'} / ${property.availabilityStatus} / ${property.listingViews} views',
           maxLines: 1,
@@ -805,9 +805,9 @@ class _Section extends StatelessWidget {
               child: Text(
                 title,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             if (children.isEmpty)
@@ -815,9 +815,9 @@ class _Section extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 child: Text(
                   empty,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.textMuted,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: AppTheme.textMuted),
                 ),
               )
             else

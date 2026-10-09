@@ -121,7 +121,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
 
   Future<void> _loadSimilarProperties() async {
     final state = context.read<Property24State>();
-    if (state.user?.role != AccountRole.tenant || !state.signedIn) return;
+    if (!state.signedIn) return;
     setState(() => _similarPropertiesLoading = true);
     try {
       final suggestions =
@@ -496,7 +496,8 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         ),
                         const SizedBox(height: 20),
                       ],
-                      if (state.user?.role == AccountRole.tenant) ...[
+                      if (state.signedIn &&
+                          state.user?.id != widget.property.owner?.id) ...[
                         _SimilarPropertiesSection(
                           suggestions: _similarProperties,
                           isLoading: _similarPropertiesLoading,
@@ -1255,7 +1256,7 @@ class _AffordabilityCardState extends State<_AffordabilityCard> {
 
   @override
   Widget build(BuildContext context) {
-    if (context.watch<Property24State>().user?.role != AccountRole.tenant) {
+    if (!context.watch<Property24State>().signedIn) {
       return const SizedBox.shrink();
     }
     final theme = Theme.of(context);
@@ -1679,7 +1680,6 @@ class _HostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final supplier = property.supplier;
     final name = supplier?.name.trim() ?? '';
-    final role = supplier?.role.label ?? '';
     final initials = name.isEmpty
         ? 'P'
         : name
@@ -1743,10 +1743,10 @@ class _HostCard extends StatelessWidget {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                      if (role.isNotEmpty) ...[
+                      if (supplier?.email.isNotEmpty == true) ...[
                         const SizedBox(height: 2),
                         Text(
-                          role,
+                          supplier!.email,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1811,7 +1811,7 @@ class _BottomActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    final isTenant = state.user?.role == AccountRole.tenant &&
+    final canInteract = state.signedIn &&
         state.user?.id != property.owner?.id;
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -1834,7 +1834,7 @@ class _BottomActions extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (isTenant && !property.isStayOrVenue) ...[
+          if (canInteract && !property.isStayOrVenue) ...[
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
@@ -1938,7 +1938,7 @@ class _BottomActions extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Viewing request sent. Refresh your inbox to open the landlord chat.',
+              'Viewing request sent. Refresh your inbox to open the conversation.',
             ),
           ),
         );

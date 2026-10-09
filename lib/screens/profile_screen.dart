@@ -55,6 +55,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .map((p) => p[0].toUpperCase())
         .join();
     final hasImage = user?.profilePicture.isNotEmpty == true;
+    final userId = user?.id;
+    final hasMyServices = state.snapshot.services.any(
+      (service) => service.owner.id == userId,
+    );
+    final hasMyJobs = state.snapshot.jobs.any((job) => job.owner.id == userId);
+    final hasMyApplications = state.snapshot.jobApplications.any(
+      (application) => application.applicantId == userId,
+    );
+    final hasReceivedApplications = state.snapshot.jobApplications.any(
+      (application) => application.ownerId == userId,
+    );
+    final hasJobProfile = user?.bio.trim().isNotEmpty == true;
+    final hasBusinessActivity = state.canManageListings ||
+        hasMyServices ||
+        state.snapshot.serviceRequests.isNotEmpty ||
+        hasMyJobs ||
+        hasReceivedApplications;
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -65,7 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           physics: const BouncingScrollPhysics(),
           children: [
             Text(
-              'Profile',
+              'My Account',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
@@ -160,21 +177,196 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 28),
 
-            // ─── Menu cards ───
+            const _ProfileSectionHeading('ACTIVITY'),
+            _MenuCardTile(
+              icon: CupertinoIcons.house,
+              label: state.canManageListings ? 'Overview' : 'My Rentals',
+              onTap: () => context.push(AppRoutes.activityScreen),
+            ),
+            _MenuCardTile(
+              icon: CupertinoIcons.heart,
+              label: 'Saved',
+              onTap: () => context.push(AppRoutes.callsScreen),
+            ),
+            _MenuCardTile(
+              icon: CupertinoIcons.chat_bubble,
+              label: 'Messages',
+              onTap: () => context.go(AppRoutes.chatScreen),
+              showBottomSpacing: false,
+            ),
+            if (hasBusinessActivity) ...[
+              const SizedBox(height: 24),
+              const _ProfileSectionHeading('MY BUSINESS'),
+              if (state.canManageListings)
+                _MenuCardTile(
+                  icon: CupertinoIcons.building_2_fill,
+                  label: 'My Properties',
+                  onTap: () => context.push(AppRoutes.listingsScreen),
+                  showBottomSpacing: !hasMyServices &&
+                      state.snapshot.serviceRequests.isEmpty &&
+                      !hasMyJobs,
+                ),
+              if (hasMyServices)
+                _MenuCardTile(
+                  icon: CupertinoIcons.wrench,
+                  label: 'My Services',
+                  onTap: () => context.go(
+                    '${AppRoutes.exploreScreen}?market=services&view=mine',
+                  ),
+                  showBottomSpacing:
+                      state.snapshot.serviceRequests.isNotEmpty || hasMyJobs,
+                ),
+              if (state.snapshot.serviceRequests.isNotEmpty)
+                _MenuCardTile(
+                  icon: CupertinoIcons.chat_bubble,
+                  label: 'Service Requests',
+                  onTap: () => context.go(
+                    '${AppRoutes.exploreScreen}?market=services&view=requests',
+                  ),
+                  showBottomSpacing: hasMyJobs,
+                ),
+              if (hasMyJobs)
+                _MenuCardTile(
+                  icon: CupertinoIcons.briefcase,
+                  label: 'My Job Posts',
+                  onTap: () => context.go(
+                    '${AppRoutes.exploreScreen}?market=jobs&view=mine',
+                  ),
+                  showBottomSpacing: hasReceivedApplications,
+                ),
+              if (hasReceivedApplications)
+                _MenuCardTile(
+                  icon: CupertinoIcons.person_2,
+                  label: 'Candidate Applications',
+                  onTap: () => context.go(
+                    '${AppRoutes.exploreScreen}?market=jobs&view=candidates',
+                  ),
+                  showBottomSpacing: false,
+                ),
+            ],
+            if (!state.canManageListings || (!hasMyServices && !hasMyJobs)) ...[
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSurface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      state.canManageListings
+                          ? 'Explore more ways to participate'
+                          : 'Want to list a property, stay or venue?',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      state.canManageListings
+                          ? 'Offer a service or explore jobs when you are ready.'
+                          : 'Enable property listings now. You can still use the rest of the marketplace.',
+                      style: TextStyle(
+                        color: AppTheme.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        if (!state.canManageListings)
+                          TextButton(
+                            onPressed: user == null
+                                ? null
+                                : () async {
+                                    try {
+                                      await state.enablePropertyListings();
+                                      if (!context.mounted) return;
+                                      context.push(
+                                        '${AppRoutes.listingsScreen}?category=homes&create=${DateTime.now().microsecondsSinceEpoch}',
+                                      );
+                                    } catch (exception) {
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            userFacingError(exception),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                            child: const Text('Enable property listings'),
+                          ),
+                        TextButton(
+                          onPressed: () => context.go(
+                            '${AppRoutes.exploreScreen}?market=services&create=${DateTime.now().microsecondsSinceEpoch}',
+                          ),
+                          child: const Text('Offer a service'),
+                        ),
+                        TextButton(
+                          onPressed: () => context.go(
+                            '${AppRoutes.exploreScreen}?market=jobs',
+                          ),
+                          child: const Text('Explore jobs'),
+                        ),
+                        if (!hasJobProfile)
+                          TextButton(
+                            onPressed: user == null
+                                ? null
+                                : () => _openProfileEditor(context, user),
+                            child: const Text('Create job profile'),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (hasJobProfile || hasMyApplications) ...[
+              const SizedBox(height: 24),
+              const _ProfileSectionHeading('WORK'),
+              if (hasJobProfile)
+                _MenuCardTile(
+                  icon: CupertinoIcons.person_crop_circle,
+                  label: 'My Job Profile',
+                  onTap: user == null
+                      ? null
+                      : () => _openProfileEditor(context, user),
+                  showBottomSpacing: hasMyApplications,
+                ),
+              if (hasMyApplications)
+                _MenuCardTile(
+                  icon: CupertinoIcons.doc_text,
+                  label: 'My Applications',
+                  onTap: () => context.go(
+                    '${AppRoutes.exploreScreen}?market=jobs&view=applications',
+                  ),
+                  showBottomSpacing: false,
+                ),
+            ],
+            const SizedBox(height: 24),
+            const _ProfileSectionHeading('ACCOUNT'),
             _MenuCardTile(
               icon: CupertinoIcons.person,
-              label: 'Profile Edit',
+              label: 'Edit profile',
               onTap:
                   user == null ? null : () => _openProfileEditor(context, user),
             ),
             _MenuCardTile(
               icon: CupertinoIcons.gear,
-              label: 'Setting',
+              label: 'Settings',
               onTap: () => _openSettings(context),
             ),
             _MenuCardTile(
               icon: CupertinoIcons.person_2,
-              label: 'Help Center',
+              label: 'Help center',
               onTap: () => _openHelp(context),
             ),
             _MenuCardTile(
@@ -249,6 +441,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _openSidePanel<void>(
       context: context,
       child: _VerificationSheet(user: user),
+    );
+  }
+}
+
+class _ProfileSectionHeading extends StatelessWidget {
+  const _ProfileSectionHeading(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: AppTheme.textMuted,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.1,
+        ),
+      ),
     );
   }
 }
@@ -497,7 +711,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             'Name',
                             state.user?.name ?? 'Not signed in',
                           ),
-                          _InfoRowData('Role', state.account.role.label),
                           _InfoRowData(
                             'Phone',
                             state.user?.phone ?? 'Not provided',
@@ -524,25 +737,24 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                       ),
                     ),
                   ),
-                  if (state.account.role != AccountRole.landlord)
-                    _SettingsTile(
-                      icon: CupertinoIcons.doc_text,
-                      label: 'My Bookings',
-                      trailing: _CountBadge(
-                        count: state.snapshot.viewings
-                            .where((item) => item.isAvailableBooking)
-                            .length,
-                      ),
-                      onTap: () => _openNestedPanel(
-                        context,
-                        _BookingsPanel(
-                          bookingsBuilder: (state) => state.snapshot.viewings
-                              .where((item) => item.isAvailableBooking)
-                              .toList(growable: false),
-                        ),
-                      ),
-                      showDivider: false,
+                  _SettingsTile(
+                    icon: CupertinoIcons.doc_text,
+                    label: 'My Bookings',
+                    trailing: _CountBadge(
+                      count: state.snapshot.viewings
+                          .where((item) => item.isAvailableBooking)
+                          .length,
                     ),
+                    onTap: () => _openNestedPanel(
+                      context,
+                      _BookingsPanel(
+                        bookingsBuilder: (state) => state.snapshot.viewings
+                            .where((item) => item.isAvailableBooking)
+                            .toList(growable: false),
+                      ),
+                    ),
+                    showDivider: false,
+                  ),
                 ],
               ),
               const SizedBox(height: 26),
@@ -1377,11 +1589,6 @@ class _HelpCenterSheet extends StatelessWidget {
                 _InfoRow(
                   label: 'Account',
                   value: state.user?.name ?? 'Guest',
-                  showDivider: true,
-                ),
-                _InfoRow(
-                  label: 'Role',
-                  value: state.account.role.label,
                   showDivider: true,
                 ),
                 _InfoRow(

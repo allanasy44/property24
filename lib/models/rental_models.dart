@@ -249,6 +249,170 @@ class AccountContext {
   final bool fullVerificationRequired;
 }
 
+class ServiceListing {
+  const ServiceListing({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.description,
+    required this.location,
+    required this.price,
+    required this.priceType,
+    required this.status,
+    required this.owner,
+    required this.createdAt,
+  });
+
+  factory ServiceListing.fromJson(Map<String, dynamic> json) {
+    final ownerJson = json['owner'] is Map<String, dynamic>
+        ? json['owner'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return ServiceListing(
+      id: textValue(json, 'id'),
+      title: textValue(json, 'title'),
+      category: textValue(json, 'category'),
+      description: textValue(json, 'description'),
+      location: textValue(json, 'location'),
+      price: textValue(json, 'price'),
+      priceType: textValue(json, 'price_type', 'fixed'),
+      status: textValue(json, 'status', 'active'),
+      owner: AccountUser.fromJson(ownerJson),
+      createdAt: textValue(json, 'created_at'),
+    );
+  }
+
+  final String id;
+  final String title;
+  final String category;
+  final String description;
+  final String location;
+  final String price;
+  final String priceType;
+  final String status;
+  final AccountUser owner;
+  final String createdAt;
+}
+
+class ServiceRequestItem {
+  const ServiceRequestItem({
+    required this.id,
+    required this.serviceId,
+    required this.ownerId,
+    required this.requesterId,
+    required this.message,
+    required this.status,
+    required this.requester,
+    required this.createdAt,
+  });
+
+  factory ServiceRequestItem.fromJson(Map<String, dynamic> json) {
+    final requesterJson = json['requester'] is Map<String, dynamic>
+        ? json['requester'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return ServiceRequestItem(
+      id: textValue(json, 'id'),
+      serviceId: textValue(json, 'service_id'),
+      ownerId: textValue(json, 'owner_id'),
+      requesterId: textValue(json, 'requester_id'),
+      message: textValue(json, 'message'),
+      status: textValue(json, 'status', 'pending'),
+      requester: AccountUser.fromJson(requesterJson),
+      createdAt: textValue(json, 'created_at'),
+    );
+  }
+
+  final String id;
+  final String serviceId;
+  final String ownerId;
+  final String requesterId;
+  final String message;
+  final String status;
+  final AccountUser requester;
+  final String createdAt;
+}
+
+class JobPosting {
+  const JobPosting({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.description,
+    required this.location,
+    required this.employmentType,
+    required this.compensation,
+    required this.status,
+    required this.owner,
+    required this.createdAt,
+  });
+
+  factory JobPosting.fromJson(Map<String, dynamic> json) {
+    final ownerJson = json['owner'] is Map<String, dynamic>
+        ? json['owner'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return JobPosting(
+      id: textValue(json, 'id'),
+      title: textValue(json, 'title'),
+      category: textValue(json, 'category'),
+      description: textValue(json, 'description'),
+      location: textValue(json, 'location'),
+      employmentType: textValue(json, 'employment_type', 'full_time'),
+      compensation: textValue(json, 'compensation'),
+      status: textValue(json, 'status', 'active'),
+      owner: AccountUser.fromJson(ownerJson),
+      createdAt: textValue(json, 'created_at'),
+    );
+  }
+
+  final String id;
+  final String title;
+  final String category;
+  final String description;
+  final String location;
+  final String employmentType;
+  final String compensation;
+  final String status;
+  final AccountUser owner;
+  final String createdAt;
+}
+
+class JobApplicationItem {
+  const JobApplicationItem({
+    required this.id,
+    required this.jobId,
+    required this.ownerId,
+    required this.applicantId,
+    required this.coverMessage,
+    required this.status,
+    required this.applicant,
+    required this.createdAt,
+  });
+
+  factory JobApplicationItem.fromJson(Map<String, dynamic> json) {
+    final applicantJson = json['applicant'] is Map<String, dynamic>
+        ? json['applicant'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return JobApplicationItem(
+      id: textValue(json, 'id'),
+      jobId: textValue(json, 'job_id'),
+      ownerId: textValue(json, 'owner_id'),
+      applicantId: textValue(json, 'applicant_id'),
+      coverMessage: textValue(json, 'cover_message'),
+      status: textValue(json, 'status', 'pending'),
+      applicant: AccountUser.fromJson(applicantJson),
+      createdAt: textValue(json, 'created_at'),
+    );
+  }
+
+  final String id;
+  final String jobId;
+  final String ownerId;
+  final String applicantId;
+  final String coverMessage;
+  final String status;
+  final AccountUser applicant;
+  final String createdAt;
+}
+
 class PropertyListing {
   const PropertyListing({
     required this.id,
@@ -1316,6 +1480,10 @@ class PlatformSnapshot {
     required this.comparisonSuggestions,
     required this.savedSearches,
     required this.notifications,
+    this.services = const [],
+    this.serviceRequests = const [],
+    this.jobs = const [],
+    this.jobApplications = const [],
   });
 
   factory PlatformSnapshot.empty() {
@@ -1331,6 +1499,10 @@ class PlatformSnapshot {
       comparisonSuggestions: [],
       savedSearches: [],
       notifications: [],
+      services: [],
+      serviceRequests: [],
+      jobs: [],
+      jobApplications: [],
     );
   }
 
@@ -1345,6 +1517,10 @@ class PlatformSnapshot {
   final List<ComparisonSuggestion> comparisonSuggestions;
   final List<SavedSearchItem> savedSearches;
   final List<NotificationItem> notifications;
+  final List<ServiceListing> services;
+  final List<ServiceRequestItem> serviceRequests;
+  final List<JobPosting> jobs;
+  final List<JobApplicationItem> jobApplications;
 
   PlatformSnapshot copyWith({
     List<PropertyListing>? properties,
@@ -1358,6 +1534,10 @@ class PlatformSnapshot {
     List<ComparisonSuggestion>? comparisonSuggestions,
     List<SavedSearchItem>? savedSearches,
     List<NotificationItem>? notifications,
+    List<ServiceListing>? services,
+    List<ServiceRequestItem>? serviceRequests,
+    List<JobPosting>? jobs,
+    List<JobApplicationItem>? jobApplications,
   }) {
     return PlatformSnapshot(
       properties: properties ?? this.properties,
@@ -1372,6 +1552,10 @@ class PlatformSnapshot {
           comparisonSuggestions ?? this.comparisonSuggestions,
       savedSearches: savedSearches ?? this.savedSearches,
       notifications: notifications ?? this.notifications,
+      services: services ?? this.services,
+      serviceRequests: serviceRequests ?? this.serviceRequests,
+      jobs: jobs ?? this.jobs,
+      jobApplications: jobApplications ?? this.jobApplications,
     );
   }
 }

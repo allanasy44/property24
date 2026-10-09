@@ -37,7 +37,7 @@ class MetricTile extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.10),
+              color: AppTheme.accent.withValues(alpha: 0.10),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: AppTheme.accent),

@@ -6,8 +6,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
-import 'activity_screen.dart';
-
 import '../models/rental_models.dart';
 import '../models/zimbabwe_institutions.dart';
 import '../services/device_location.dart';
@@ -19,10 +17,22 @@ import '../widgets/property_card.dart';
 import 'ai_search_screen.dart';
 import 'property_comparison_screen.dart';
 import 'property_detail_screen.dart';
+import 'marketplace_screen.dart';
 import 'saved_searches_sheet.dart';
 
 class DiscoverScreen extends StatefulWidget {
-  const DiscoverScreen({super.key});
+  const DiscoverScreen({
+    this.initialMarket,
+    this.initialView = 'browse',
+    this.initialQuery,
+    this.createRequestId,
+    super.key,
+  });
+
+  final String? initialMarket;
+  final String initialView;
+  final String? initialQuery;
+  final String? createRequestId;
 
   @override
   State<DiscoverScreen> createState() => _DiscoverScreenState();
@@ -32,6 +42,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   String _query = '';
   final TextEditingController _searchController = TextEditingController();
   String _type = 'Popular';
+  late String _market;
+  late String _marketView;
+  late bool _createOnOpen;
+  String? _createRequestId;
   String? _studentInstitution;
   double? _studentMaxDistanceKm;
   bool _studentSharedOnly = false;
@@ -49,13 +63,54 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   static const _types = [
     'Popular',
-    'Stays',
-    'Venues',
     'Nearby',
     'Recommended',
     'Student stays',
     'Shared rooms',
     'Following',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _market = _normalizeMarket(widget.initialMarket);
+    _marketView = widget.initialView;
+    _query = widget.initialQuery ?? '';
+    _searchController.text = _query;
+    _createRequestId = widget.createRequestId;
+    _createOnOpen = _createRequestId != null;
+  }
+
+  @override
+  void didUpdateWidget(covariant DiscoverScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialMarket != widget.initialMarket) {
+      _market = _normalizeMarket(widget.initialMarket);
+    }
+    if (oldWidget.initialView != widget.initialView) {
+      _marketView = widget.initialView;
+    }
+    if (oldWidget.initialQuery != widget.initialQuery) {
+      _query = widget.initialQuery ?? '';
+      _searchController.text = _query;
+    }
+    if (widget.createRequestId != oldWidget.createRequestId) {
+      _createRequestId = widget.createRequestId;
+      _createOnOpen = _createRequestId != null;
+    }
+  }
+
+  String _normalizeMarket(String? value) => switch (value) {
+    'stays' || 'venues' || 'services' || 'jobs' => value!,
+    _ => 'properties',
+  };
+
+  static const _markets = [
+    ('Properties', 'properties'),
+    ('Stays', 'stays'),
+    ('Venues', 'venues'),
+    ('Services', 'services'),
+    ('Jobs', 'jobs'),
   ];
 
   @override
@@ -88,7 +143,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   void _onPropertyNotification() {
     final state = _listenedState;
-    if (!mounted || state == null || state.user?.role != AccountRole.tenant) {
+    if (!mounted || state == null || !state.signedIn) {
       return;
     }
     final notification = state.allNotifications.firstWhere(
@@ -137,7 +192,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       if (matches.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('This property is no longer available.')),
+            content: Text('This property is no longer available.'),
+          ),
         );
         return;
       }
@@ -148,9 +204,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       );
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -158,28 +214,44 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    if (state.user?.role == AccountRole.landlord) {
-      return const ActivityScreen();
+    if (_market == 'services' || _market == 'jobs') {
+      return MarketplaceScreen(
+        key: ValueKey('$_market-$_createRequestId'),
+        market: _market,
+        initialView: _marketView,
+        createOnOpen: _createOnOpen,
+        onSelectMarket: (market) => setState(() {
+          _market = market;
+          _marketView = 'browse';
+          _createOnOpen = false;
+          _createRequestId = null;
+        }),
+      );
     }
     final displayName = state.user?.name.trim() ?? '';
     final greeting = greetingForTime();
     final sourceProperties = _type == 'Following'
         ? state.followedProperties
         : state.snapshot.properties;
-    final institutions = <String>{
-      ...zimbabweInstitutions,
-      ...state.snapshot.properties
-          .where(
-            (property) =>
-                property.isStudentAccommodation &&
-                property.accommodationInstitution.trim().isNotEmpty,
-          )
-          .map((property) => property.accommodationInstitution.trim())
-    }.toList()
-      ..sort((first, second) => first.toLowerCase().compareTo(
-            second.toLowerCase(),
-          ));
+    final institutions =
+        <String>{
+          ...zimbabweInstitutions,
+          ...state.snapshot.properties
+              .where(
+                (property) =>
+                    property.isStudentAccommodation &&
+                    property.accommodationInstitution.trim().isNotEmpty,
+              )
+              .map((property) => property.accommodationInstitution.trim()),
+        }.toList()..sort(
+          (first, second) =>
+              first.toLowerCase().compareTo(second.toLowerCase()),
+        );
     var properties = sourceProperties.where((property) {
+      if (property.owner?.id == state.user?.id ||
+          property.agent?.id == state.user?.id) {
+        return false;
+      }
       final haystack = [
         property.title,
         property.address,
@@ -203,13 +275,20 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
       return matchesQuery;
     }).toList();
-    if (_type == 'Stays') {
-      properties = properties.where((property) => property.isStay).toList()
-        ..sort(_newestFirst);
-    } else if (_type == 'Venues') {
-      properties = properties.where((property) => property.isVenue).toList()
-        ..sort(_newestFirst);
-    } else if (_type == 'Student stays') {
+    if (_market == 'stays') {
+      properties = properties.where((property) => property.isStay).toList();
+    } else if (_market == 'venues') {
+      properties = properties.where((property) => property.isVenue).toList();
+    } else {
+      properties = properties
+          .where(
+            (property) =>
+                property.listingCategories.contains('homes') ||
+                !property.isStayOrVenue,
+          )
+          .toList();
+    }
+    if (_type == 'Student stays') {
       properties = properties
           .where((property) => property.isStudentAccommodation)
           .where(
@@ -224,17 +303,20 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       if (_studentMaxDistanceKm != null && _deviceLocation == null) {
         properties = [];
       } else if (_deviceLocation case final location?) {
-        properties = properties
-            .where(
-              (property) =>
-                  _distanceMeters(property, location) <=
-                  (_studentMaxDistanceKm ?? double.infinity) * 1000,
-            )
-            .toList()
-          ..sort(
-            (first, second) => _distanceMeters(first, location)
-                .compareTo(_distanceMeters(second, location)),
-          );
+        properties =
+            properties
+                .where(
+                  (property) =>
+                      _distanceMeters(property, location) <=
+                      (_studentMaxDistanceKm ?? double.infinity) * 1000,
+                )
+                .toList()
+              ..sort(
+                (first, second) => _distanceMeters(
+                  first,
+                  location,
+                ).compareTo(_distanceMeters(second, location)),
+              );
       } else {
         properties.sort(_newestFirst);
       }
@@ -242,8 +324,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       properties = properties.where((property) => property.sharedRoom).toList();
       if (_deviceLocation case final location?) {
         properties.sort(
-          (first, second) => _distanceMeters(first, location)
-              .compareTo(_distanceMeters(second, location)),
+          (first, second) => _distanceMeters(
+            first,
+            location,
+          ).compareTo(_distanceMeters(second, location)),
         );
       } else if (_selectedArea case final area?) {
         properties = properties.where(area.matches).toList()
@@ -254,21 +338,24 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     } else if (_type == 'Nearby') {
       if (_deviceLocation case final location?) {
         properties.sort(
-          (first, second) => _distanceMeters(first, location)
-              .compareTo(_distanceMeters(second, location)),
+          (first, second) => _distanceMeters(
+            first,
+            location,
+          ).compareTo(_distanceMeters(second, location)),
         );
       } else if (_selectedArea case final area?) {
-        properties = properties
-            .where((property) => area.matches(property))
-            .toList()
-          ..sort(_newestFirst);
+        properties =
+            properties.where((property) => area.matches(property)).toList()
+              ..sort(_newestFirst);
       } else {
         properties = [];
       }
     } else if (_type == 'Recommended') {
       properties.sort(
-        (first, second) => _recommendationScore(second, state)
-            .compareTo(_recommendationScore(first, state)),
+        (first, second) => _recommendationScore(
+          second,
+          state,
+        ).compareTo(_recommendationScore(first, state)),
       );
     } else if (_type == 'Popular') {
       properties.sort(
@@ -289,9 +376,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           now.difference(createdAt) <= const Duration(days: 7);
     }).toList();
     recentlyAdded.sort(
-      (first, second) => localDateTime(second.createdAt)!.compareTo(
-        localDateTime(first.createdAt)!,
-      ),
+      (first, second) => localDateTime(
+        second.createdAt,
+      )!.compareTo(localDateTime(first.createdAt)!),
     );
     List<PropertyListing> eventProperties(String kind) {
       final propertyIds = state.allNotifications
@@ -312,7 +399,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
     final priceReduced = eventProperties('property.price_reduced');
     final backOnMarket = eventProperties('property.back_on_market');
-    final hasHighlights = newToday.isNotEmpty ||
+    final hasHighlights =
+        newToday.isNotEmpty ||
         recentlyAdded.isNotEmpty ||
         priceReduced.isNotEmpty ||
         backOnMarket.isNotEmpty;
@@ -396,13 +484,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         onChanged: (value) => setState(() => _query = value),
                         onSubmitted: _submitSearch,
                         textInputAction: TextInputAction.search,
-                        style: TextStyle(
-                          color: _textDark,
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: _textDark, fontSize: 14),
                         decoration: InputDecoration(
                           filled: false,
-                          hintText: 'Search homes or describe what you need',
+                          hintText: 'Search properties, stays or venues',
                           hintStyle: TextStyle(
                             color: _textMuted,
                             fontSize: 12.5,
@@ -434,7 +519,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                   size: 18,
                                 ),
                               ),
-                              if (state.user?.role == AccountRole.tenant)
+                              if (state.signedIn)
                                 IconButton(
                                   tooltip: 'Saved searches',
                                   onPressed: () => openSavedSearches(context),
@@ -456,12 +541,54 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                 ),
                             ],
                           ),
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 14),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 14,
+                          ),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
                         ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      height: 42,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _markets.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          final (label, value) = _markets[index];
+                          final selected = _market == value;
+                          return ChoiceChip(
+                            label: Text(label),
+                            selected: selected,
+                            onSelected: (_) {
+                              setState(() {
+                                _market = value;
+                                _type = 'Popular';
+                                _marketView = 'browse';
+                                _createOnOpen = false;
+                                _createRequestId = null;
+                              });
+                            },
+                            labelStyle: TextStyle(
+                              color: selected
+                                  ? Colors.white
+                                  : AppTheme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                            selectedColor: AppTheme.accent,
+                            backgroundColor: AppTheme.bgSurface,
+                            side: BorderSide(color: AppTheme.border),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(22),
+                            ),
+                            showCheckmark: false,
+                          );
+                        },
                       ),
                     ),
 
@@ -571,7 +698,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               if (_type == 'Recommended')
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 8, 20, 4),
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
                     child: Text(
                       'Ranked using your saved AI searches, budget fit, location and listing activity.',
                       style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
@@ -587,37 +714,37 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   title: _type == 'Following'
                       ? 'No followed listings yet'
                       : _type == 'Stays'
-                          ? 'No stays listed yet'
-                          : _type == 'Venues'
-                              ? 'No event venues listed yet'
+                      ? 'No stays listed yet'
+                      : _type == 'Venues'
+                      ? 'No event venues listed yet'
                       : _type == 'Student stays' &&
-                              _studentMaxDistanceKm != null &&
-                              _deviceLocation == null
-                          ? 'Set your location for distance filtering'
-                          : _type == 'Student stays'
-                              ? 'No student accommodation matches'
-                              : _type == 'Shared rooms'
-                                  ? 'No shared rooms listed yet'
-                                  : _type == 'Nearby' && _selectedArea == null
-                                      ? 'Choose your nearby area'
-                                      : 'No matching listings',
+                            _studentMaxDistanceKm != null &&
+                            _deviceLocation == null
+                      ? 'Set your location for distance filtering'
+                      : _type == 'Student stays'
+                      ? 'No student accommodation matches'
+                      : _type == 'Shared rooms'
+                      ? 'No shared rooms listed yet'
+                      : _type == 'Nearby' && _selectedArea == null
+                      ? 'Choose your nearby area'
+                      : 'No matching listings',
                   body: _type == 'Following'
-                      ? 'Follow a landlord or agent to see their listings here.'
+                      ? 'Follow a property manager or agent to see their listings here.'
                       : _type == 'Stays'
-                          ? 'Browse lodges, guest houses, hotels, cottages, holiday homes, resorts and more.'
-                          : _type == 'Venues'
-                              ? 'Discover wedding, conference, party and other event venues.'
+                      ? 'Browse lodges, guest houses, hotels, cottages, holiday homes, resorts and more.'
+                      : _type == 'Venues'
+                      ? 'Discover wedding, conference, party and other event venues.'
                       : _type == 'Student stays' &&
-                              _studentMaxDistanceKm != null &&
-                              _deviceLocation == null
-                          ? 'Use your current location to find student accommodation within your selected distance.'
-                          : _type == 'Student stays'
-                              ? 'Try another institution or adjust shared-room, verification, or distance filters.'
-                              : _type == 'Shared rooms'
-                                  ? 'Browse available shared-room listings or choose a nearby area.'
-                                  : _type == 'Nearby' && _selectedArea == null
-                                      ? 'Allow location access or choose a city or suburb to see nearby homes.'
-                                      : 'Try another suburb, city, or property type.',
+                            _studentMaxDistanceKm != null &&
+                            _deviceLocation == null
+                      ? 'Use your current location to find student accommodation within your selected distance.'
+                      : _type == 'Student stays'
+                      ? 'Try another institution or adjust shared-room, verification, or distance filters.'
+                      : _type == 'Shared rooms'
+                      ? 'Browse available shared-room listings or choose a nearby area.'
+                      : _type == 'Nearby' && _selectedArea == null
+                      ? 'Allow location access or choose a city or suburb to see nearby homes.'
+                      : 'Try another suburb, city, or property type.',
                 ),
               )
             else if (_type == 'Nearby')
@@ -630,7 +757,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     distanceFor: _deviceLocation == null
                         ? null
                         : (property) => _formatDistance(
-                            _distanceMeters(property, _deviceLocation!)),
+                            _distanceMeters(property, _deviceLocation!),
+                          ),
                     onOpen: (property) => _openDetails(context, property),
                   ),
                 ),
@@ -644,12 +772,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     onCompare: state.comparedProperties.length < 2
                         ? null
                         : () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => PropertyComparisonScreen(
-                                  properties: state.comparedProperties,
-                                ),
+                            MaterialPageRoute<void>(
+                              builder: (_) => PropertyComparisonScreen(
+                                properties: state.comparedProperties,
                               ),
                             ),
+                          ),
                     onClear: () {
                       state.clearComparisons();
                     },
@@ -666,7 +794,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     final property = properties[index];
                     return PropertyCard(
                       property: property,
-                      distanceLabel: (_type == 'Recommended' ||
+                      distanceLabel:
+                          (_type == 'Recommended' ||
                                   _type == 'Student stays' ||
                                   _type == 'Shared rooms') &&
                               _deviceLocation != null &&
@@ -676,8 +805,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                             )
                           : null,
                       saved: state.savedPropertyIds.contains(property.id),
-                      compared:
-                          state.comparisonPropertyIds.contains(property.id),
+                      compared: state.comparisonPropertyIds.contains(
+                        property.id,
+                      ),
                       onSave: () => state.toggleSaved(property),
                       onCompare: () => state.toggleComparison(property),
                       onTap: () => _openDetails(context, property),
@@ -806,22 +936,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       var score = 0;
       final locations = criteria['locations'] is List
           ? (criteria['locations'] as List).map((value) => '$value')
-          : [
-              '${criteria['location'] ?? ''}',
-            ];
+          : ['${criteria['location'] ?? ''}'];
       if (locations.any(
         (location) =>
             location.trim().isNotEmpty &&
-            '${property.city} ${property.suburb}'
-                .toLowerCase()
-                .contains(location.toLowerCase()),
+            '${property.city} ${property.suburb}'.toLowerCase().contains(
+              location.toLowerCase(),
+            ),
       )) {
         score += 35;
       }
       final minBedrooms = int.tryParse(
-          '${criteria['min_bedrooms'] ?? criteria['bedrooms_min'] ?? ''}');
+        '${criteria['min_bedrooms'] ?? criteria['bedrooms_min'] ?? ''}',
+      );
       final maxBedrooms = int.tryParse(
-          '${criteria['max_bedrooms'] ?? criteria['bedrooms_max'] ?? ''}');
+        '${criteria['max_bedrooms'] ?? criteria['bedrooms_max'] ?? ''}',
+      );
       if ((minBedrooms == null || property.bedrooms >= minBedrooms) &&
           (maxBedrooms == null || property.bedrooms <= maxBedrooms) &&
           (minBedrooms != null || maxBedrooms != null)) {
@@ -851,7 +981,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       }
       final amenities = criteria['required_amenities'];
       if (amenities is List) {
-        score += amenities
+        score +=
+            amenities
                 .where((item) => _propertyHasAmenity(property, '$item', text))
                 .length *
             5;
@@ -860,10 +991,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
     final distanceScore =
         _deviceLocation != null && _hasPrivacyAwareCoordinates(property)
-            ? (20 - _distanceMeters(property, _deviceLocation!) / 2500)
-                .clamp(0, 20)
-                .round()
-            : 0;
+        ? (20 - _distanceMeters(property, _deviceLocation!) / 2500)
+              .clamp(0, 20)
+              .round()
+        : 0;
     final popularityScore = _popularityScore(property).clamp(0, 15);
     final recencyScore = _recencyScore(property).clamp(0, 10);
     return bestSearchScore + distanceScore + popularityScore + recencyScore;
@@ -918,10 +1049,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         longitude <= 180;
   }
 
-  static double _distanceMeters(
-    PropertyListing property,
-    LatLng? origin,
-  ) {
+  static double _distanceMeters(PropertyListing property, LatLng? origin) {
     if (origin == null || !_hasPrivacyAwareCoordinates(property)) {
       return double.infinity;
     }
@@ -932,7 +1060,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         (property.mapLatitude!.toDouble() - origin.latitude) * math.pi / 180;
     final deltaLongitude =
         (property.mapLongitude!.toDouble() - origin.longitude) * math.pi / 180;
-    final haversine = math.pow(math.sin(deltaLatitude / 2), 2) +
+    final haversine =
+        math.pow(math.sin(deltaLatitude / 2), 2) +
         math.cos(latitude1) *
             math.cos(latitude2) *
             math.pow(math.sin(deltaLongitude / 2), 2);
@@ -1070,15 +1199,18 @@ class _StudentAccommodationFilters extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final distanceValue =
-        maxDistanceKm == null ? 'any' : '${maxDistanceKm!.round()}';
-    final availableInstitutions = <String>{
-      ...institutions,
-      if (institution != null && institution!.trim().isNotEmpty) institution!,
-    }.toList()
-      ..sort((first, second) => first.toLowerCase().compareTo(
-            second.toLowerCase(),
-          ));
+    final distanceValue = maxDistanceKm == null
+        ? 'any'
+        : '${maxDistanceKm!.round()}';
+    final availableInstitutions =
+        <String>{
+          ...institutions,
+          if (institution != null && institution!.trim().isNotEmpty)
+            institution!,
+        }.toList()..sort(
+          (first, second) =>
+              first.toLowerCase().compareTo(second.toLowerCase()),
+        );
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
       child: Column(
@@ -1103,7 +1235,8 @@ class _StudentAccommodationFilters extends StatelessWidget {
                       DropdownMenuItem(value: name, child: Text(name)),
                   ],
                   onChanged: (value) => onInstitutionChanged(
-                      value?.isEmpty == true ? null : value),
+                    value?.isEmpty == true ? null : value,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1133,7 +1266,7 @@ class _StudentAccommodationFilters extends StatelessWidget {
                 onSelected: onSharedChanged,
               ),
               FilterChip(
-                label: const Text('Verified landlords'),
+                label: const Text('Verified property managers'),
                 selected: verifiedOnly,
                 onSelected: onVerifiedChanged,
               ),
@@ -1521,10 +1654,10 @@ class _NotificationPanel extends StatelessWidget {
                           onTap: notification.payload['property_id'] == null
                               ? null
                               : () => _openNotificationProperty(
-                                    context,
-                                    state,
-                                    notification,
-                                  ),
+                                  context,
+                                  state,
+                                  notification,
+                                ),
                           leading: Icon(
                             notification.isRead
                                 ? CupertinoIcons.bell
@@ -1552,10 +1685,8 @@ class _NotificationPanel extends StatelessWidget {
                               if (!notification.isRead)
                                 IconButton(
                                   tooltip: 'Mark as read',
-                                  onPressed: () => _markAsRead(
-                                    context,
-                                    notification.id,
-                                  ),
+                                  onPressed: () =>
+                                      _markAsRead(context, notification.id),
                                   icon: const Icon(
                                     CupertinoIcons.checkmark_circle,
                                     color: AppTheme.accent,
@@ -1563,10 +1694,8 @@ class _NotificationPanel extends StatelessWidget {
                                 ),
                               IconButton(
                                 tooltip: 'Clear notification',
-                                onPressed: () => _clearOne(
-                                  context,
-                                  notification.id,
-                                ),
+                                onPressed: () =>
+                                    _clearOne(context, notification.id),
                                 icon: Icon(
                                   CupertinoIcons.trash,
                                   color: AppTheme.textMuted,
@@ -1601,7 +1730,8 @@ class _NotificationPanel extends StatelessWidget {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('This property is no longer available.')),
+            content: Text('This property is no longer available.'),
+          ),
         );
         return;
       }
@@ -1613,9 +1743,9 @@ class _NotificationPanel extends StatelessWidget {
       );
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -1625,9 +1755,9 @@ class _NotificationPanel extends StatelessWidget {
       await state.markNotificationRead(notificationId);
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -1637,9 +1767,9 @@ class _NotificationPanel extends StatelessWidget {
       await state.clearNotification(notificationId);
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -1649,8 +1779,9 @@ class _NotificationPanel extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Clear notifications?'),
-        content:
-            const Text('All notifications will be removed from this area.'),
+        content: const Text(
+          'All notifications will be removed from this area.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -1668,9 +1799,9 @@ class _NotificationPanel extends StatelessWidget {
       await state.clearAllNotifications();
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -1721,7 +1852,7 @@ class _MapExplorer extends StatelessWidget {
             child: center == null
                 ? ColoredBox(
                     color: AppTheme.bgSurface,
-                    child: Center(
+                    child: const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
                         child: Text(
@@ -1790,9 +1921,7 @@ class _MapExplorer extends StatelessWidget {
                   ),
           ),
         ),
-        if (!properties.any(
-          _DiscoverScreenState._hasPrivacyAwareCoordinates,
-        ))
+        if (!properties.any(_DiscoverScreenState._hasPrivacyAwareCoordinates))
           const Padding(
             padding: EdgeInsets.all(18),
             child: Text('No listings with map coordinates in this area yet.'),
@@ -1800,8 +1929,10 @@ class _MapExplorer extends StatelessWidget {
         for (final property in properties)
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading:
-                const Icon(CupertinoIcons.location, color: AppTheme.accent),
+            leading: const Icon(
+              CupertinoIcons.location,
+              color: AppTheme.accent,
+            ),
             title: Text(
               property.title,
               maxLines: 1,
@@ -1839,7 +1970,10 @@ class _MapPin extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             boxShadow: const [
               BoxShadow(
-                  color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                color: Colors.black26,
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
             ],
           ),
           child: Padding(
@@ -2038,8 +2172,10 @@ class _TrustLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading:
-          const Icon(CupertinoIcons.checkmark_circle, color: AppTheme.accent),
+      leading: const Icon(
+        CupertinoIcons.checkmark_circle,
+        color: AppTheme.accent,
+      ),
       title: Text(
         label,
         style: TextStyle(

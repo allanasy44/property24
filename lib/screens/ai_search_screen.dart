@@ -174,7 +174,7 @@ class _AiSearchScreenState extends State<AiSearchScreen> {
           );
       if (!mounted) return;
       setState(() => _response = response);
-      if (context.read<Property24State>().user?.role == AccountRole.tenant) {
+      if (context.read<Property24State>().signedIn) {
         await _saveSearch();
       }
     } catch (exception) {

@@ -129,10 +129,12 @@ class Property24State extends ChangeNotifier {
         }
         _applySession(session);
         try {
-          _replaceSnapshot(await _api.snapshot(
-            token: _token,
-            isAdmin: user?.role == AccountRole.admin,
-          ));
+          _replaceSnapshot(
+            await _api.snapshot(
+              token: _token,
+              isAdmin: user?.role == AccountRole.admin,
+            ),
+          );
         } catch (exception) {
           if (!_isVerificationGate(exception)) rethrow;
           await _loadVerificationSnapshot();
@@ -169,20 +171,24 @@ class Property24State extends ChangeNotifier {
         } else {
           final session = await _api.me(_token!);
           _applySession(session);
-          _replaceSnapshot(await _api.snapshot(
-            token: _token,
-            isAdmin: user?.role == AccountRole.admin,
-          ));
+          _replaceSnapshot(
+            await _api.snapshot(
+              token: _token,
+              isAdmin: user?.role == AccountRole.admin,
+            ),
+          );
         }
       } catch (exception) {
         if (_isUnauthorized(exception)) {
           final restored = await _restoreSession();
           if (restored == null) rethrow;
           _applySession(restored);
-          _replaceSnapshot(await _api.snapshot(
-            token: _token,
-            isAdmin: user?.role == AccountRole.admin,
-          ));
+          _replaceSnapshot(
+            await _api.snapshot(
+              token: _token,
+              isAdmin: user?.role == AccountRole.admin,
+            ),
+          );
         } else if (!_isVerificationGate(exception)) {
           rethrow;
         } else {
@@ -389,10 +395,17 @@ class Property24State extends ChangeNotifier {
     );
   }
 
-  Future<void> signInWithGoogle(AccountRole role) async {
+  Future<void> signInWithGoogle(
+    AccountRole? role, {
+    List<String> marketplaceCapabilities = const [],
+  }) async {
     await _authenticate(() async {
       final google = await _api.googleSignIn();
-      return _api.loginWithGoogle(idToken: google, role: role);
+      return _api.loginWithGoogle(
+        idToken: google,
+        role: role,
+        marketplaceCapabilities: marketplaceCapabilities,
+      );
     });
   }
 
@@ -401,6 +414,7 @@ class Property24State extends ChangeNotifier {
     required String name,
     required String email,
     required String password,
+    List<String> marketplaceCapabilities = const [],
   }) async {
     loading = true;
     error = null;
@@ -411,6 +425,7 @@ class Property24State extends ChangeNotifier {
         name: name,
         email: email,
         password: password,
+        marketplaceCapabilities: marketplaceCapabilities,
       );
       return '${response['challenge_id']}';
     } catch (exception) {
@@ -430,10 +445,12 @@ class Property24State extends ChangeNotifier {
     await _storeSession(session);
     _applySession(session);
     try {
-      _replaceSnapshot(await _api.snapshot(
-        token: session.token,
-        isAdmin: session.user.role == AccountRole.admin,
-      ));
+      _replaceSnapshot(
+        await _api.snapshot(
+          token: session.token,
+          isAdmin: session.user.role == AccountRole.admin,
+        ),
+      );
     } catch (_) {
       try {
         await _loadVerificationSnapshot();
@@ -446,6 +463,17 @@ class Property24State extends ChangeNotifier {
 
   Future<String> resendRegistrationEmail(String challengeId) {
     return _api.resendRegistrationEmail(challengeId);
+  }
+
+  Future<void> enablePropertyListings() async {
+    final session = await _api.updateMarketplaceCapabilities(
+      token: _requireToken(),
+      capabilities: const ['list_properties'],
+    );
+    user = session.user;
+    account = session.account;
+    notifyListeners();
+    await refresh(silent: true);
   }
 
   Future<void> updateProfile({
@@ -560,10 +588,12 @@ class Property24State extends ChangeNotifier {
     user = session.user;
 
     account = session.account;
-    _replaceSnapshot(await _api.snapshot(
-      token: activeToken,
-      isAdmin: user?.role == AccountRole.admin,
-    ));
+    _replaceSnapshot(
+      await _api.snapshot(
+        token: activeToken,
+        isAdmin: user?.role == AccountRole.admin,
+      ),
+    );
     notifyListeners();
     return verification;
   }
@@ -577,10 +607,12 @@ class Property24State extends ChangeNotifier {
       await _storeSession(session);
       _applySession(session);
       try {
-        _replaceSnapshot(await _api.snapshot(
-          token: session.token,
-          isAdmin: session.user.role == AccountRole.admin,
-        ));
+        _replaceSnapshot(
+          await _api.snapshot(
+            token: session.token,
+            isAdmin: session.user.role == AccountRole.admin,
+          ),
+        );
       } catch (exception) {
         if (!_isVerificationGate(exception)) rethrow;
         await _loadVerificationSnapshot();
@@ -636,10 +668,12 @@ class Property24State extends ChangeNotifier {
       final saved = propertyId == null
           ? await _api.createProperty(activeToken, draft)
           : await _api.updateProperty(activeToken, propertyId, draft);
-      _replaceSnapshot(await _api.snapshot(
-        token: activeToken,
-        isAdmin: user?.role == AccountRole.admin,
-      ));
+      _replaceSnapshot(
+        await _api.snapshot(
+          token: activeToken,
+          isAdmin: user?.role == AccountRole.admin,
+        ),
+      );
       return saved;
     } catch (exception) {
       error = userFacingError(exception);
@@ -653,11 +687,115 @@ class Property24State extends ChangeNotifier {
   Future<void> deleteProperty(String propertyId) async {
     final activeToken = _requireToken();
     await _api.deleteProperty(activeToken, propertyId);
-    _replaceSnapshot(await _api.snapshot(
-      token: activeToken,
-      isAdmin: user?.role == AccountRole.admin,
-    ));
+    _replaceSnapshot(
+      await _api.snapshot(
+        token: activeToken,
+        isAdmin: user?.role == AccountRole.admin,
+      ),
+    );
     notifyListeners();
+  }
+
+  Future<ServiceListing> createService(Map<String, dynamic> payload) async {
+    final activeToken = _requireToken();
+    final service = await _api.createService(activeToken, payload);
+    await refresh();
+    return service;
+  }
+
+  Future<ServiceListing> updateService(
+    ServiceListing service,
+    Map<String, dynamic> payload,
+  ) async {
+    final activeToken = _requireToken();
+    final updated = await _api.updateService(activeToken, service.id, payload);
+    await refresh();
+    return updated;
+  }
+
+  Future<void> deleteService(String serviceId) async {
+    final activeToken = _requireToken();
+    await _api.deleteService(activeToken, serviceId);
+    await refresh();
+  }
+
+  Future<ServiceRequestItem> requestService(
+    ServiceListing service,
+    String message,
+  ) async {
+    final activeToken = _requireToken();
+    final request = await _api.requestService(
+      activeToken,
+      service.id,
+      message,
+    );
+    await refresh();
+    return request;
+  }
+
+  Future<ServiceRequestItem> updateServiceRequest(
+    ServiceRequestItem request,
+    String status,
+  ) async {
+    final activeToken = _requireToken();
+    final updated = await _api.updateServiceRequest(
+      activeToken,
+      request.id,
+      status,
+    );
+    await refresh();
+    return updated;
+  }
+
+  Future<JobPosting> createJob(Map<String, dynamic> payload) async {
+    final activeToken = _requireToken();
+    final job = await _api.createJob(activeToken, payload);
+    await refresh();
+    return job;
+  }
+
+  Future<JobPosting> updateJob(
+    JobPosting job,
+    Map<String, dynamic> payload,
+  ) async {
+    final activeToken = _requireToken();
+    final updated = await _api.updateJob(activeToken, job.id, payload);
+    await refresh();
+    return updated;
+  }
+
+  Future<void> deleteJob(String jobId) async {
+    final activeToken = _requireToken();
+    await _api.deleteJob(activeToken, jobId);
+    await refresh();
+  }
+
+  Future<JobApplicationItem> applyToJob(
+    JobPosting job,
+    String coverMessage,
+  ) async {
+    final activeToken = _requireToken();
+    final application = await _api.applyToJob(
+      activeToken,
+      job.id,
+      coverMessage,
+    );
+    await refresh();
+    return application;
+  }
+
+  Future<JobApplicationItem> updateJobApplication(
+    JobApplicationItem application,
+    String status,
+  ) async {
+    final activeToken = _requireToken();
+    final updated = await _api.updateJobApplication(
+      activeToken,
+      application.id,
+      status,
+    );
+    await refresh();
+    return updated;
   }
 
   Future<void> confirmPropertyAvailability(
@@ -680,12 +818,13 @@ class Property24State extends ChangeNotifier {
     PropertyListing property,
   ) async {
     final activeToken = _requireToken();
-    final conversation =
-        await _api.startConversation(activeToken, property.id);
-    _replaceSnapshot(await _api.snapshot(
-      token: activeToken,
-      isAdmin: user?.role == AccountRole.admin,
-    ));
+    final conversation = await _api.startConversation(activeToken, property.id);
+    _replaceSnapshot(
+      await _api.snapshot(
+        token: activeToken,
+        isAdmin: user?.role == AccountRole.admin,
+      ),
+    );
     notifyListeners();
     return conversation;
   }
@@ -722,10 +861,12 @@ class Property24State extends ChangeNotifier {
   Future<ConversationItem> holdProperty(PropertyListing property) async {
     final activeToken = _requireToken();
     final conversation = await _api.holdProperty(activeToken, property.id);
-    _replaceSnapshot(await _api.snapshot(
-      token: activeToken,
-      isAdmin: user?.role == AccountRole.admin,
-    ));
+    _replaceSnapshot(
+      await _api.snapshot(
+        token: activeToken,
+        isAdmin: user?.role == AccountRole.admin,
+      ),
+    );
     notifyListeners();
     return conversation;
   }
@@ -1277,6 +1418,8 @@ class Property24State extends ChangeNotifier {
         comparisonSuggestions: publicSnapshot.comparisonSuggestions,
         savedSearches: publicSnapshot.savedSearches,
         notifications: publicSnapshot.notifications,
+        services: publicSnapshot.services,
+        jobs: publicSnapshot.jobs,
       ),
     );
   }

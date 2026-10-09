@@ -11,6 +11,7 @@ import '../screens/auth_screen.dart';
 import '../screens/calls_screen.dart';
 import '../screens/discover_screen.dart';
 import '../screens/inbox_screen.dart';
+import '../screens/home_screen.dart';
 import '../screens/listings_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/property_detail_screen.dart';
@@ -23,6 +24,7 @@ class AppRoutes {
 
   static const String initial = '/';
   static const String homeName = 'home';
+  static const String exploreName = 'explore';
   static const String callsName = 'calls';
   static const String chatName = 'chat';
   static const String listingsName = 'listings';
@@ -33,6 +35,7 @@ class AppRoutes {
   static const String authName = 'auth';
 
   static const String homeScreen = '/home';
+  static const String exploreScreen = '/explore';
   static const String callsScreen = '/calls';
   static const String chatScreen = '/chat';
   static const String listingsScreen = '/listings';
@@ -58,8 +61,18 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.authScreen,
       name: AppRoutes.authName,
       pageBuilder: (context, state) {
-        final role = accountRoleFromJson(state.pathParameters['role']);
-        return _fadePage(state, AuthScreen(role: role));
+        final intent = state.pathParameters['role'] ?? 'explore';
+        final isLegacyRole = intent == 'tenant' || intent == 'landlord';
+        final role = isLegacyRole
+            ? accountRoleFromJson(intent)
+            : AccountRole.tenant;
+        return _fadePage(
+          state,
+          AuthScreen(
+            role: role,
+            initialIntent: intent,
+          ),
+        );
       },
     ),
     GoRoute(
@@ -86,11 +99,16 @@ final GoRouter appRouter = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: AppRoutes.callsScreen,
-              name: AppRoutes.callsName,
+              path: AppRoutes.exploreScreen,
+              name: AppRoutes.exploreName,
               pageBuilder: (context, state) => _fadePage(
                 state,
-                const _ListingsBranchScreen(),
+                _ExploreBranchScreen(
+                  initialMarket: state.uri.queryParameters['market'],
+                  initialView: state.uri.queryParameters['view'] ?? 'browse',
+                  initialQuery: state.uri.queryParameters['q'],
+                  createRequestId: state.uri.queryParameters['create'],
+                ),
               ),
             ),
           ],
@@ -122,11 +140,24 @@ final GoRouter appRouter = GoRouter(
       ],
     ),
     GoRoute(
+      path: AppRoutes.callsScreen,
+      name: AppRoutes.callsName,
+      pageBuilder: (context, state) => _fadePage(
+        state,
+        const SavedHomesScreen(),
+      ),
+    ),
+    GoRoute(
       path: AppRoutes.listingsScreen,
       name: AppRoutes.listingsName,
       pageBuilder: (context, state) => _fadePage(
         state,
-        const ListingsScreen(),
+        ListingsScreen(
+          initialCategories: [
+            state.uri.queryParameters['category'] ?? 'homes',
+          ],
+          openComposerOnOpen: state.uri.queryParameters['create'] != null,
+        ),
       ),
     ),
     GoRoute(
@@ -191,18 +222,33 @@ class _DashboardBranchScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return context.watch<Property24State>().user?.role == AccountRole.admin
         ? const AdminDashboardScreen()
-        : const DiscoverScreen();
+        : const HomeScreen();
   }
 }
 
-class _ListingsBranchScreen extends StatelessWidget {
-  const _ListingsBranchScreen();
+class _ExploreBranchScreen extends StatelessWidget {
+  const _ExploreBranchScreen({
+    this.initialMarket,
+    this.initialView = 'browse',
+    this.initialQuery,
+    this.createRequestId,
+  });
+
+  final String? initialMarket;
+  final String initialView;
+  final String? initialQuery;
+  final String? createRequestId;
 
   @override
   Widget build(BuildContext context) {
     return context.watch<Property24State>().user?.role == AccountRole.admin
         ? const AdminUsersScreen()
-        : const SavedHomesScreen();
+        : DiscoverScreen(
+            initialMarket: initialMarket,
+            initialView: initialView,
+            initialQuery: initialQuery,
+            createRequestId: createRequestId,
+          );
   }
 }
 

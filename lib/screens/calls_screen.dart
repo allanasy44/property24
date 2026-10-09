@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
 import '../services/property24_api.dart';
-import 'listings_screen.dart';
 import 'property_detail_screen.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
@@ -22,9 +21,6 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    if (state.user?.role == AccountRole.landlord) {
-      return const ListingsScreen();
-    }
     final properties = state.snapshot.savedProperties
         .map(state.currentProperty)
         .toList(growable: false);

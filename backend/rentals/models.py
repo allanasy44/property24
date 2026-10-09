@@ -21,6 +21,7 @@ class User(AbstractUser):
     full_name = models.CharField(max_length=160, blank=True)
     phone = models.CharField(max_length=32, blank=True)
     role = models.CharField(max_length=16, choices=Roles.choices, default=Roles.TENANT)
+    marketplace_capabilities = models.JSONField(default=list, blank=True)
     is_verified = models.BooleanField(default=False)
     auth_provider = models.CharField(max_length=24, default="password")
     google_subject = models.CharField(max_length=255, blank=True, unique=True, null=True)
@@ -85,6 +86,7 @@ class PendingRegistrationOTP(models.Model):
     phone = models.CharField(max_length=32)
     full_name = models.CharField(max_length=160, blank=True)
     role = models.CharField(max_length=16, choices=User.Roles.choices, default=User.Roles.TENANT)
+    marketplace_capabilities = models.JSONField(default=list, blank=True)
     password_hash = models.CharField(max_length=128)
     code_hash = models.CharField(max_length=128)
     sent_to = models.CharField(max_length=254)
@@ -374,6 +376,141 @@ class Property(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class ServiceListing(models.Model):
+    class PriceType(models.TextChoices):
+        FIXED = "fixed", "Fixed"
+        HOURLY = "hourly", "Hourly"
+        QUOTE = "quote", "Quote"
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="service_listings",
+    )
+    title = models.CharField(max_length=180)
+    category = models.CharField(max_length=80)
+    description = models.TextField(max_length=4000)
+    location = models.CharField(max_length=160)
+    price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    price_type = models.CharField(max_length=16, choices=PriceType.choices, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["is_active", "category", "-created_at"])]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(price__isnull=True) | models.Q(price__gte=0),
+                name="service_listing_price_nonnegative",
+            ),
+        ]
+
+    def __str__(self):
+        return self.title
+
+
+class ServiceRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        DECLINED = "declined", "Declined"
+        CANCELLED = "cancelled", "Cancelled"
+
+    service = models.ForeignKey(
+        ServiceListing,
+        on_delete=models.CASCADE,
+        related_name="requests",
+    )
+    requester = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="service_requests",
+    )
+    message = models.CharField(max_length=2000)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["service", "requester"],
+                name="unique_service_requester",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["requester", "-created_at"]),
+            models.Index(fields=["service", "-created_at"]),
+        ]
+
+
+class JobPosting(models.Model):
+    class EmploymentType(models.TextChoices):
+        FULL_TIME = "full_time", "Full time"
+        PART_TIME = "part_time", "Part time"
+        CONTRACT = "contract", "Contract"
+        TEMPORARY = "temporary", "Temporary"
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="job_postings",
+    )
+    title = models.CharField(max_length=180)
+    category = models.CharField(max_length=80)
+    description = models.TextField(max_length=4000)
+    location = models.CharField(max_length=160)
+    employment_type = models.CharField(max_length=16, choices=EmploymentType.choices)
+    compensation = models.CharField(max_length=160, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["is_active", "category", "-created_at"])]
+
+    def __str__(self):
+        return self.title
+
+
+class JobApplication(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        DECLINED = "declined", "Declined"
+        WITHDRAWN = "withdrawn", "Withdrawn"
+
+    job = models.ForeignKey(
+        JobPosting,
+        on_delete=models.CASCADE,
+        related_name="applications",
+    )
+    applicant = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="job_applications",
+    )
+    cover_message = models.CharField(max_length=2000)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["job", "applicant"],
+                name="unique_job_applicant",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["applicant", "-created_at"]),
+            models.Index(fields=["job", "-created_at"]),
+        ]
 
 
 class PropertyHold(models.Model):

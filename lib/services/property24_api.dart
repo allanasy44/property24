@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -231,6 +230,7 @@ class Property24Api {
     required String name,
     required String email,
     required String password,
+    List<String> marketplaceCapabilities = const [],
   }) async {
     return _post(
       'auth/register/',
@@ -240,6 +240,7 @@ class Property24Api {
         'email': email,
         'username': email,
         'password': password,
+        'marketplace_capabilities': marketplaceCapabilities,
       },
     );
   }
@@ -265,13 +266,15 @@ class Property24Api {
 
   Future<AuthSession> loginWithGoogle({
     required String idToken,
-    required AccountRole role,
+    AccountRole? role,
+    List<String> marketplaceCapabilities = const [],
   }) async {
     final body = await _post(
       'auth/google/',
       body: {
         'id_token': idToken,
-        'account_type': role.apiValue,
+        if (role != null) 'account_type': role.apiValue,
+        if (role != null) 'marketplace_capabilities': marketplaceCapabilities,
       },
     );
     return _authSessionFromBody(body);
@@ -295,6 +298,25 @@ class Property24Api {
         if (profilePictureUrl != null) 'profile_picture_url': profilePictureUrl,
         if (phone != null) 'phone': phone,
       },
+    );
+    return AuthSession(
+      token: token,
+      user: AccountUser.fromJson(
+        body['user'] as Map<String, dynamic>,
+        body['account'] as Map<String, dynamic>?,
+      ),
+      account: AccountContext.fromJson(body['account'] as Map<String, dynamic>),
+    );
+  }
+
+  Future<AuthSession> updateMarketplaceCapabilities({
+    required String token,
+    required List<String> capabilities,
+  }) async {
+    final body = await _patch(
+      'auth/profile/',
+      token: token,
+      body: {'marketplace_capabilities': capabilities},
     );
     return AuthSession(
       token: token,
@@ -484,12 +506,23 @@ class Property24Api {
       );
     }
 
-    final propertiesResponse = await _get('properties/', token: token);
+    final publicResponses = await Future.wait([
+      _get('properties/', token: token),
+      _get('services/', token: token),
+      _get('jobs/', token: token),
+    ]);
     final properties =
-        _results(propertiesResponse).map(PropertyListing.fromJson).toList();
+        _results(publicResponses[0]).map(PropertyListing.fromJson).toList();
+    final services =
+        _results(publicResponses[1]).map(ServiceListing.fromJson).toList();
+    final jobs = _results(publicResponses[2]).map(JobPosting.fromJson).toList();
 
     if (token == null || token.isEmpty) {
-      return PlatformSnapshot.empty().copyWith(properties: properties);
+      return PlatformSnapshot.empty().copyWith(
+        properties: properties,
+        services: services,
+        jobs: jobs,
+      );
     }
 
     final responses = await Future.wait([
@@ -502,6 +535,8 @@ class Property24Api {
       _get('notifications/', token: token),
       _get('tenant/comparisons/', token: token),
       _get('tenant/saved-searches/', token: token),
+      _get('service-requests/', token: token),
+      _get('job-applications/', token: token),
     ]);
 
     return PlatformSnapshot(
@@ -527,6 +562,12 @@ class Property24Api {
               .toList(),
       savedSearches:
           _results(responses[8]).map(SavedSearchItem.fromJson).toList(),
+      services: services,
+      serviceRequests:
+          _results(responses[9]).map(ServiceRequestItem.fromJson).toList(),
+      jobs: jobs,
+      jobApplications:
+          _results(responses[10]).map(JobApplicationItem.fromJson).toList(),
     );
   }
 
@@ -784,6 +825,108 @@ class Property24Api {
 
   Future<void> deleteProperty(String token, String propertyId) async {
     await _delete('properties/$propertyId/', token: token);
+  }
+
+  Future<ServiceListing> createService(
+    String token,
+    Map<String, dynamic> payload,
+  ) async {
+    final body = await _post('services/', token: token, body: payload);
+    return ServiceListing.fromJson(body);
+  }
+
+  Future<ServiceListing> updateService(
+    String token,
+    String serviceId,
+    Map<String, dynamic> payload,
+  ) async {
+    final body = await _patch(
+      'services/$serviceId/',
+      token: token,
+      body: payload,
+    );
+    return ServiceListing.fromJson(body);
+  }
+
+  Future<void> deleteService(String token, String serviceId) async {
+    await _delete('services/$serviceId/', token: token);
+  }
+
+  Future<ServiceRequestItem> requestService(
+    String token,
+    String serviceId,
+    String message,
+  ) async {
+    final body = await _post(
+      'services/$serviceId/requests/',
+      token: token,
+      body: {'message': message},
+    );
+    return ServiceRequestItem.fromJson(body);
+  }
+
+  Future<ServiceRequestItem> updateServiceRequest(
+    String token,
+    String requestId,
+    String status,
+  ) async {
+    final body = await _patch(
+      'service-requests/$requestId/',
+      token: token,
+      body: {'status': status},
+    );
+    return ServiceRequestItem.fromJson(body);
+  }
+
+  Future<JobPosting> createJob(
+    String token,
+    Map<String, dynamic> payload,
+  ) async {
+    final body = await _post('jobs/', token: token, body: payload);
+    return JobPosting.fromJson(body);
+  }
+
+  Future<JobPosting> updateJob(
+    String token,
+    String jobId,
+    Map<String, dynamic> payload,
+  ) async {
+    final body = await _patch(
+      'jobs/$jobId/',
+      token: token,
+      body: payload,
+    );
+    return JobPosting.fromJson(body);
+  }
+
+  Future<void> deleteJob(String token, String jobId) async {
+    await _delete('jobs/$jobId/', token: token);
+  }
+
+  Future<JobApplicationItem> applyToJob(
+    String token,
+    String jobId,
+    String coverMessage,
+  ) async {
+    final body = await _post(
+      'jobs/$jobId/applications/',
+      token: token,
+      body: {'cover_message': coverMessage},
+    );
+    return JobApplicationItem.fromJson(body);
+  }
+
+  Future<JobApplicationItem> updateJobApplication(
+    String token,
+    String applicationId,
+    String status,
+  ) async {
+    final body = await _patch(
+      'job-applications/$applicationId/',
+      token: token,
+      body: {'status': status},
+    );
+    return JobApplicationItem.fromJson(body);
   }
 
   Future<void> toggleSavedProperty(
