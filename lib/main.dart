@@ -14,7 +14,6 @@ void main() async {
 
   var hasShownError = false;
 
-  // CRITICAL: Custom error handling.
   ErrorWidget.builder = (FlutterErrorDetails details) {
     if (!hasShownError) {
       hasShownError = true;
@@ -36,10 +35,7 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({
-    this.bootState = true,
-    super.key,
-  });
+  const MyApp({this.bootState = true, super.key});
 
   final bool bootState;
 
@@ -63,8 +59,9 @@ class MyApp extends StatelessWidget {
                 darkTheme: AppTheme.darkTheme,
                 themeMode: state.darkMode ? ThemeMode.dark : ThemeMode.light,
                 builder: (context, child) {
-                  final iconBrightness =
-                      state.darkMode ? Brightness.light : Brightness.dark;
+                  final iconBrightness = state.darkMode
+                      ? Brightness.light
+                      : Brightness.dark;
                   return AnnotatedRegion<SystemUiOverlayStyle>(
                     value: SystemUiOverlayStyle(
                       statusBarColor: AppTheme.bg,

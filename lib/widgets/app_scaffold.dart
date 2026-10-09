@@ -517,65 +517,217 @@ void _showCreateActions(BuildContext context) {
       market: 'services',
     ),
   ];
-  showModalBottomSheet<void>(
+  showGeneralDialog<void>(
     context: context,
-    backgroundColor: AppTheme.bgCard,
-    showDragHandle: true,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (sheetContext) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    barrierDismissible: true,
+    barrierLabel: 'Close create menu',
+    barrierColor: Colors.black.withAlpha(48),
+    transitionDuration: const Duration(milliseconds: 240),
+    pageBuilder: (dialogContext, animation, secondaryAnimation) {
+      final bottomInset = MediaQuery.paddingOf(dialogContext).bottom;
+      return SafeArea(
+        child: Stack(
           children: [
-            Text(
-              'What would you like to do?',
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 19,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 12),
-            for (final action in actions)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(action.icon, color: AppTheme.accent),
-                title: Text(
-                  action.label,
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w600,
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: bottomInset + 96,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: 380,
+                    maxHeight:
+                        MediaQuery.sizeOf(dialogContext).height -
+                        MediaQuery.paddingOf(dialogContext).vertical -
+                        120,
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppTheme.bgCard,
+                            AppTheme.bgCard.withAlpha(242),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(32),
+                        border: Border.all(
+                          color: AppTheme.accent.withAlpha(70),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withAlpha(48),
+                            blurRadius: 36,
+                            offset: const Offset(0, 16),
+                          ),
+                          BoxShadow(
+                            color: AppTheme.accent.withAlpha(22),
+                            blurRadius: 28,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Create something',
+                                  style: TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Close',
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+                                icon: Icon(
+                                  CupertinoIcons.xmark_circle_fill,
+                                  color: AppTheme.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: actions.length,
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  mainAxisExtent: 102,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 6,
+                                ),
+                            itemBuilder: (context, index) {
+                              final action = actions[index];
+                              return _CreateActionBubble(
+                                action: action,
+                                onTap: () {
+                                  Navigator.of(dialogContext).pop();
+                                  if (!state.signedIn &&
+                                      action.requiresPropertyCapability) {
+                                    context.pushNamed(
+                                      AppRoutes.authName,
+                                      pathParameters: const {
+                                        'role': 'list-property',
+                                      },
+                                    );
+                                    return;
+                                  }
+                                  unawaited(
+                                    _runCreateAction(context, state, action),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  if (!state.signedIn && action.requiresPropertyCapability) {
-                    context.pushNamed(
-                      AppRoutes.authName,
-                      pathParameters: const {'role': 'list-property'},
-                    );
-                    return;
-                  }
-                  unawaited(_runCreateAction(context, state, action));
-                },
-              ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () => Navigator.of(sheetContext).pop(),
-                child: const Text('Close'),
               ),
             ),
           ],
         ),
-      ),
-    ),
+      );
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curvedAnimation = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutBack,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.86, end: 1).animate(curvedAnimation),
+          alignment: const Alignment(0, 0.75),
+          child: child,
+        ),
+      );
+    },
   );
+}
+
+class _CreateActionBubble extends StatelessWidget {
+  const _CreateActionBubble({required this.action, required this.onTap});
+
+  final _CreateAction action;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: action.label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppTheme.accent.withAlpha(230),
+                      AppTheme.accent.withAlpha(150),
+                    ],
+                  ),
+                  border: Border.all(color: Colors.white.withAlpha(95)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.accent.withAlpha(55),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
+                    ),
+                    const BoxShadow(
+                      color: Colors.white24,
+                      blurRadius: 4,
+                      offset: Offset(-2, -2),
+                    ),
+                  ],
+                ),
+                child: Icon(action.icon, color: Colors.white, size: 23),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                action.label,
+                maxLines: 2,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 10,
+                  height: 1.15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _CreateAction {
@@ -605,12 +757,12 @@ Future<void> _runCreateAction(
     }
     if (!context.mounted) return;
     if (action.category != null) {
-      context.push(
+      await context.push<void>(
         '${AppRoutes.listingsScreen}?category=${action.category}&create=${DateTime.now().microsecondsSinceEpoch}',
       );
       return;
     }
-    context.go(
+    await context.push<void>(
       Uri(
         path: AppRoutes.exploreScreen,
         queryParameters: {

@@ -408,410 +408,416 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         priceReduced.isNotEmpty ||
         backOnMarket.isNotEmpty;
 
-    return LoadingOverlay(
-      child: RefreshIndicator(
-        onRefresh: state.refresh,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Explore $marketTitle',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  height: 1.2,
-                                  color: _textDark,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                switch (_market) {
-                                  'stays' =>
-                                    'Find a place to stay, near or far.',
-                                  'venues' =>
-                                    'Discover spaces for your next occasion.',
-                                  _ => 'Find a home that feels right.',
-                                },
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _textMuted,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    // ─── Property search controls ───
-                    Container(
-                      height: 54,
-                      decoration: BoxDecoration(
-                        color: AppTheme.bgSurface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.border),
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: (value) => setState(() => _query = value),
-                        onSubmitted: _submitSearch,
-                        textInputAction: TextInputAction.search,
-                        style: TextStyle(color: _textDark, fontSize: 14),
-                        decoration: InputDecoration(
-                          filled: false,
-                          hintText: switch (_market) {
-                            'stays' => 'Search stays or locations',
-                            'venues' => 'Search venues or locations',
-                            _ => 'Search properties or locations',
-                          },
-                          hintStyle: TextStyle(
-                            color: _textMuted,
-                            fontSize: 12.5,
-                          ),
-                          prefixIcon: Icon(
-                            CupertinoIcons.search,
-                            color: _textMuted,
-                            size: 19,
-                          ),
-                          suffixIcon: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                tooltip: 'Search with AI',
-                                onPressed: () => _submitSearch(),
-                                icon: const Icon(
-                                  CupertinoIcons.sparkles,
-                                  color: AppTheme.accent,
-                                  size: 19,
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Sort and filters',
-                                onPressed: _showExploreFilters,
-                                icon: Badge(
-                                  isLabelVisible: activeFilterCount > 0,
-                                  label: Text('$activeFilterCount'),
-                                  child: Icon(
-                                    CupertinoIcons.slider_horizontal_3,
-                                    color: _textMuted,
-                                    size: 18,
+    return SafeArea(
+      bottom: false,
+      child: LoadingOverlay(
+        child: RefreshIndicator(
+          onRefresh: state.refresh,
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Explore $marketTitle',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    height: 1.2,
+                                    color: _textDark,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.5,
                                   ),
                                 ),
-                              ),
-                              if (state.signedIn)
+                                const SizedBox(height: 2),
+                                Text(
+                                  switch (_market) {
+                                    'stays' =>
+                                      'Find a place to stay, near or far.',
+                                    'venues' =>
+                                      'Discover spaces for your next occasion.',
+                                    _ => 'Find a home that feels right.',
+                                  },
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: _textMuted,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // ─── Property search controls ───
+                      Container(
+                        height: 54,
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgSurface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (value) => setState(() => _query = value),
+                          onSubmitted: _submitSearch,
+                          textInputAction: TextInputAction.search,
+                          style: TextStyle(color: _textDark, fontSize: 14),
+                          decoration: InputDecoration(
+                            filled: false,
+                            hintText: switch (_market) {
+                              'stays' => 'Search stays or locations',
+                              'venues' => 'Search venues or locations',
+                              _ => 'Search properties or locations',
+                            },
+                            hintStyle: TextStyle(
+                              color: _textMuted,
+                              fontSize: 12.5,
+                            ),
+                            prefixIcon: Icon(
+                              CupertinoIcons.search,
+                              color: _textMuted,
+                              size: 19,
+                            ),
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
                                 IconButton(
-                                  tooltip: 'Saved searches',
-                                  onPressed: () => openSavedSearches(context),
+                                  tooltip: 'Search with AI',
+                                  onPressed: () => _submitSearch(),
+                                  icon: const Icon(
+                                    CupertinoIcons.sparkles,
+                                    color: AppTheme.accent,
+                                    size: 19,
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Sort and filters',
+                                  onPressed: _showExploreFilters,
                                   icon: Badge(
-                                    isLabelVisible:
-                                        state.savedSearches.isNotEmpty,
-                                    label: Text(
-                                      state.savedSearches.length > 99
-                                          ? '99+'
-                                          : '${state.savedSearches.length}',
-                                      style: const TextStyle(fontSize: 9),
-                                    ),
+                                    isLabelVisible: activeFilterCount > 0,
+                                    label: Text('$activeFilterCount'),
                                     child: Icon(
-                                      CupertinoIcons.bookmark,
+                                      CupertinoIcons.slider_horizontal_3,
                                       color: _textMuted,
                                       size: 18,
                                     ),
                                   ),
                                 ),
+                                if (state.signedIn)
+                                  IconButton(
+                                    tooltip: 'Saved searches',
+                                    onPressed: () => openSavedSearches(context),
+                                    icon: Badge(
+                                      isLabelVisible:
+                                          state.savedSearches.isNotEmpty,
+                                      label: Text(
+                                        state.savedSearches.length > 99
+                                            ? '99+'
+                                            : '${state.savedSearches.length}',
+                                        style: const TextStyle(fontSize: 9),
+                                      ),
+                                      child: Icon(
+                                        CupertinoIcons.bookmark,
+                                        color: _textMuted,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        height: 42,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _markets.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          itemBuilder: (context, index) {
+                            final (label, value) = _markets[index];
+                            final selected = _market == value;
+                            return ChoiceChip(
+                              label: Text(label),
+                              selected: selected,
+                              onSelected: (_) {
+                                setState(() {
+                                  _market = value;
+                                  _type = 'Popular';
+                                  _marketView = 'browse';
+                                  _createOnOpen = false;
+                                  _createRequestId = null;
+                                });
+                              },
+                              labelStyle: TextStyle(
+                                color: selected
+                                    ? Colors.white
+                                    : AppTheme.textPrimary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                              selectedColor: AppTheme.accent,
+                              backgroundColor: AppTheme.bgSurface,
+                              side: BorderSide(color: AppTheme.border),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(22),
+                              ),
+                              showCheckmark: false,
+                            );
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 22),
+
+                      if (_type != 'Popular')
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Row(
+                            children: [
+                              Icon(
+                                CupertinoIcons.slider_horizontal_3,
+                                size: 15,
+                                color: _textMuted,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Showing $_type',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const Spacer(),
+                              TextButton(
+                                onPressed: () => setState(() {
+                                  _type = 'Popular';
+                                  _studentInstitution = null;
+                                  _studentSharedOnly = false;
+                                  _studentVerifiedOnly = false;
+                                  _studentMaxDistanceKm = null;
+                                  _selectedArea = null;
+                                }),
+                                child: const Text('Clear'),
+                              ),
                             ],
                           ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 14,
-                          ),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
+                        )
+                      else
+                        const SizedBox(height: 18),
+                    ],
+                  ),
+                ),
+              ),
+              if (_type == 'Student stays')
+                SliverToBoxAdapter(
+                  child: _StudentAccommodationFilters(
+                    institutions: institutions,
+                    institution: _studentInstitution,
+                    sharedOnly: _studentSharedOnly,
+                    verifiedOnly: _studentVerifiedOnly,
+                    maxDistanceKm: _studentMaxDistanceKm,
+                    locationAvailable: _deviceLocation != null,
+                    locationLoading: _locationLoading,
+                    locationError: _locationError,
+                    onInstitutionChanged: (value) =>
+                        setState(() => _studentInstitution = value),
+                    onSharedChanged: (value) =>
+                        setState(() => _studentSharedOnly = value),
+                    onVerifiedChanged: (value) =>
+                        setState(() => _studentVerifiedOnly = value),
+                    onDistanceChanged: (value) =>
+                        setState(() => _studentMaxDistanceKm = value),
+                    onUseDeviceLocation: _requestDeviceLocation,
+                  ),
+                ),
+              if (_type == 'Nearby' || _type == 'Shared rooms')
+                SliverToBoxAdapter(
+                  child: _NearbyLocationControl(
+                    loading: _locationLoading,
+                    error: _locationError,
+                    selectedArea: _selectedArea?.label,
+                    onUseDeviceLocation: _requestDeviceLocation,
+                    onChooseArea: () => _chooseNearbyArea(sourceProperties),
+                  ),
+                ),
+              if (_type != 'Nearby' &&
+                  _type != 'Following' &&
+                  _type != 'Stays' &&
+                  _type != 'Venues' &&
+                  _type != 'Student stays' &&
+                  _type != 'Shared rooms') ...[
+                _DiscoveryPropertySection(
+                  title: '🔥 New properties today',
+                  properties: newToday,
+                  onOpen: (property) => _openDetails(context, property),
+                ),
+                _DiscoveryPropertySection(
+                  title: 'Recently added',
+                  properties: recentlyAdded,
+                  onOpen: (property) => _openDetails(context, property),
+                ),
+                _DiscoveryPropertySection(
+                  title: 'Price reduced',
+                  properties: priceReduced,
+                  onOpen: (property) => _openDetails(context, property),
+                ),
+                _DiscoveryPropertySection(
+                  title: 'Back on the market',
+                  properties: backOnMarket,
+                  onOpen: (property) => _openDetails(context, property),
+                ),
+                if (_type == 'Recommended')
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                      child: Text(
+                        'Ranked using your saved AI searches, budget fit, location and listing activity.',
+                        style: TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 12,
                         ),
                       ),
                     ),
-
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      height: 42,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _markets.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
-                        itemBuilder: (context, index) {
-                          final (label, value) = _markets[index];
-                          final selected = _market == value;
-                          return ChoiceChip(
-                            label: Text(label),
-                            selected: selected,
-                            onSelected: (_) {
-                              setState(() {
-                                _market = value;
-                                _type = 'Popular';
-                                _marketView = 'browse';
-                                _createOnOpen = false;
-                                _createRequestId = null;
-                              });
-                            },
-                            labelStyle: TextStyle(
-                              color: selected
-                                  ? Colors.white
-                                  : AppTheme.textPrimary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                            selectedColor: AppTheme.accent,
-                            backgroundColor: AppTheme.bgSurface,
-                            side: BorderSide(color: AppTheme.border),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(22),
-                            ),
-                            showCheckmark: false,
-                          );
-                        },
-                      ),
-                    ),
-
-                    const SizedBox(height: 22),
-
-                    if (_type != 'Popular')
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Row(
-                          children: [
-                            Icon(
-                              CupertinoIcons.slider_horizontal_3,
-                              size: 15,
-                              color: _textMuted,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Showing $_type',
-                              style: TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const Spacer(),
-                            TextButton(
-                              onPressed: () => setState(() {
-                                _type = 'Popular';
-                                _studentInstitution = null;
-                                _studentSharedOnly = false;
-                                _studentVerifiedOnly = false;
-                                _studentMaxDistanceKm = null;
-                                _selectedArea = null;
-                              }),
-                              child: const Text('Clear'),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      const SizedBox(height: 18),
-                  ],
-                ),
-              ),
-            ),
-            if (_type == 'Student stays')
-              SliverToBoxAdapter(
-                child: _StudentAccommodationFilters(
-                  institutions: institutions,
-                  institution: _studentInstitution,
-                  sharedOnly: _studentSharedOnly,
-                  verifiedOnly: _studentVerifiedOnly,
-                  maxDistanceKm: _studentMaxDistanceKm,
-                  locationAvailable: _deviceLocation != null,
-                  locationLoading: _locationLoading,
-                  locationError: _locationError,
-                  onInstitutionChanged: (value) =>
-                      setState(() => _studentInstitution = value),
-                  onSharedChanged: (value) =>
-                      setState(() => _studentSharedOnly = value),
-                  onVerifiedChanged: (value) =>
-                      setState(() => _studentVerifiedOnly = value),
-                  onDistanceChanged: (value) =>
-                      setState(() => _studentMaxDistanceKm = value),
-                  onUseDeviceLocation: _requestDeviceLocation,
-                ),
-              ),
-            if (_type == 'Nearby' || _type == 'Shared rooms')
-              SliverToBoxAdapter(
-                child: _NearbyLocationControl(
-                  loading: _locationLoading,
-                  error: _locationError,
-                  selectedArea: _selectedArea?.label,
-                  onUseDeviceLocation: _requestDeviceLocation,
-                  onChooseArea: () => _chooseNearbyArea(sourceProperties),
-                ),
-              ),
-            if (_type != 'Nearby' &&
-                _type != 'Following' &&
-                _type != 'Stays' &&
-                _type != 'Venues' &&
-                _type != 'Student stays' &&
-                _type != 'Shared rooms') ...[
-              _DiscoveryPropertySection(
-                title: '🔥 New properties today',
-                properties: newToday,
-                onOpen: (property) => _openDetails(context, property),
-              ),
-              _DiscoveryPropertySection(
-                title: 'Recently added',
-                properties: recentlyAdded,
-                onOpen: (property) => _openDetails(context, property),
-              ),
-              _DiscoveryPropertySection(
-                title: 'Price reduced',
-                properties: priceReduced,
-                onOpen: (property) => _openDetails(context, property),
-              ),
-              _DiscoveryPropertySection(
-                title: 'Back on the market',
-                properties: backOnMarket,
-                onOpen: (property) => _openDetails(context, property),
-              ),
-              if (_type == 'Recommended')
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-                    child: Text(
-                      'Ranked using your saved AI searches, budget fit, location and listing activity.',
-                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                    ),
                   ),
-                ),
-            ],
-            const SliverToBoxAdapter(child: ErrorBanner()),
-            if (properties.isEmpty && !hasHighlights)
-              SliverFillRemaining(
-                child: EmptyState(
-                  icon: CupertinoIcons.search,
-                  title: _type == 'Following'
-                      ? 'No followed listings yet'
-                      : _type == 'Stays'
-                      ? 'No stays listed yet'
-                      : _type == 'Venues'
-                      ? 'No event venues listed yet'
-                      : _type == 'Student stays' &&
-                            _studentMaxDistanceKm != null &&
-                            _deviceLocation == null
-                      ? 'Set your location for distance filtering'
-                      : _type == 'Student stays'
-                      ? 'No student accommodation matches'
-                      : _type == 'Shared rooms'
-                      ? 'No shared rooms listed yet'
-                      : _type == 'Nearby' && _selectedArea == null
-                      ? 'Choose your nearby area'
-                      : 'No matching listings',
-                  body: _type == 'Following'
-                      ? 'Follow a property manager or agent to see their listings here.'
-                      : _type == 'Stays'
-                      ? 'Browse lodges, guest houses, hotels, cottages, holiday homes, resorts and more.'
-                      : _type == 'Venues'
-                      ? 'Discover wedding, conference, party and other event venues.'
-                      : _type == 'Student stays' &&
-                            _studentMaxDistanceKm != null &&
-                            _deviceLocation == null
-                      ? 'Use your current location to find student accommodation within your selected distance.'
-                      : _type == 'Student stays'
-                      ? 'Try another institution or adjust shared-room, verification, or distance filters.'
-                      : _type == 'Shared rooms'
-                      ? 'Browse available shared-room listings or choose a nearby area.'
-                      : _type == 'Nearby' && _selectedArea == null
-                      ? 'Allow location access or choose a city or suburb to see nearby homes.'
-                      : 'Try another suburb, city, or property type.',
-                ),
-              )
-            else if (_type == 'Nearby')
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                sliver: SliverToBoxAdapter(
-                  child: _MapExplorer(
-                    properties: properties,
-                    center: _nearbyMapCenter(properties),
-                    distanceFor: _deviceLocation == null
-                        ? null
-                        : (property) => _formatDistance(
-                            _distanceMeters(property, _deviceLocation!),
-                          ),
-                    onOpen: (property) => _openDetails(context, property),
+              ],
+              const SliverToBoxAdapter(child: ErrorBanner()),
+              if (properties.isEmpty && !hasHighlights)
+                SliverFillRemaining(
+                  child: EmptyState(
+                    icon: CupertinoIcons.search,
+                    title: _type == 'Following'
+                        ? 'No followed listings yet'
+                        : _type == 'Stays'
+                        ? 'No stays listed yet'
+                        : _type == 'Venues'
+                        ? 'No event venues listed yet'
+                        : _type == 'Student stays' &&
+                              _studentMaxDistanceKm != null &&
+                              _deviceLocation == null
+                        ? 'Set your location for distance filtering'
+                        : _type == 'Student stays'
+                        ? 'No student accommodation matches'
+                        : _type == 'Shared rooms'
+                        ? 'No shared rooms listed yet'
+                        : _type == 'Nearby' && _selectedArea == null
+                        ? 'Choose your nearby area'
+                        : 'No matching listings',
+                    body: _type == 'Following'
+                        ? 'Follow a property manager or agent to see their listings here.'
+                        : _type == 'Stays'
+                        ? 'Browse lodges, guest houses, hotels, cottages, holiday homes, resorts and more.'
+                        : _type == 'Venues'
+                        ? 'Discover wedding, conference, party and other event venues.'
+                        : _type == 'Student stays' &&
+                              _studentMaxDistanceKm != null &&
+                              _deviceLocation == null
+                        ? 'Use your current location to find student accommodation within your selected distance.'
+                        : _type == 'Student stays'
+                        ? 'Try another institution or adjust shared-room, verification, or distance filters.'
+                        : _type == 'Shared rooms'
+                        ? 'Browse available shared-room listings or choose a nearby area.'
+                        : _type == 'Nearby' && _selectedArea == null
+                        ? 'Allow location access or choose a city or suburb to see nearby homes.'
+                        : 'Try another suburb, city, or property type.',
                   ),
-                ),
-              )
-            else ...[
-              if (state.comparedProperties.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: _ComparisonTray(
-                    properties: state.comparedProperties,
-                    suggestions: state.comparisonSuggestions,
-                    onCompare: state.comparedProperties.length < 2
-                        ? null
-                        : () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => PropertyComparisonScreen(
-                                properties: state.comparedProperties,
-                              ),
-                            ),
-                          ),
-                    onClear: () {
-                      state.clearComparisons();
-                    },
-                    onAddSuggestion: (property) {
-                      state.toggleComparison(property);
-                    },
-                  ),
-                ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
-                sliver: SliverList.builder(
-                  itemCount: properties.length,
-                  itemBuilder: (context, index) {
-                    final property = properties[index];
-                    return PropertyCard(
-                      property: property,
-                      distanceLabel:
-                          (_type == 'Recommended' ||
-                                  _type == 'Student stays' ||
-                                  _type == 'Shared rooms') &&
-                              _deviceLocation != null &&
-                              _hasPrivacyAwareCoordinates(property)
-                          ? _formatDistance(
+                )
+              else if (_type == 'Nearby')
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  sliver: SliverToBoxAdapter(
+                    child: _MapExplorer(
+                      properties: properties,
+                      center: _nearbyMapCenter(properties),
+                      distanceFor: _deviceLocation == null
+                          ? null
+                          : (property) => _formatDistance(
                               _distanceMeters(property, _deviceLocation!),
-                            )
-                          : null,
-                      saved: state.savedPropertyIds.contains(property.id),
-                      compared: state.comparisonPropertyIds.contains(
-                        property.id,
-                      ),
-                      onSave: () => state.toggleSaved(property),
-                      onCompare: () => state.toggleComparison(property),
-                      onTap: () => _openDetails(context, property),
-                    );
-                  },
+                            ),
+                      onOpen: (property) => _openDetails(context, property),
+                    ),
+                  ),
+                )
+              else ...[
+                if (state.comparedProperties.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: _ComparisonTray(
+                      properties: state.comparedProperties,
+                      suggestions: state.comparisonSuggestions,
+                      onCompare: state.comparedProperties.length < 2
+                          ? null
+                          : () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => PropertyComparisonScreen(
+                                  properties: state.comparedProperties,
+                                ),
+                              ),
+                            ),
+                      onClear: () {
+                        state.clearComparisons();
+                      },
+                      onAddSuggestion: (property) {
+                        state.toggleComparison(property);
+                      },
+                    ),
+                  ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+                  sliver: SliverList.builder(
+                    itemCount: properties.length,
+                    itemBuilder: (context, index) {
+                      final property = properties[index];
+                      return PropertyCard(
+                        property: property,
+                        distanceLabel:
+                            (_type == 'Recommended' ||
+                                    _type == 'Student stays' ||
+                                    _type == 'Shared rooms') &&
+                                _deviceLocation != null &&
+                                _hasPrivacyAwareCoordinates(property)
+                            ? _formatDistance(
+                                _distanceMeters(property, _deviceLocation!),
+                              )
+                            : null,
+                        saved: state.savedPropertyIds.contains(property.id),
+                        compared: state.comparisonPropertyIds.contains(
+                          property.id,
+                        ),
+                        onSave: () => state.toggleSaved(property),
+                        onCompare: () => state.toggleComparison(property),
+                        onTap: () => _openDetails(context, property),
+                      );
+                    },
+                  ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

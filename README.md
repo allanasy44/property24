@@ -1,11 +1,13 @@
 # Property24 Zimbabwe
 
-Mobile-first Flutter property platform for Zimbabwean property discovery, applications, messaging, and verification.
+Property platform for Zimbabwean property discovery, applications, messaging, and verification. The Flutter mobile app and standalone Next.js website in [`inprop/`](./inprop/) share the Django API.
 
 ## Stack
 
 - Flutter
 - Dart
+- Next.js and TypeScript web frontend (`inprop/`)
+- Tailwind CSS, shadcn/ui-style components, and Motion
 - Provider state management
 - Shared preferences for local auth-token persistence
 - HTTP client connected to the Django API
@@ -25,6 +27,17 @@ Mobile-first Flutter property platform for Zimbabwean property discovery, applic
 - Django rentals API for listings, verification, applications, messaging, reports, and analytics
 
 ## Run locally
+
+Web:
+
+```bash
+cd inprop
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Open `http://localhost:3000`. The web frontend reads the same Django API as the mobile app; set `INPROP_API_BASE_URL` in `inprop/.env.local` if the backend uses a different address.
 
 Frontend:
 

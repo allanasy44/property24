@@ -83,191 +83,195 @@ class _ListingsScreenState extends State<ListingsScreen> {
       return _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
     }).toList();
 
-    return LoadingOverlay(
-      child: RefreshIndicator(
-        onRefresh: state.refresh,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: isLandlord
-                              ? const SizedBox.shrink()
-                              : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${greetingForTime()},',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        height: 1.3,
-                                        color: _textMuted,
-                                        fontWeight: FontWeight.w500,
-                                        letterSpacing: 0.1,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      displayName.isEmpty
-                                          ? greetingForTime()
-                                          : displayName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 23,
-                                        height: 1.15,
-                                        color: _textDark,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: -0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(24),
-                          onTap: () => _openEditor(context),
-                          child: Container(
-                            height: 48,
-                            width: 48,
-                            decoration: BoxDecoration(
-                              color: _primary,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: _primary.withValues(alpha: 0.2),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 5),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              CupertinoIcons.add,
-                              color: Colors.white,
-                              size: 22,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      'Listings',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: _textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            height: 54,
-                            decoration: BoxDecoration(
-                              color: _searchFill,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: AppTheme.border),
-                            ),
-                            child: TextField(
-                              controller: _searchController,
-                              onChanged: (value) =>
-                                  setState(() => _query = value),
-                              textInputAction: TextInputAction.search,
-                              style: TextStyle(
-                                color: _textDark,
-                                fontSize: 13.5,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'Search your listings',
-                                hintStyle: TextStyle(
-                                  color: _textMuted,
-                                  fontSize: 13.5,
-                                ),
-                                prefixIcon: Icon(
-                                  CupertinoIcons.search,
-                                  color: _textMuted,
-                                  size: 20,
-                                ),
-                                suffixIcon: _query.isEmpty
-                                    ? null
-                                    : IconButton(
-                                        tooltip: 'Clear search',
-                                        onPressed: _searchController.clear,
-                                        icon: Icon(
-                                          CupertinoIcons.xmark,
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: LoadingOverlay(
+        child: RefreshIndicator(
+          onRefresh: state.refresh,
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: isLandlord
+                                ? const SizedBox.shrink()
+                                : Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${greetingForTime()},',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          height: 1.3,
                                           color: _textMuted,
-                                          size: 18,
+                                          fontWeight: FontWeight.w500,
+                                          letterSpacing: 0.1,
                                         ),
                                       ),
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 17,
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        displayName.isEmpty
+                                            ? greetingForTime()
+                                            : displayName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 23,
+                                          height: 1.15,
+                                          color: _textDark,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: -0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(24),
+                            onTap: () => _openEditor(context),
+                            child: Container(
+                              height: 48,
+                              width: 48,
+                              decoration: BoxDecoration(
+                                color: _primary,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _primary.withValues(alpha: 0.2),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 5),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                CupertinoIcons.add,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Listings',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: _textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              height: 54,
+                              decoration: BoxDecoration(
+                                color: _searchFill,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: AppTheme.border),
+                              ),
+                              child: TextField(
+                                controller: _searchController,
+                                onChanged: (value) =>
+                                    setState(() => _query = value),
+                                textInputAction: TextInputAction.search,
+                                style: TextStyle(
+                                  color: _textDark,
+                                  fontSize: 13.5,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Search your listings',
+                                  hintStyle: TextStyle(
+                                    color: _textMuted,
+                                    fontSize: 13.5,
+                                  ),
+                                  prefixIcon: Icon(
+                                    CupertinoIcons.search,
+                                    color: _textMuted,
+                                    size: 20,
+                                  ),
+                                  suffixIcon: _query.isEmpty
+                                      ? null
+                                      : IconButton(
+                                          tooltip: 'Clear search',
+                                          onPressed: _searchController.clear,
+                                          icon: Icon(
+                                            CupertinoIcons.xmark,
+                                            color: _textMuted,
+                                            size: 18,
+                                          ),
+                                        ),
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 17,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                  ],
-                ),
-              ),
-            ),
-            const SliverToBoxAdapter(child: ErrorBanner()),
-            if (listings.isEmpty && accountListings.isEmpty)
-              const SliverFillRemaining(
-                child: EmptyState(
-                  icon: CupertinoIcons.house,
-                  title: 'No listings yet',
-                  body:
-                      'Create a sale or rental listing to start receiving enquiries.',
-                ),
-              )
-            else if (listings.isEmpty)
-              const SliverFillRemaining(
-                child: EmptyState(
-                  icon: CupertinoIcons.search,
-                  title: 'No matching listings',
-                  body: '',
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-                sliver: SliverList.builder(
-                  itemCount: listings.length,
-                  itemBuilder: (context, index) {
-                    final property = listings[index];
-                    return _LandlordListingTile(
-                      property: property,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) =>
-                              PropertyDetailScreen(property: property),
-                        ),
+                        ],
                       ),
-                      onEdit: () => _openEditor(context, property),
-                      onDelete: () => _delete(context, property),
-                      onAvailabilityChange: (action) =>
-                          _updateAvailability(context, property, action),
-                    );
-                  },
+                      const SizedBox(height: 18),
+                    ],
+                  ),
                 ),
               ),
-          ],
+              const SliverToBoxAdapter(child: ErrorBanner()),
+              if (listings.isEmpty && accountListings.isEmpty)
+                const SliverFillRemaining(
+                  child: EmptyState(
+                    icon: CupertinoIcons.house,
+                    title: 'No listings yet',
+                    body:
+                        'Create a sale or rental listing to start receiving enquiries.',
+                  ),
+                )
+              else if (listings.isEmpty)
+                const SliverFillRemaining(
+                  child: EmptyState(
+                    icon: CupertinoIcons.search,
+                    title: 'No matching listings',
+                    body: '',
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+                  sliver: SliverList.builder(
+                    itemCount: listings.length,
+                    itemBuilder: (context, index) {
+                      final property = listings[index];
+                      return _LandlordListingTile(
+                        property: property,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                PropertyDetailScreen(property: property),
+                          ),
+                        ),
+                        onEdit: () => _openEditor(context, property),
+                        onDelete: () => _delete(context, property),
+                        onAvailabilityChange: (action) =>
+                            _updateAvailability(context, property, action),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -275,12 +279,30 @@ class _ListingsScreenState extends State<ListingsScreen> {
 
   void _openEditor(BuildContext context, [PropertyListing? property]) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (_) => PropertyEditor(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 260),
+        pageBuilder: (context, animation, secondaryAnimation) => PropertyEditor(
           property: property,
           initialCategories: widget.initialCategories,
         ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curvedAnimation = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curvedAnimation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.04, 0),
+                end: Offset.zero,
+              ).animate(curvedAnimation),
+              child: child,
+            ),
+          );
+        },
       ),
     );
   }
@@ -326,10 +348,10 @@ class _ListingsScreenState extends State<ListingsScreen> {
     }
     try {
       await context.read<Property24State>().confirmPropertyAvailability(
-            property,
-            action: action,
-            availableFrom: availableFrom,
-          );
+        property,
+        action: action,
+        availableFrom: availableFrom,
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -343,19 +365,16 @@ class _ListingsScreenState extends State<ListingsScreen> {
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(error))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
       }
     }
   }
 }
 
 class _Section extends StatelessWidget {
-  const _Section({
-    required this.title,
-    required this.child,
-  });
+  const _Section({required this.title, required this.child});
 
   final String title;
   final Widget child;
@@ -461,8 +480,9 @@ class _LandlordListingTile extends StatelessWidget {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color:
-                            theme.colorScheme.surface.withValues(alpha: 0.94),
+                        color: theme.colorScheme.surface.withValues(
+                          alpha: 0.94,
+                        ),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
@@ -671,14 +691,16 @@ class _PropertyEditorState extends State<PropertyEditor> {
     final state = context.read<Property24State>();
     final token = state.token;
     _adminLandlords = state.user?.role == AccountRole.admin && token != null
-        ? Property24Api().adminUsers(token).then(
-              (users) => users
-                  .where(
-                    (user) =>
-                        user['role'] == 'landlord' && user['active'] == true,
-                  )
-                  .toList(growable: false),
-            )
+        ? Property24Api()
+              .adminUsers(token)
+              .then(
+                (users) => users
+                    .where(
+                      (user) =>
+                          user['role'] == 'landlord' && user['active'] == true,
+                    )
+                    .toList(growable: false),
+              )
         : Future.value(const <Map<String, dynamic>>[]);
     final property = widget.property;
     _title = TextEditingController(text: property?.title ?? '');
@@ -688,8 +710,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _latitude = TextEditingController(text: '${property?.latitude ?? ''}');
     _longitude = TextEditingController(text: '${property?.longitude ?? ''}');
     _rent = TextEditingController(text: property?.monthlyRent ?? '');
-    _standReference =
-        TextEditingController(text: property?.standReference ?? '');
+    _standReference = TextEditingController(
+      text: property?.standReference ?? '',
+    );
     _stands = TextEditingController(text: '${property?.standsAvailable ?? 1}');
     _landSize = TextEditingController(text: property?.landSize ?? '');
     _zoning = TextEditingController(text: property?.zoning ?? '');
@@ -717,8 +740,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
       text: property?.venueFeatures.join(', ') ?? '',
     );
     _maxGuests = TextEditingController(text: '${property?.maxGuests ?? ''}');
-    _weddingCapacity =
-        TextEditingController(text: '${property?.weddingCapacity ?? ''}');
+    _weddingCapacity = TextEditingController(
+      text: '${property?.weddingCapacity ?? ''}',
+    );
     _conferenceCapacity = TextEditingController(
       text: '${property?.conferenceCapacity ?? ''}',
     );
@@ -731,10 +755,12 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _electricityAvailable = property?.electricityAvailable ?? false;
     _landWaterAvailable = property?.landWaterAvailable ?? false;
     _description = TextEditingController(text: property?.description ?? '');
-    _water =
-        TextEditingController(text: property?.waterAvailability ?? 'Available');
-    _parking =
-        TextEditingController(text: property?.parking ?? 'Parking available');
+    _water = TextEditingController(
+      text: property?.waterAvailability ?? 'Available',
+    );
+    _parking = TextEditingController(
+      text: property?.parking ?? 'Parking available',
+    );
     _images = TextEditingController(text: property?.photos.join('\n') ?? '');
     _videos = TextEditingController(text: property?.videos.join('\n') ?? '');
     _audio = TextEditingController();
@@ -810,11 +836,11 @@ class _PropertyEditorState extends State<PropertyEditor> {
         title: Text(
           isLand
               ? widget.property == null
-                  ? 'Add land listing'
-                  : 'Edit land listing'
+                    ? 'Add land listing'
+                    : 'Edit land listing'
               : widget.property == null
-                  ? 'Add property'
-                  : 'Edit property',
+              ? 'Add property'
+              : 'Edit property',
         ),
         centerTitle: true,
         automaticallyImplyLeading: false,
@@ -979,8 +1005,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
                             }.entries)
                               FilterChip(
                                 label: Text(category.value),
-                                selected:
-                                    _listingCategories.contains(category.key),
+                                selected: _listingCategories.contains(
+                                  category.key,
+                                ),
                                 onSelected: (selected) {
                                   setState(() {
                                     if (selected) {
@@ -1151,8 +1178,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
                     isLand
                         ? 'Stand location / address'
                         : isCommercialProperty
-                            ? 'Office / shop address'
-                            : 'Property address',
+                        ? 'Office / shop address'
+                        : 'Property address',
                   ),
                   Row(
                     children: [
@@ -1193,10 +1220,10 @@ class _PropertyEditorState extends State<PropertyEditor> {
               title: isLand
                   ? 'Asking price'
                   : hasStays || hasVenues
-                      ? 'Rates and capacity'
-                      : isCommercialProperty
-                          ? 'Rental details'
-                          : 'Pricing and rooms',
+                  ? 'Rates and capacity'
+                  : isCommercialProperty
+                  ? 'Rental details'
+                  : 'Pricing and rooms',
               child: Column(
                 children: [
                   if (hasHomes || (!hasStays && !hasVenues))
@@ -1208,8 +1235,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
                             isLand
                                 ? 'Asking price'
                                 : _intent == 'Sale'
-                                    ? 'Price'
-                                    : 'Monthly rent',
+                                ? 'Price'
+                                : 'Monthly rent',
                             keyboardType: TextInputType.number,
                           ),
                         ),
@@ -1652,28 +1679,24 @@ class _PropertyEditorState extends State<PropertyEditor> {
 
   // ─── Helpers ───
   InputDecoration _inputDeco(String label) => InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: _searchFill,
-        labelStyle: TextStyle(
-          color: _textMuted,
-          fontWeight: FontWeight.w500,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: AppTheme.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: AppTheme.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: _primary, width: 1.4),
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      );
+    labelText: label,
+    filled: true,
+    fillColor: _searchFill,
+    labelStyle: TextStyle(color: _textMuted, fontWeight: FontWeight.w500),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: AppTheme.border),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: AppTheme.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: _primary, width: 1.4),
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+  );
 
   Widget _field(
     TextEditingController controller,
@@ -1692,8 +1715,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
         style: TextStyle(color: _textDark),
         validator: (value) =>
             requiredField && (value == null || value.trim().isEmpty)
-                ? 'Required'
-                : null,
+            ? 'Required'
+            : null,
       ),
     );
   }
@@ -1704,10 +1727,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
       activeThumbColor: _primary,
       title: Text(
         label,
-        style: TextStyle(
-          fontWeight: FontWeight.w500,
-          color: _textDark,
-        ),
+        style: TextStyle(fontWeight: FontWeight.w500, color: _textDark),
       ),
       value: value,
       onChanged: onChanged,
@@ -1729,9 +1749,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
       if (mounted && files.isNotEmpty) setState(() => _newImages.addAll(files));
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -1746,9 +1766,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
       if (file != null && mounted) setState(() => _newVideo = file);
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -1792,12 +1812,15 @@ class _PropertyEditorState extends State<PropertyEditor> {
         'room_types': hasStays
             ? _splitDetailList(_roomTypes.text, linesOnly: true)
             : <String>[],
-        'amenities':
-            hasStays ? _splitDetailList(_listingAmenities.text) : <String>[],
-        'activities':
-            hasStays ? _splitDetailList(_activities.text) : <String>[],
-        'venue_features':
-            hasVenues ? _splitDetailList(_venueFeatures.text) : <String>[],
+        'amenities': hasStays
+            ? _splitDetailList(_listingAmenities.text)
+            : <String>[],
+        'activities': hasStays
+            ? _splitDetailList(_activities.text)
+            : <String>[],
+        'venue_features': hasVenues
+            ? _splitDetailList(_venueFeatures.text)
+            : <String>[],
         'max_guests': hasStays ? _maxGuests.text.trim() : '',
         'wedding_capacity': hasVenues ? _weddingCapacity.text.trim() : '',
         'conference_capacity': hasVenues ? _conferenceCapacity.text.trim() : '',
@@ -1810,17 +1833,19 @@ class _PropertyEditorState extends State<PropertyEditor> {
       monthlyRent: hasHomes || (!hasStays && !hasVenues)
           ? _rent.text.trim()
           : hasStays
-              ? _nightlyRate.text.trim()
-              : _eventRate.text.trim(),
+          ? _nightlyRate.text.trim()
+          : _eventRate.text.trim(),
       depositRequired: isLandListing || !hasHomes ? '' : _deposit.text.trim(),
       propertyType: _type,
       ownerId: _ownerId,
-      bedrooms: isLandListing ||
+      bedrooms:
+          isLandListing ||
               (isCommercialProperty && !hasStays) ||
               (!hasHomes && !hasStays)
           ? 0
           : int.tryParse(_beds.text) ?? 0,
-      bathrooms: isLandListing ||
+      bathrooms:
+          isLandListing ||
               (isCommercialProperty && !hasStays) ||
               (!hasHomes && !hasStays)
           ? 0
@@ -1863,8 +1888,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
       if (mounted) Navigator.pop(context);
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
