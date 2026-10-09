@@ -18,6 +18,7 @@ class Property24State extends ChangeNotifier {
 
   static const _tokenKey = 'property24.flutter.accessToken';
   static const _refreshTokenKey = 'property24.flutter.refreshToken';
+  static const _sessionCacheKey = 'property24.flutter.sessionCache';
   static const _darkModeKey = 'property24.flutter.darkMode';
 
   final Property24Api _api;
@@ -86,9 +87,9 @@ class Property24State extends ChangeNotifier {
   int get unreadNotificationCount =>
       snapshot.notifications.where((item) => !item.isRead).length;
   int get unreadMessageCount => snapshot.conversations.fold(
-        0,
-        (total, conversation) => total + conversation.unreadCount,
-      );
+    0,
+    (total, conversation) => total + conversation.unreadCount,
+  );
 
   List<PropertyListing> get comparedProperties => snapshot.comparisonProperties;
   List<ComparisonSuggestion> get comparisonSuggestions =>
@@ -117,6 +118,7 @@ class Property24State extends ChangeNotifier {
       darkMode = preferences.getBool(_darkModeKey) ?? false;
       notifyListeners();
       _refreshToken = preferences.getString(_refreshTokenKey);
+      _restoreCachedSession(preferences.getString(_sessionCacheKey));
       if (_token != null && _token!.isNotEmpty) {
         AuthSession session;
         try {
@@ -127,6 +129,7 @@ class Property24State extends ChangeNotifier {
           if (restored == null) rethrow;
           session = restored;
         }
+        await _storeSession(session);
         _applySession(session);
         try {
           _replaceSnapshot(
@@ -144,11 +147,19 @@ class Property24State extends ChangeNotifier {
         _replaceSnapshot(await _api.snapshot());
       }
     } catch (exception) {
-      await _clearToken();
-      user = null;
-      account = AccountContext.guest();
-      _replaceSnapshot(await _api.snapshot());
+      if (_isUnauthorized(exception)) {
+        await _clearToken();
+        user = null;
+        account = AccountContext.guest();
+      }
       error = userFacingError(exception);
+      if (!signedIn) {
+        try {
+          _replaceSnapshot(await _api.snapshot());
+        } catch (snapshotException) {
+          error = userFacingError(snapshotException);
+        }
+      }
     } finally {
       loading = false;
       notifyListeners();
@@ -256,8 +267,9 @@ class Property24State extends ChangeNotifier {
       if (event is! Map<String, dynamic>) return;
       final type = '${event['type'] ?? ''}';
       final payload = event['payload'];
-      final conversationId =
-          payload is Map ? '${payload['conversation_id'] ?? ''}' : '';
+      final conversationId = payload is Map
+          ? '${payload['conversation_id'] ?? ''}'
+          : '';
       if (type.startsWith('call.') && payload is Map<String, dynamic>) {
         _callEvents.add({
           'type': type,
@@ -525,10 +537,7 @@ class Property24State extends ChangeNotifier {
 
   Future<String> requestPhoneVerification({required String phone}) async {
     final activeToken = _requireToken();
-    return _api.requestPhoneVerification(
-      token: activeToken,
-      phone: phone,
-    );
+    return _api.requestPhoneVerification(token: activeToken, phone: phone);
   }
 
   Future<void> verifyPhone(String challengeId, String code) async {
@@ -724,11 +733,7 @@ class Property24State extends ChangeNotifier {
     String message,
   ) async {
     final activeToken = _requireToken();
-    final request = await _api.requestService(
-      activeToken,
-      service.id,
-      message,
-    );
+    final request = await _api.requestService(activeToken, service.id, message);
     await refresh();
     return request;
   }
@@ -843,10 +848,7 @@ class Property24State extends ChangeNotifier {
     return viewing;
   }
 
-  Future<void> updateViewingStatus(
-    ViewingItem viewing,
-    String status,
-  ) async {
+  Future<void> updateViewingStatus(ViewingItem viewing, String status) async {
     final activeToken = _requireToken();
     await _api.updateViewingStatus(activeToken, viewing.id, status);
     await refresh();
@@ -917,8 +919,10 @@ class Property24State extends ChangeNotifier {
     String conversationId,
   ) async {
     final activeToken = _requireToken();
-    final messages =
-        await _api.conversationMessages(activeToken, conversationId);
+    final messages = await _api.conversationMessages(
+      activeToken,
+      conversationId,
+    );
     _replaceSnapshot(
       snapshot.copyWith(
         conversations: snapshot.conversations
@@ -952,11 +956,7 @@ class Property24State extends ChangeNotifier {
     required CallMode mode,
   }) async {
     final activeToken = _requireToken();
-    final call = await _api.startCall(
-      activeToken,
-      conversationId,
-      mode: mode,
-    );
+    final call = await _api.startCall(activeToken, conversationId, mode: mode);
     await refresh();
     return call;
   }
@@ -1118,11 +1118,7 @@ class Property24State extends ChangeNotifier {
     String propertyId,
     String commentId,
   ) async {
-    await _api.deletePropertyComment(
-      _requireToken(),
-      propertyId,
-      commentId,
-    );
+    await _api.deletePropertyComment(_requireToken(), propertyId, commentId);
   }
 
   Future<Map<String, dynamic>> toggleSupplierFollow(
@@ -1334,8 +1330,9 @@ class Property24State extends ChangeNotifier {
 
   void _replaceSnapshot(PlatformSnapshot value) {
     snapshot = value;
-    final visiblePropertyIds =
-        value.properties.map((property) => property.id).toSet();
+    final visiblePropertyIds = value.properties
+        .map((property) => property.id)
+        .toSet();
     _changedProperties.removeWhere(
       (propertyId, _) => visiblePropertyIds.contains(propertyId),
     );
@@ -1352,9 +1349,9 @@ class Property24State extends ChangeNotifier {
     smartAlerts
       ..clear()
       ..addAll(
-        value.savedSearches.where((search) => search.isActive).map(
-              (search) => search.query,
-            ),
+        value.savedSearches
+            .where((search) => search.isActive)
+            .map((search) => search.query),
       );
   }
 
@@ -1364,6 +1361,7 @@ class Property24State extends ChangeNotifier {
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_tokenKey);
     await preferences.remove(_refreshTokenKey);
+    await preferences.remove(_sessionCacheKey);
   }
 
   Future<void> _storeSession(AuthSession session) async {
@@ -1373,8 +1371,71 @@ class Property24State extends ChangeNotifier {
     }
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_tokenKey, session.token);
+    await preferences.setString(
+      _sessionCacheKey,
+      jsonEncode({
+        'user': {
+          'id': session.user.id,
+          'username': session.user.username,
+          'name': session.user.name,
+          'greeting': session.user.greeting,
+          'email': session.user.email,
+          'phone': session.user.phone,
+          'role': session.user.role.apiValue,
+          'verified': session.user.verified,
+          'email_verified': session.user.emailVerified,
+          'phone_verified': session.user.phoneVerified,
+          'account_onboarding_complete': session.user.accountOnboardingComplete,
+          'profile_picture': session.user.profilePicture,
+          'cover_photo': session.user.coverPhoto,
+          'bio': session.user.bio,
+        },
+        'account': {
+          'account_type': session.account.role.apiValue,
+          'is_verified': session.account.isVerified,
+          'email_verified': session.account.emailVerified,
+          'phone_verified': session.account.phoneVerified,
+          'visible_sections': session.account.visibleSections,
+          'capabilities': session.account.capabilities,
+          'onboarding': {
+            'requirements': session.account.onboardingRequirements,
+            'full_verification_required':
+                session.account.fullVerificationRequired,
+          },
+        },
+      }),
+    );
     if (_refreshToken != null && _refreshToken!.isNotEmpty) {
       await preferences.setString(_refreshTokenKey, _refreshToken!);
+    }
+  }
+
+  void _restoreCachedSession(String? cachedSession) {
+    if (_token == null ||
+        _token!.isEmpty ||
+        cachedSession == null ||
+        cachedSession.isEmpty) {
+      return;
+    }
+    try {
+      final decoded = jsonDecode(cachedSession);
+      if (decoded is! Map<String, dynamic> ||
+          decoded['user'] is! Map<String, dynamic> ||
+          decoded['account'] is! Map<String, dynamic>) {
+        return;
+      }
+      _applySession(
+        AuthSession(
+          token: _token ?? '',
+          refreshToken: _refreshToken,
+          user: AccountUser.fromJson(decoded['user'] as Map<String, dynamic>),
+          account: AccountContext.fromJson(
+            decoded['account'] as Map<String, dynamic>,
+          ),
+        ),
+      );
+    } on FormatException {
+      return;
     }
   }
 

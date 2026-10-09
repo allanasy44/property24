@@ -324,8 +324,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     final payload = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.bgCard,
-      showDragHandle: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withAlpha(105),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -421,37 +422,18 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     required String hint,
     required String actionLabel,
   }) async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
+    return showModalBottomSheet<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          minLines: 3,
-          maxLines: 5,
-          decoration: InputDecoration(
-            hintText: hint,
-            border: const OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final text = controller.text.trim();
-              if (text.isNotEmpty) Navigator.pop(dialogContext, text);
-            },
-            child: Text(actionLabel),
-          ),
-        ],
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withAlpha(105),
+      builder: (_) => _MarketplaceMessageSheet(
+        title: title,
+        hint: hint,
+        actionLabel: actionLabel,
       ),
     );
-    controller.dispose();
-    return result;
   }
 
   Future<void> _deleteService(ServiceListing service) async {
@@ -792,112 +774,260 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottomInset),
-      child: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.isServices
-                    ? widget.service == null
-                          ? 'Offer a service'
-                          : 'Edit service'
-                    : widget.job == null
-                    ? 'Post a job'
-                    : 'Edit job post',
-                style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _input(_title, widget.isServices ? 'Service name' : 'Job title'),
-              _input(_category, 'Category'),
-              _input(_location, 'Location'),
-              _input(_description, 'Description', minLines: 3, maxLines: 5),
-              if (widget.isServices) ...[
-                _input(
-                  _price,
-                  'Price (optional)',
-                  keyboardType: TextInputType.number,
-                ),
-                DropdownButtonFormField<String>(
-                  initialValue: _priceType,
-                  decoration: const InputDecoration(labelText: 'Pricing'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'fixed',
-                      child: Text('Fixed price'),
-                    ),
-                    DropdownMenuItem(value: 'hourly', child: Text('Hourly')),
-                    DropdownMenuItem(
-                      value: 'quote',
-                      child: Text('Request a quote'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => _priceType = value);
-                  },
-                ),
-              ] else ...[
-                DropdownButtonFormField<String>(
-                  initialValue: _employmentType,
-                  decoration: const InputDecoration(labelText: 'Work type'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'full_time',
-                      child: Text('Full-time'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'part_time',
-                      child: Text('Part-time'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'contract',
-                      child: Text('Contract'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'temporary',
-                      child: Text('Temporary'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _employmentType = value);
-                    }
-                  },
-                ),
-                _input(_compensation, 'Pay (optional)'),
-              ],
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _submitting ? null : _submit,
-                  child: _submitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(
-                          widget.isServices
-                              ? widget.service == null
-                                    ? 'Publish service'
-                                    : 'Save changes'
-                              : widget.job == null
-                              ? 'Post job'
-                              : 'Save changes',
-                        ),
-                ),
+    final media = MediaQuery.of(context);
+    final isEditing = widget.service != null || widget.job != null;
+    final title = widget.isServices
+        ? isEditing
+              ? 'Edit your service'
+              : 'Offer a service'
+        : isEditing
+        ? 'Edit your job post'
+        : 'Post a job';
+    final subtitle = widget.isServices
+        ? 'Help customers understand what you offer and how to reach you.'
+        : 'Share the role, location and pay details with potential applicants.';
+    final submitLabel = isEditing
+        ? 'Save changes'
+        : widget.isServices
+        ? 'Publish service'
+        : 'Publish job';
+    final bottomInset = media.viewInsets.bottom;
+
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: media.size.height - media.padding.top - bottomInset - 12,
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.bgCard,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            border: Border.all(color: AppTheme.border.withAlpha(130)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(50),
+                blurRadius: 32,
+                offset: const Offset(0, -8),
               ),
             ],
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.textMuted.withAlpha(85),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 18, 12, 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withAlpha(22),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(
+                          widget.isServices
+                              ? CupertinoIcons.wrench
+                              : CupertinoIcons.briefcase,
+                          color: AppTheme.accent,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.35,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              subtitle,
+                              style: TextStyle(
+                                color: AppTheme.textMuted,
+                                fontSize: 12,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: Icon(
+                          CupertinoIcons.xmark_circle_fill,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: AppTheme.border.withAlpha(150)),
+                Flexible(
+                  child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(22, 18, 22, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _formSectionLabel(
+                          'THE ${widget.isServices ? 'OFFER' : 'ROLE'}',
+                        ),
+                        _input(
+                          _title,
+                          widget.isServices ? 'Service title' : 'Job title',
+                        ),
+                        Row(
+                          children: [
+                            Expanded(child: _input(_category, 'Category')),
+                            const SizedBox(width: 12),
+                            Expanded(child: _input(_location, 'Location')),
+                          ],
+                        ),
+                        _input(
+                          _description,
+                          widget.isServices
+                              ? 'What do you offer?'
+                              : 'About the role',
+                          minLines: 3,
+                          maxLines: 5,
+                        ),
+                        const SizedBox(height: 6),
+                        _formSectionLabel(
+                          widget.isServices ? 'PRICING' : 'JOB DETAILS',
+                        ),
+                        if (widget.isServices) ...[
+                          _input(
+                            _price,
+                            'Price (optional)',
+                            keyboardType: TextInputType.number,
+                          ),
+                          DropdownButtonFormField<String>(
+                            initialValue: _priceType,
+                            decoration: _inputDecoration('Pricing type'),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'fixed',
+                                child: Text('Fixed price'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'hourly',
+                                child: Text('Hourly'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'quote',
+                                child: Text('Request a quote'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _priceType = value);
+                              }
+                            },
+                          ),
+                        ] else ...[
+                          DropdownButtonFormField<String>(
+                            initialValue: _employmentType,
+                            decoration: _inputDecoration('Employment type'),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'full_time',
+                                child: Text('Full-time'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'part_time',
+                                child: Text('Part-time'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'contract',
+                                child: Text('Contract'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'temporary',
+                                child: Text('Temporary'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _employmentType = value);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          _input(_compensation, 'Pay (optional)'),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                Divider(height: 1, color: AppTheme.border.withAlpha(150)),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 14, 22, 14),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _submitting ? null : _submit,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(52),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: _submitting
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    submitLabel,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Icon(
+                                    CupertinoIcons.arrow_right,
+                                    size: 17,
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -912,13 +1042,13 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
     TextInputType? keyboardType,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
         controller: controller,
         minLines: minLines,
         maxLines: maxLines,
         keyboardType: keyboardType,
-        decoration: InputDecoration(labelText: label),
+        decoration: _inputDecoration(label),
         validator: (value) {
           if (label.endsWith('(optional)')) return null;
           if (value == null || value.trim().isEmpty) {
@@ -929,6 +1059,38 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
       ),
     );
   }
+
+  InputDecoration _inputDecoration(String label) => InputDecoration(
+    labelText: label,
+    filled: true,
+    fillColor: AppTheme.bgSurface,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: AppTheme.border),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: AppTheme.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: AppTheme.accent, width: 1.5),
+    ),
+  );
+
+  Widget _formSectionLabel(String label) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: AppTheme.textMuted,
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.15,
+      ),
+    ),
+  );
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -951,6 +1113,217 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
             'compensation': _compensation.text.trim(),
           };
     if (mounted) Navigator.of(context).pop(payload);
+  }
+}
+
+class _MarketplaceMessageSheet extends StatefulWidget {
+  const _MarketplaceMessageSheet({
+    required this.title,
+    required this.hint,
+    required this.actionLabel,
+  });
+
+  final String title;
+  final String hint;
+  final String actionLabel;
+
+  @override
+  State<_MarketplaceMessageSheet> createState() =>
+      _MarketplaceMessageSheetState();
+}
+
+class _MarketplaceMessageSheetState extends State<_MarketplaceMessageSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _message = TextEditingController();
+
+  @override
+  void dispose() {
+    _message.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final isApplication = widget.actionLabel.toLowerCase().contains(
+      'application',
+    );
+    final bottomInset = media.viewInsets.bottom;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: media.size.height - media.padding.top - bottomInset - 12,
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.bgCard,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            border: Border.all(color: AppTheme.border.withAlpha(130)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(50),
+                blurRadius: 32,
+                offset: const Offset(0, -8),
+              ),
+            ],
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.textMuted.withAlpha(85),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 18, 12, 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withAlpha(22),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(
+                          isApplication
+                              ? CupertinoIcons.briefcase
+                              : CupertinoIcons.chat_bubble_text,
+                          color: AppTheme.accent,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              isApplication
+                                  ? 'Add a short note to support your application.'
+                                  : 'Share a few details so the provider can help.',
+                              style: TextStyle(
+                                color: AppTheme.textMuted,
+                                fontSize: 12,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: Icon(
+                          CupertinoIcons.xmark_circle_fill,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: AppTheme.border.withAlpha(150)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 20, 22, 8),
+                  child: TextFormField(
+                    controller: _message,
+                    autofocus: true,
+                    minLines: 4,
+                    maxLines: 7,
+                    textCapitalization: TextCapitalization.sentences,
+                    keyboardType: TextInputType.multiline,
+                    decoration: InputDecoration(
+                      labelText: isApplication
+                          ? 'Message to the employer'
+                          : 'Your message',
+                      hintText: widget.hint,
+                      alignLabelWithHint: true,
+                      filled: true,
+                      fillColor: AppTheme.bgSurface,
+                      contentPadding: const EdgeInsets.all(16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: AppTheme.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: AppTheme.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(
+                          color: AppTheme.accent,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Add a message to continue.'
+                        : null,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 10, 22, 14),
+                  child: SafeArea(
+                    top: false,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {
+                          if (!_formKey.currentState!.validate()) return;
+                          Navigator.of(context).pop(_message.text.trim());
+                        },
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(52),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              widget.actionLabel,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(CupertinoIcons.arrow_right, size: 17),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

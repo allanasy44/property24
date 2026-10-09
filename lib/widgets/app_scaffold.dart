@@ -497,7 +497,7 @@ void _showCreateActions(BuildContext context) {
     ),
     const _CreateAction(
       icon: Icons.celebration,
-      label: 'List a venue',
+      label: 'List an event venue',
       category: 'venues',
       requiresPropertyCapability: true,
     ),
@@ -574,28 +574,35 @@ void _showCreateActions(BuildContext context) {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
+                          SizedBox(
+                            height: 48,
+                            width: double.infinity,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Text(
                                   'Create something',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: AppTheme.textPrimary,
                                     fontSize: 19,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                              ),
-                              IconButton(
-                                tooltip: 'Close',
-                                onPressed: () =>
-                                    Navigator.of(dialogContext).pop(),
-                                icon: Icon(
-                                  CupertinoIcons.xmark_circle_fill,
-                                  color: AppTheme.textMuted,
+                                Positioned(
+                                  right: 0,
+                                  child: IconButton(
+                                    tooltip: 'Close',
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(),
+                                    icon: Icon(
+                                      CupertinoIcons.xmark_circle_fill,
+                                      color: AppTheme.textMuted,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 6),
                           GridView.builder(

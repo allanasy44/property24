@@ -33,151 +33,155 @@ class _InboxScreenState extends State<InboxScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    final conversations = state.snapshot.conversations.where((conversation) {
-      final property = _propertyFor(state, conversation);
-      final haystack = [
-        conversation.title,
-        conversation.preview,
-        property?.title ?? '',
-        property?.heroLocation ?? '',
-      ].join(' ').toLowerCase();
-      final matchesQuery =
-          _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
-      final matchesFilter = _filter == 'All' ||
-          (_filter == 'Unread' && conversation.unreadCount > 0);
-      return matchesQuery && matchesFilter;
-    }).toList()
-      ..sort((first, second) {
-        final firstDate = first.updatedAtDate;
-        final secondDate = second.updatedAtDate;
-        if (firstDate == null) return secondDate == null ? 0 : 1;
-        if (secondDate == null) return -1;
-        return secondDate.compareTo(firstDate);
-      });
+    final conversations =
+        state.snapshot.conversations.where((conversation) {
+          final property = _propertyFor(state, conversation);
+          final haystack = [
+            conversation.title,
+            conversation.preview,
+            property?.title ?? '',
+            property?.heroLocation ?? '',
+          ].join(' ').toLowerCase();
+          final matchesQuery =
+              _query.trim().isEmpty || haystack.contains(_query.toLowerCase());
+          final matchesFilter =
+              _filter == 'All' ||
+              (_filter == 'Unread' && conversation.unreadCount > 0);
+          return matchesQuery && matchesFilter;
+        }).toList()..sort((first, second) {
+          final firstDate = first.updatedAtDate;
+          final secondDate = second.updatedAtDate;
+          if (firstDate == null) return secondDate == null ? 0 : 1;
+          if (secondDate == null) return -1;
+          return secondDate.compareTo(firstDate);
+        });
 
-    return LoadingOverlay(
-      child: RefreshIndicator(
-        onRefresh: state.refresh,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Chats',
-                    style: TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 30,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Camera',
-                  onPressed: () => _showUnavailable('Camera'),
-                  icon: const Icon(CupertinoIcons.camera),
-                ),
-                IconButton(
-                  tooltip: 'New chat',
-                  onPressed: () => _showUnavailable('New chat'),
-                  icon: const Icon(CupertinoIcons.square_pencil),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppTheme.bgSurface,
-                borderRadius: BorderRadius.circular(28),
-              ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (value) => setState(() => _query = value),
-                textInputAction: TextInputAction.search,
-                style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 13.5,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Search',
-                  hintStyle: TextStyle(
-                    color: AppTheme.textMuted,
-                    fontSize: 13.5,
-                  ),
-                  prefixIcon: Icon(
-                    CupertinoIcons.search,
-                    color: AppTheme.textMuted,
-                    size: 20,
-                  ),
-                  suffixIcon: _query.isEmpty
-                      ? null
-                      : IconButton(
-                          tooltip: 'Clear search',
-                          onPressed: _searchController.clear,
-                          icon: Icon(
-                            CupertinoIcons.xmark,
-                            color: AppTheme.textMuted,
-                            size: 18,
-                          ),
-                        ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              height: 34,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
+    return SafeArea(
+      bottom: false,
+      child: LoadingOverlay(
+        child: RefreshIndicator(
+          onRefresh: state.refresh,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+            children: [
+              Row(
                 children: [
-                  for (final filter in const ['All', 'Unread'])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: _ChatFilter(
-                        label: filter,
-                        selected: _filter == filter,
-                        onTap: () => setState(() => _filter = filter),
+                  Expanded(
+                    child: Text(
+                      'Chats',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                  ),
+                  IconButton(
+                    tooltip: 'Camera',
+                    onPressed: () => _showUnavailable('Camera'),
+                    icon: const Icon(CupertinoIcons.camera),
+                  ),
+                  IconButton(
+                    tooltip: 'New chat',
+                    onPressed: () => _showUnavailable('New chat'),
+                    icon: const Icon(CupertinoIcons.square_pencil),
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(height: 16),
-            const ErrorBanner(),
-            if (conversations.isEmpty)
-              const EmptyState(
-                icon: CupertinoIcons.chat_bubble_2,
-                title: 'No conversations',
-                body: '',
-              )
-            else
-              for (var index = 0; index < conversations.length; index++) ...[
-                if (index == 0 ||
-                    _conversationGroup(
-                          conversations[index - 1].updatedAtDate,
-                        ) !=
-                        _conversationGroup(conversations[index].updatedAtDate))
-                  _ConversationGroupHeading(
-                    label:
-                        _conversationGroup(conversations[index].updatedAtDate),
+              const SizedBox(height: 8),
+              Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSurface,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value),
+                  textInputAction: TextInputAction.search,
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 13.5),
+                  decoration: InputDecoration(
+                    hintText: 'Search',
+                    hintStyle: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 13.5,
+                    ),
+                    prefixIcon: Icon(
+                      CupertinoIcons.search,
+                      color: AppTheme.textMuted,
+                      size: 20,
+                    ),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: _searchController.clear,
+                            icon: Icon(
+                              CupertinoIcons.xmark,
+                              color: AppTheme.textMuted,
+                              size: 18,
+                            ),
+                          ),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                _ConversationTile(
-                  conversation: conversations[index],
-                  property: _propertyFor(state, conversations[index]),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ConversationScreen(
-                        conversation: conversations[index],
-                        property: _propertyFor(state, conversations[index]),
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 34,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    for (final filter in const ['All', 'Unread'])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _ChatFilter(
+                          label: filter,
+                          selected: _filter == filter,
+                          onTap: () => setState(() => _filter = filter),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const ErrorBanner(),
+              if (conversations.isEmpty)
+                const EmptyState(
+                  icon: CupertinoIcons.chat_bubble_2,
+                  title: 'No conversations',
+                  body: '',
+                )
+              else
+                for (var index = 0; index < conversations.length; index++) ...[
+                  if (index == 0 ||
+                      _conversationGroup(
+                            conversations[index - 1].updatedAtDate,
+                          ) !=
+                          _conversationGroup(
+                            conversations[index].updatedAtDate,
+                          ))
+                    _ConversationGroupHeading(
+                      label: _conversationGroup(
+                        conversations[index].updatedAtDate,
+                      ),
+                    ),
+                  _ConversationTile(
+                    conversation: conversations[index],
+                    property: _propertyFor(state, conversations[index]),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ConversationScreen(
+                          conversation: conversations[index],
+                          property: _propertyFor(state, conversations[index]),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-          ],
+                ],
+            ],
+          ),
         ),
       ),
     );
@@ -438,9 +442,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
       _observedState?.removeListener(_onStateChanged);
       _observedState = state..addListener(_onStateChanged);
     }
-    final next = context
-        .read<Property24State>()
-        .conversationRevision(widget.conversation.id);
+    final next = context.read<Property24State>().conversationRevision(
+      widget.conversation.id,
+    );
     if (next != _revision) {
       _revision = next;
       _loadMessages();
@@ -470,16 +474,17 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (!state.signedIn || _loading) return;
     if (mounted) setState(() => _loading = true);
     try {
-      final messages =
-          await state.loadConversationMessages(widget.conversation.id);
+      final messages = await state.loadConversationMessages(
+        widget.conversation.id,
+      );
       state.sendLiveEvent('delivered', widget.conversation.id);
       state.sendLiveEvent('read', widget.conversation.id);
       if (mounted) setState(() => _messages = messages);
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -523,10 +528,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                         (property?.title ?? 'Property24 chat'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppTheme.textMuted,
-                      fontSize: 11,
-                    ),
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -642,8 +644,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     color: AppTheme.textSecondary,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints.tightFor(width: 34, height: 34),
+                    constraints: const BoxConstraints.tightFor(
+                      width: 34,
+                      height: 34,
+                    ),
                   ),
                   IconButton(
                     tooltip: canShareLocation
@@ -664,8 +668,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
                         : AppTheme.textMuted,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints.tightFor(width: 34, height: 34),
+                    constraints: const BoxConstraints.tightFor(
+                      width: 34,
+                      height: 34,
+                    ),
                   ),
                   Expanded(
                     child: Container(
@@ -698,8 +704,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
                               height: 32,
                             ),
                           ),
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 6),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 6,
+                          ),
                         ),
                       ),
                     ),
@@ -719,13 +726,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
                           tooltip: hasText
                               ? 'Send'
                               : (_recording
-                                  ? 'Stop recording'
-                                  : 'Record audio'),
+                                    ? 'Stop recording'
+                                    : 'Record audio'),
                           onPressed: _uploading
                               ? null
                               : hasText
-                                  ? _send
-                                  : _toggleRecording,
+                              ? _send
+                              : _toggleRecording,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(
                             width: 34,
@@ -735,11 +742,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
                             hasText
                                 ? CupertinoIcons.arrow_up
                                 : (_recording
-                                    ? CupertinoIcons.stop_fill
-                                    : CupertinoIcons.mic),
+                                      ? CupertinoIcons.stop_fill
+                                      : CupertinoIcons.mic),
                             size: 18,
-                            color:
-                                hasText ? Colors.white : AppTheme.textSecondary,
+                            color: hasText
+                                ? Colors.white
+                                : AppTheme.textSecondary,
                           ),
                         ),
                       );
@@ -832,9 +840,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
       await _loadMessages();
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -845,14 +853,15 @@ class _ConversationScreenState extends State<ConversationScreen> {
         context,
         conversation: widget.conversation,
         mode: mode,
-        peerName: _participant(context.read<Property24State>())?.name ??
+        peerName:
+            _participant(context.read<Property24State>())?.name ??
             widget.conversation.title,
       );
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -860,14 +869,14 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Future<void> _endCall(String callId) async {
     try {
       await context.read<Property24State>().endCall(
-            widget.conversation.id,
-            callId,
-          );
+        widget.conversation.id,
+        callId,
+      );
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -909,15 +918,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
       final participant = _participant(context.read<Property24State>());
       if (participant == null) return;
       try {
-        await context
-            .read<Property24State>()
-            .blockConversationUser(widget.conversation.id, participant.id);
+        await context.read<Property24State>().blockConversationUser(
+          widget.conversation.id,
+          participant.id,
+        );
         if (mounted) Navigator.of(context).pop();
       } catch (exception) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(userFacingError(exception))),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
         }
       }
     } else {
@@ -1032,8 +1042,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
       if (file != null) await _sendAttachment(file, video ? 'video' : 'image');
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -1061,9 +1072,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
     } catch (exception) {
       if (mounted) {
         setState(() => _recording = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -1071,14 +1082,17 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Future<void> _sendAttachment(XFile file, String type) async {
     if (mounted) setState(() => _uploading = true);
     try {
-      await context
-          .read<Property24State>()
-          .sendMessageAttachment(widget.conversation.id, file, type);
+      await context.read<Property24State>().sendMessageAttachment(
+        widget.conversation.id,
+        file,
+        type,
+      );
       await _loadMessages();
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -1090,14 +1104,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (body.isEmpty) return;
     _message.clear();
     try {
-      await context
-          .read<Property24State>()
-          .sendMessage(widget.conversation.id, body);
+      await context.read<Property24State>().sendMessage(
+        widget.conversation.id,
+        body,
+      );
       await _loadMessages();
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -1187,7 +1203,8 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final attachmentType = item.attachmentType.toLowerCase();
     final hasAttachment = item.attachmentUrl.isNotEmpty;
-    final isLocation = item.body.startsWith('Location:') ||
+    final isLocation =
+        item.body.startsWith('Location:') ||
         item.body.startsWith('Live location:');
     final foreground = mine ? Colors.white : AppTheme.textPrimary;
     final muted = mine ? Colors.white70 : AppTheme.textMuted;
@@ -1209,8 +1226,9 @@ class _MessageBubble extends StatelessWidget {
           ),
         ),
         child: Column(
-          crossAxisAlignment:
-              mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: mine
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
           children: [
             if (isLocation)
               _LocationMessage(
@@ -1240,8 +1258,8 @@ class _MessageBubble extends StatelessWidget {
                 icon: attachmentType == 'video'
                     ? CupertinoIcons.play_circle_fill
                     : attachmentType == 'audio'
-                        ? CupertinoIcons.waveform
-                        : CupertinoIcons.doc,
+                    ? CupertinoIcons.waveform
+                    : CupertinoIcons.doc,
                 label: item.attachmentName.isEmpty
                     ? 'Shared $attachmentType'
                     : item.attachmentName,

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
@@ -28,6 +31,7 @@ class ListingsScreen extends StatefulWidget {
 class _ListingsScreenState extends State<ListingsScreen> {
   String _query = '';
   final TextEditingController _searchController = TextEditingController();
+  bool _returnToOriginOnCancel = false;
 
   static const _primary = AppTheme.accent;
   static Color get _searchFill => AppTheme.bgSurface;
@@ -38,6 +42,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
   void initState() {
     super.initState();
     if (widget.openComposerOnOpen) {
+      _returnToOriginOnCancel = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _openEditor(context);
       });
@@ -277,9 +282,12 @@ class _ListingsScreenState extends State<ListingsScreen> {
     );
   }
 
-  void _openEditor(BuildContext context, [PropertyListing? property]) {
-    Navigator.of(context).push(
-      PageRouteBuilder<void>(
+  Future<void> _openEditor(
+    BuildContext context, [
+    PropertyListing? property,
+  ]) async {
+    final result = await Navigator.of(context).push<bool>(
+      PageRouteBuilder<bool>(
         transitionDuration: const Duration(milliseconds: 300),
         reverseTransitionDuration: const Duration(milliseconds: 260),
         pageBuilder: (context, animation, secondaryAnimation) => PropertyEditor(
@@ -305,6 +313,11 @@ class _ListingsScreenState extends State<ListingsScreen> {
         },
       ),
     );
+    final returnToOriginOnCancel = _returnToOriginOnCancel;
+    _returnToOriginOnCancel = false;
+    if (returnToOriginOnCancel && result != true && context.mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _delete(BuildContext context, PropertyListing property) async {
@@ -688,6 +701,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_restoreLostMedia());
+    });
     final state = context.read<Property24State>();
     final token = state.token;
     _adminLandlords = state.user?.role == AccountRole.admin && token != null
@@ -765,7 +781,12 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _videos = TextEditingController(text: property?.videos.join('\n') ?? '');
     _audio = TextEditingController();
     _type =
-        (property?.propertyType.toLowerCase().replaceAll(' ', '_') ?? 'house');
+        property?.propertyType.toLowerCase().replaceAll(' ', '_') ??
+        (widget.initialCategories.contains('stays')
+            ? 'student_accommodation'
+            : widget.initialCategories.contains('venues')
+            ? 'function_hall'
+            : 'house');
     _intent = property?.listingIntent == 'sale' ? 'Sale' : 'Rent';
     _furnished = property?.furnished ?? false;
     _solar = property?.solarPower ?? false;
@@ -830,24 +851,72 @@ class _PropertyEditorState extends State<PropertyEditor> {
     final hasHomes = _listingCategories.contains('homes');
     final hasStays = _listingCategories.contains('stays');
     final hasVenues = _listingCategories.contains('venues');
+    final isNewFixedCategory =
+        widget.property == null && _listingCategories.length == 1;
+    final categoryLabel = hasVenues
+        ? 'Event venue'
+        : hasStays && !hasHomes
+        ? 'Accommodation'
+        : 'Property';
+    final categoryDescription = hasVenues
+        ? 'List an event space for weddings, conferences, parties, or other gatherings.'
+        : hasStays && !hasHomes
+        ? 'List short-stay or student accommodation. Student rooms and residences also appear in Student stays.'
+        : 'List a home, apartment, commercial property, or land for sale or long-term rent.';
+    final typeOptions = <(String, String)>{
+      if (!isNewFixedCategory ||
+          hasHomes ||
+          (!hasStays && !hasVenues)) ...const [
+        ('house', 'House'),
+        ('flat', 'Apartment / flat'),
+        ('cottage', 'Cottage'),
+        ('room', 'Room'),
+        ('office', 'Office'),
+        ('shop', 'Shop'),
+        ('commercial_property', 'Commercial property'),
+        ('land', 'Land / stand'),
+      ],
+      if (!isNewFixedCategory || hasStays) ...const [
+        ('student_accommodation', 'Student accommodation'),
+        ('room', 'Room'),
+        ('flat', 'Apartment / flat'),
+        ('house', 'House'),
+        ('cottage', 'Cottage'),
+        ('lodge', 'Lodge'),
+        ('guest_house', 'Guest house'),
+        ('hotel', 'Hotel'),
+        ('holiday_home', 'Holiday home'),
+        ('resort', 'Resort'),
+        ('self_catering_apartment', 'Self-catering apartment'),
+        ('camping_glamping', 'Camping / glamping'),
+      ],
+      if (!isNewFixedCategory || hasVenues) ...const [
+        ('wedding_venue', 'Wedding venue'),
+        ('conference_venue', 'Conference venue'),
+        ('party_venue', 'Party venue'),
+        ('garden', 'Garden'),
+        ('function_hall', 'Function hall'),
+        ('corporate_event_space', 'Corporate event space'),
+      ],
+    }.toList(growable: false);
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
         title: Text(
           isLand
               ? widget.property == null
-                    ? 'Add land listing'
+                    ? 'Create land listing'
                     : 'Edit land listing'
               : widget.property == null
-              ? 'Add property'
-              : 'Edit property',
+              ? 'Create ${categoryLabel.toLowerCase()} listing'
+              : 'Edit ${categoryLabel.toLowerCase()} listing',
         ),
         centerTitle: true,
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
             tooltip: 'Close',
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             icon: const Icon(CupertinoIcons.xmark),
           ),
         ],
@@ -857,89 +926,108 @@ class _PropertyEditorState extends State<PropertyEditor> {
         child: ListView(
           padding: EdgeInsets.fromLTRB(16, 8, 16, inset + 96),
           children: [
-            _Section(
-              title: 'Listing type',
-              child: Builder(
-                builder: (context) {
-                  final colors = Theme.of(context).colorScheme;
-                  if (isLand) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.surface,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: colors.outlineVariant),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            CupertinoIcons.tag_fill,
-                            color: colors.primary,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'For sale',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const Spacer(),
-                          Icon(
-                            CupertinoIcons.checkmark_circle_fill,
-                            color: colors.primary,
-                            size: 20,
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                  return SegmentedButton<String>(
-                    segments: [
-                      if (!hasStays && !hasVenues)
-                        const ButtonSegment(
-                          value: 'Sale',
-                          label: Text('For sale'),
-                          icon: Icon(CupertinoIcons.tag),
-                        ),
-                      if (_type != 'land')
-                        const ButtonSegment(
-                          value: 'Rent',
-                          label: Text('For rent'),
-                          icon: Icon(CupertinoIcons.calendar),
-                        ),
-                    ],
-                    selected: {_intent},
-                    showSelectedIcon: false,
-                    style: ButtonStyle(
-                      backgroundColor: WidgetStateProperty.resolveWith(
-                        (states) => states.contains(WidgetState.selected)
-                            ? colors.primary
-                            : colors.surfaceContainerHighest,
-                      ),
-                      foregroundColor: WidgetStateProperty.resolveWith(
-                        (states) => states.contains(WidgetState.selected)
-                            ? colors.onPrimary
-                            : colors.onSurface,
-                      ),
-                      side: WidgetStatePropertyAll(
-                        BorderSide(color: colors.outlineVariant),
-                      ),
-                      shape: const WidgetStatePropertyAll(
-                        RoundedRectangleBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(8)),
-                        ),
+            if (!hasStays && !hasVenues)
+              _Section(
+                title: 'Listing purpose',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        'Choose whether buyers can purchase this property or tenants can rent it long term.',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
-                    onSelectionChanged: (value) {
-                      if (_type == 'land' && value.first == 'Rent') return;
-                      setState(() => _intent = value.first);
-                    },
-                  );
-                },
+                    Builder(
+                      builder: (context) {
+                        final colors = Theme.of(context).colorScheme;
+                        if (isLand) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colors.surface,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: colors.outlineVariant),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  CupertinoIcons.tag_fill,
+                                  color: colors.primary,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'For sale',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                const Spacer(),
+                                Icon(
+                                  CupertinoIcons.checkmark_circle_fill,
+                                  color: colors.primary,
+                                  size: 20,
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return SegmentedButton<String>(
+                          segments: [
+                            if (!hasStays && !hasVenues)
+                              const ButtonSegment(
+                                value: 'Sale',
+                                label: Text('For sale'),
+                                icon: Icon(CupertinoIcons.tag),
+                              ),
+                            if (_type != 'land')
+                              const ButtonSegment(
+                                value: 'Rent',
+                                label: Text('For rent'),
+                                icon: Icon(CupertinoIcons.calendar),
+                              ),
+                          ],
+                          selected: {_intent},
+                          showSelectedIcon: false,
+                          style: ButtonStyle(
+                            backgroundColor: WidgetStateProperty.resolveWith(
+                              (states) => states.contains(WidgetState.selected)
+                                  ? colors.primary
+                                  : colors.surfaceContainerHighest,
+                            ),
+                            foregroundColor: WidgetStateProperty.resolveWith(
+                              (states) => states.contains(WidgetState.selected)
+                                  ? colors.onPrimary
+                                  : colors.onSurface,
+                            ),
+                            side: WidgetStatePropertyAll(
+                              BorderSide(color: colors.outlineVariant),
+                            ),
+                            shape: const WidgetStatePropertyAll(
+                              RoundedRectangleBorder(
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          onSelectionChanged: (value) {
+                            if (_type == 'land' && value.first == 'Rent') {
+                              return;
+                            }
+                            setState(() => _intent = value.first);
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
             _Section(
               title: 'Property details',
               child: Column(
@@ -984,127 +1072,123 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         );
                       },
                     ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Select every category that applies. One listing can appear in both Stays and Venues.',
-                          style: Theme.of(context).textTheme.bodySmall,
+                  if (isNewFixedCategory)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outlineVariant.withAlpha(110),
                         ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: [
-                            for (final category in const {
-                              'homes': 'Homes',
-                              'stays': 'Stays',
-                              'venues': 'Venues',
-                            }.entries)
-                              FilterChip(
-                                label: Text(category.value),
-                                selected: _listingCategories.contains(
-                                  category.key,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            hasVenues
+                                ? Icons.celebration_outlined
+                                : hasStays
+                                ? CupertinoIcons.bed_double
+                                : CupertinoIcons.house,
+                            color: AppTheme.accent,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  hasVenues
+                                      ? 'Event venue'
+                                      : hasStays
+                                      ? 'Accommodation'
+                                      : 'For sale or long-term rent',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _listingCategories.add(category.key);
-                                      if (category.key != 'homes') {
-                                        if (_type == 'land') _type = 'house';
-                                        _intent = 'Rent';
+                                const SizedBox(height: 4),
+                                Text(
+                                  categoryDescription,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Choose where this listing should appear. Property type describes the place itself.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              for (final category in const {
+                                'homes': 'Homes',
+                                'stays': 'Stays',
+                                'venues': 'Venues',
+                              }.entries)
+                                FilterChip(
+                                  label: Text(category.value),
+                                  selected: _listingCategories.contains(
+                                    category.key,
+                                  ),
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      if (selected) {
+                                        _listingCategories.add(category.key);
+                                        if (category.key != 'homes') {
+                                          if (_type == 'land') _type = 'house';
+                                          _intent = 'Rent';
+                                        }
+                                      } else if (_listingCategories.length >
+                                          1) {
+                                        _listingCategories.remove(category.key);
                                       }
-                                    } else if (_listingCategories.length > 1) {
-                                      _listingCategories.remove(category.key);
-                                    }
-                                  });
-                                },
-                              ),
-                          ],
-                        ),
-                      ],
+                                    });
+                                  },
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  _field(_title, 'Title'),
-                  _field(_description, 'Details', maxLines: 4),
+                  _field(_title, 'Listing title'),
+                  _field(_description, 'Description', maxLines: 4),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: DropdownButtonFormField<String>(
                       initialValue: _type,
-                      decoration: _inputDeco('Property type'),
-                      items: const [
-                        DropdownMenuItem(value: 'house', child: Text('House')),
-                        DropdownMenuItem(value: 'flat', child: Text('Flat')),
-                        DropdownMenuItem(
-                          value: 'cottage',
-                          child: Text('Cottage'),
-                        ),
-                        DropdownMenuItem(value: 'room', child: Text('Room')),
-                        DropdownMenuItem(
-                          value: 'office',
-                          child: Text('Office'),
-                        ),
-                        DropdownMenuItem(value: 'shop', child: Text('Shop')),
-                        DropdownMenuItem(
-                          value: 'student_accommodation',
-                          child: Text('Student accommodation'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'commercial_property',
-                          child: Text('Commercial property'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'land',
-                          child: Text('Land / Stand for sale'),
-                        ),
-                        DropdownMenuItem(value: 'lodge', child: Text('Lodge')),
-                        DropdownMenuItem(
-                          value: 'guest_house',
-                          child: Text('Guest house'),
-                        ),
-                        DropdownMenuItem(value: 'hotel', child: Text('Hotel')),
-                        DropdownMenuItem(
-                          value: 'holiday_home',
-                          child: Text('Holiday home'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'resort',
-                          child: Text('Resort'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'self_catering_apartment',
-                          child: Text('Self-catering apartment'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'camping_glamping',
-                          child: Text('Camping / glamping'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'wedding_venue',
-                          child: Text('Wedding venue'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'conference_venue',
-                          child: Text('Conference venue'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'party_venue',
-                          child: Text('Party venue'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'garden',
-                          child: Text('Garden'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'function_hall',
-                          child: Text('Function hall'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'corporate_event_space',
-                          child: Text('Corporate event space'),
-                        ),
+                      decoration: _inputDeco('Property type').copyWith(
+                        helperText: hasStays
+                            ? 'Choose the accommodation type. Student rooms and residences are included.'
+                            : hasVenues
+                            ? 'Choose the kind of event space you are offering.'
+                            : 'Choose the physical property type; Homes listings can be sold or rented.',
+                      ),
+                      items: [
+                        for (final option in typeOptions)
+                          DropdownMenuItem(
+                            value: option.$1,
+                            child: Text(option.$2),
+                          ),
                       ],
                       onChanged: (value) {
                         final next = value ?? 'house';
@@ -1122,6 +1206,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                             'resort',
                             'self_catering_apartment',
                             'camping_glamping',
+                            'student_accommodation',
                           }.contains(next)) {
                             _intent = 'Rent';
                             if (_listingCategories.length == 1 &&
@@ -1291,7 +1376,11 @@ class _PropertyEditorState extends State<PropertyEditor> {
             ),
             if (hasStays || hasVenues)
               _Section(
-                title: 'Stay & venue details',
+                title: hasStays && hasVenues
+                    ? 'Accommodation and venue details'
+                    : hasStays
+                    ? 'Accommodation details'
+                    : 'Event details',
                 child: Column(
                   children: [
                     if (hasStays) ...[
@@ -1756,6 +1845,34 @@ class _PropertyEditorState extends State<PropertyEditor> {
     }
   }
 
+  Future<void> _restoreLostMedia() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      final response = await _picker.retrieveLostData();
+      if (response.exception != null) throw response.exception!;
+      final files =
+          response.files ??
+          (response.file == null ? const <XFile>[] : [response.file!]);
+      if (!mounted || files.isEmpty) return;
+      setState(() {
+        for (final file in files) {
+          final extension = file.path.split('.').last.toLowerCase();
+          if ({'mp4', 'mov', '3gp', 'mkv', 'webm'}.contains(extension)) {
+            _newVideo = file;
+          } else {
+            _newImages.add(file);
+          }
+        }
+      });
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+      }
+    }
+  }
+
   Future<void> _pickVideo({bool camera = false}) async {
     try {
       final file = await _picker.pickVideo(
@@ -1885,7 +2002,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
       await state.refresh();
       if (!mounted) return;
       await _showSuccessDialog();
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context, true);
     } catch (exception) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1941,7 +2058,11 @@ class _PropertyEditorState extends State<PropertyEditor> {
                 const SizedBox(height: 8),
                 Text(
                   widget.property == null
-                      ? 'Your property listed successfully.'
+                      ? _listingCategories.contains('stays')
+                            ? 'Your accommodation listing is now live.'
+                            : _listingCategories.contains('venues')
+                            ? 'Your event venue listing is now live.'
+                            : 'Your property listing is now live.'
                       : 'Your listing was updated successfully.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -1954,7 +2075,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.pop(context, false),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       shape: RoundedRectangleBorder(
