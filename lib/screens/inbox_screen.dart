@@ -76,16 +76,6 @@ class _InboxScreenState extends State<InboxScreen> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Camera',
-                    onPressed: () => _showUnavailable('Camera'),
-                    icon: const Icon(CupertinoIcons.camera),
-                  ),
-                  IconButton(
-                    tooltip: 'New chat',
-                    onPressed: () => _showUnavailable('New chat'),
-                    icon: const Icon(CupertinoIcons.square_pencil),
-                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -184,12 +174,6 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  void _showUnavailable(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature is available from a conversation')),
     );
   }
 
