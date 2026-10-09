@@ -8,6 +8,7 @@ import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/notification_button.dart';
 import '../widgets/property_card.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -49,15 +50,23 @@ class _HomeScreenState extends State<HomeScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 112),
             children: [
-              Text(
-                '${greetingForTime()}${name.isEmpty ? '' : ', $name'} 👋',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${greetingForTime()}${name.isEmpty ? '' : ', $name'} 👋',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  NotificationButton(state: state),
+                ],
               ),
               const SizedBox(height: 18),
               _HomeSearch(
@@ -207,6 +216,12 @@ class _HomeSearch extends StatelessWidget {
               color: AppTheme.textMuted,
             ),
             border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            errorBorder: InputBorder.none,
+            focusedErrorBorder: InputBorder.none,
+            filled: false,
             contentPadding: const EdgeInsets.symmetric(vertical: 16),
           ),
         ),
