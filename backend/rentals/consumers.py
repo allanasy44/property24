@@ -26,7 +26,7 @@ from .models import CallSession, SecurityAuditEvent
 from .notification_services import send_call_push, send_chat_message_push
 from .views import serialize_call_session, serialize_message
 
-ALLOWED_INBOUND_EVENTS = {"message.send", "typing", "delivered", "read", "call.start", "call.end", "call.signal", "presence.ping"}
+ALLOWED_INBOUND_EVENTS = {"message.send", "typing", "delivered", "read", "call.start", "call.end", "call.signal", "presence.ping", "conversation.join"}
 MAX_EVENTS_PER_MINUTE = 80
 MAX_SIGNAL_BYTES = 12000
 ALLOWED_SIGNAL_TYPES = {"offer", "answer", "ice-candidate", "ready", "reject", "busy", "mute", "unmute", "camera-off", "camera-on"}
@@ -100,7 +100,18 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             await self.send_error("You cannot access this conversation")
             return
 
-        if event_type == "message.send":
+        if event_type == "conversation.join":
+            if str(conversation.id) not in {str(item) for item in self.conversation_ids}:
+                self.conversation_ids.append(conversation.id)
+                await self.channel_layer.group_add(
+                    conversation_group_name(conversation.id),
+                    self.channel_name,
+                )
+            await self.send_json({
+                "type": "conversation.joined",
+                "payload": {"conversation_id": str(conversation.id)},
+            })
+        elif event_type == "message.send":
             await self.handle_message_send(conversation, content)
         elif event_type == "typing":
             await self.handle_typing(conversation, content)

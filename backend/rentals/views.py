@@ -4849,6 +4849,7 @@ def user_greeting():
         return "Good afternoon"
     return "Good evening"
 def serialize_user(user):
+    last_seen_at = user.last_seen_at
     return {
         "id": user.id,
         "username": user.username,
@@ -4872,7 +4873,11 @@ def serialize_user(user):
         "profile_picture": account_media_url(user, "profile_picture"),
         "cover_photo": account_media_url(user, "cover_photo"),
         "bio": user.bio,
-        "last_seen_at": user.last_seen_at.isoformat() if user.last_seen_at else None,
+        "last_seen_at": last_seen_at.isoformat() if last_seen_at else None,
+        "online": bool(
+            last_seen_at
+            and (timezone.now() - last_seen_at).total_seconds() <= 45
+        ),
     }
 
 

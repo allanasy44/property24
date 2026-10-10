@@ -25,9 +25,19 @@ class Property24State extends ChangeNotifier {
   WebSocketChannel? _liveChannel;
   StreamSubscription<dynamic>? _liveSubscription;
   Timer? _liveReconnectTimer;
+  Timer? _presencePingTimer;
   Timer? _syncTimer;
+  bool _connectingLiveSocket = false;
+  bool _liveConnected = false;
+  bool _disposed = false;
+  String? _liveConnectionIssue;
+  final Set<String> _joinedConversationIds = <String>{};
   final Map<String, int> _conversationRevisions = <String, int>{};
   final Map<String, String> _typingUsers = <String, String>{};
+  final Map<String, String> _typingUserIds = <String, String>{};
+  final Map<String, Timer> _typingExpiryTimers = <String, Timer>{};
+  final Map<String, bool> _presenceByUser = <String, bool>{};
+  final Map<String, DateTime> _presenceUpdatedAt = <String, DateTime>{};
   final Map<String, CallLogItem> _activeCalls = <String, CallLogItem>{};
   final Map<String, PropertyListing> _changedProperties =
       <String, PropertyListing>{};
@@ -57,6 +67,15 @@ class Property24State extends ChangeNotifier {
       _conversationRevisions[conversationId] ?? 0;
   String? typingUserForConversation(String conversationId) =>
       _typingUsers[conversationId];
+  bool isUserOnline(String userId, {bool fallback = false}) {
+    final updatedAt = _presenceUpdatedAt[userId];
+    if (updatedAt == null ||
+        DateTime.now().difference(updatedAt) > const Duration(seconds: 45)) {
+      return fallback;
+    }
+    return _presenceByUser[userId] ?? fallback;
+  }
+
   CallLogItem? activeCallForConversation(String conversationId) =>
       _activeCalls[conversationId];
   bool get hasLocalActiveCall => _localActiveCallId != null;
@@ -77,6 +96,8 @@ class Property24State extends ChangeNotifier {
 
   String? get token => _token;
   bool get signedIn => _token != null && user != null;
+  bool get liveConnected => _liveConnected;
+  String? get liveConnectionIssue => _liveConnectionIssue;
   bool get canManageListings =>
       account.capabilities.contains('add_properties') ||
       account.capabilities.contains('list_properties');
@@ -224,44 +245,101 @@ class Property24State extends ChangeNotifier {
     if (activeToken == null ||
         activeToken.isEmpty ||
         !signedIn ||
-        user?.role == AccountRole.admin) {
+        _disposed ||
+        user?.role == AccountRole.admin ||
+        _connectingLiveSocket) {
       return;
     }
-    await _closeLiveSocket();
+    _connectingLiveSocket = true;
+    WebSocketChannel? channel;
     try {
-      final channel = WebSocketChannel.connect(
-        AppConfig.liveSocketUri(activeToken),
-      );
+      await _closeLiveSocket();
+      if (_disposed || !signedIn || _token != activeToken) return;
+      channel = WebSocketChannel.connect(AppConfig.liveSocketUri(activeToken));
       _liveChannel = channel;
+      await channel.ready;
+      if (_disposed ||
+          _liveChannel != channel ||
+          _token != activeToken ||
+          !signedIn) {
+        await channel.sink.close();
+        return;
+      }
+      _liveConnected = true;
+      _liveConnectionIssue = null;
+      if (!_disposed) notifyListeners();
       _liveSubscription = channel.stream.listen(
-        _handleLiveEvent,
-        onError: (_) => _scheduleLiveReconnect(),
-        onDone: _scheduleLiveReconnect,
+        (event) {
+          if (_liveChannel == channel) _handleLiveEvent(event);
+        },
+        onError: (_) {
+          if (_liveChannel != channel) return;
+          _liveConnected = false;
+          _liveConnectionIssue = 'Connection interrupted; retrying.';
+          if (!_disposed) notifyListeners();
+          _scheduleLiveReconnect();
+        },
+        onDone: () {
+          if (_liveChannel != channel) return;
+          _liveConnected = false;
+          _liveConnectionIssue = 'Connection interrupted; retrying.';
+          if (!_disposed) notifyListeners();
+          _scheduleLiveReconnect();
+        },
         cancelOnError: true,
       );
-    } catch (_) {
+      _joinedConversationIds.addAll(
+        snapshot.conversations.map((conversation) => conversation.id),
+      );
+      for (final conversationId in _joinedConversationIds) {
+        sendLiveEvent('conversation.join', conversationId);
+      }
+      _presencePingTimer?.cancel();
+      _presencePingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+        sendLiveEvent('presence.ping', '');
+      });
+    } catch (exception) {
+      if (channel != null && _liveChannel == channel) {
+        _liveChannel = null;
+        await channel.sink.close();
+      }
+      _liveConnected = false;
+      _liveConnectionIssue = 'Connection unavailable; retrying.';
+      debugPrint(
+        'Chat WebSocket connection failed (${exception.runtimeType}).',
+      );
+      if (!_disposed) notifyListeners();
       _scheduleLiveReconnect();
+    } finally {
+      _connectingLiveSocket = false;
     }
   }
 
   Future<void> _closeLiveSocket() async {
     _liveReconnectTimer?.cancel();
     _liveReconnectTimer = null;
+    _presencePingTimer?.cancel();
+    _presencePingTimer = null;
+    final channel = _liveChannel;
+    _liveChannel = null;
     await _liveSubscription?.cancel();
     _liveSubscription = null;
-    await _liveChannel?.sink.close();
-    _liveChannel = null;
+    await channel?.sink.close();
+    if (_liveConnected) {
+      _liveConnected = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   void _scheduleLiveReconnect() {
-    if (!signedIn || _liveReconnectTimer?.isActive == true) return;
+    if (!signedIn || _disposed || _liveReconnectTimer?.isActive == true) return;
     _liveReconnectTimer = Timer(const Duration(seconds: 5), () {
       unawaited(_connectLiveSocket());
     });
   }
 
   void _handleLiveEvent(dynamic raw) {
-    if (raw is! String) return;
+    if (_disposed || raw is! String) return;
     try {
       final event = jsonDecode(raw);
       if (event is! Map<String, dynamic>) return;
@@ -270,6 +348,14 @@ class Property24State extends ChangeNotifier {
       final conversationId = payload is Map
           ? '${payload['conversation_id'] ?? ''}'
           : '';
+      if (type == 'presence.changed' && payload is Map) {
+        final userId = '${payload['user_id'] ?? ''}';
+        if (userId.isNotEmpty) {
+          _presenceByUser[userId] = payload['online'] == true;
+          _presenceUpdatedAt[userId] = DateTime.now();
+          notifyListeners();
+        }
+      }
       if (type.startsWith('call.') && payload is Map<String, dynamic>) {
         _callEvents.add({
           'type': type,
@@ -277,12 +363,30 @@ class Property24State extends ChangeNotifier {
         });
       }
       if (type == 'typing' && conversationId.isNotEmpty && payload is Map) {
+        final userId = '${payload['user_id'] ?? ''}';
+        if (userId.isNotEmpty && userId == user?.id) return;
         final isTyping = payload['is_typing'] == true;
         if (isTyping) {
+          _typingUserIds[conversationId] = userId;
+          final name = '${payload['name'] ?? 'Someone'}'.trim();
           _typingUsers[conversationId] =
-              '${payload['name'] ?? 'Someone'} is typing...';
+              '${name.isEmpty ? 'Someone' : name} is typing...';
+          _typingExpiryTimers.remove(conversationId)?.cancel();
+          _typingExpiryTimers[conversationId] = Timer(
+            const Duration(seconds: 4),
+            () {
+              _typingUsers.remove(conversationId);
+              _typingUserIds.remove(conversationId);
+              _typingExpiryTimers.remove(conversationId);
+              notifyListeners();
+            },
+          );
         } else {
-          _typingUsers.remove(conversationId);
+          if (_typingUserIds[conversationId] == userId) {
+            _typingExpiryTimers.remove(conversationId)?.cancel();
+            _typingUsers.remove(conversationId);
+            _typingUserIds.remove(conversationId);
+          }
         }
         notifyListeners();
       }
@@ -296,6 +400,10 @@ class Property24State extends ChangeNotifier {
         notifyListeners();
       }
       if (type == 'notification.created' && payload is Map) {
+        final notifiedConversationId = '${payload['conversation_id'] ?? ''}';
+        if (notifiedConversationId.isNotEmpty) {
+          joinConversation(notifiedConversationId);
+        }
         final message = '${payload['message'] ?? ''}'.trim();
         final kind = '${payload['kind'] ?? ''}';
         final fallback = switch (kind) {
@@ -320,6 +428,13 @@ class Property24State extends ChangeNotifier {
               payload: Map<String, dynamic>.from(payload),
             ),
           );
+        }
+      }
+      if (type == 'message.created' && payload is Map<String, dynamic>) {
+        final message = ChatMessageItem.fromJson(payload);
+        _applyMessageToConversation(message);
+        if (message.senderId != user?.id) {
+          sendLiveEvent('delivered', message.conversationId);
         }
       }
       if (conversationId.isNotEmpty &&
@@ -353,10 +468,12 @@ class Property24State extends ChangeNotifier {
       }
       if (type == 'property.changed' ||
           type == 'comparison.changed' ||
-          type == 'notification.created' ||
+          (type == 'notification.created' &&
+              (conversationId.isEmpty ||
+                  !snapshot.conversations.any(
+                    (conversation) => conversation.id == conversationId,
+                  ))) ||
           type == 'account.changed' ||
-          type.startsWith('message.') ||
-          type.startsWith('messages.') ||
           type.startsWith('conversation.') ||
           type.startsWith('call.')) {
         unawaited(refresh(silent: true));
@@ -364,6 +481,38 @@ class Property24State extends ChangeNotifier {
     } catch (_) {
       // Polling remains the fallback for malformed or unsupported frames.
     }
+  }
+
+  void joinConversation(String conversationId) {
+    if (conversationId.isEmpty) return;
+    _joinedConversationIds.add(conversationId);
+    sendLiveEvent('conversation.join', conversationId);
+  }
+
+  void _applyMessageToConversation(ChatMessageItem message) {
+    final index = snapshot.conversations.indexWhere(
+      (conversation) => conversation.id == message.conversationId,
+    );
+    if (index < 0) return;
+    final now = message.createdAtDate ?? DateTime.now();
+    final existing = snapshot.conversations[index];
+    final unreadCount = message.senderId == user?.id
+        ? existing.unreadCount
+        : existing.unreadCount + 1;
+    final conversations = snapshot.conversations.toList();
+    conversations[index] = existing.copyWith(
+      preview: message.body,
+      updatedAt: chatConversationTime(now),
+      updatedAtDate: now,
+      unreadCount: unreadCount,
+    );
+    conversations.sort((a, b) {
+      final aTime = a.updatedAtDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = b.updatedAtDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bTime.compareTo(aTime);
+    });
+    _replaceSnapshot(snapshot.copyWith(conversations: conversations));
+    notifyListeners();
   }
 
   bool sendLiveEvent(
@@ -382,7 +531,10 @@ class Property24State extends ChangeNotifier {
         }),
       );
       return true;
-    } catch (_) {
+    } catch (exception) {
+      _liveConnectionIssue = 'Connection unavailable; retrying.';
+      debugPrint('Chat WebSocket send failed (${exception.runtimeType}).');
+      if (!_disposed) notifyListeners();
       _scheduleLiveReconnect();
       return false;
     }
@@ -390,8 +542,14 @@ class Property24State extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _syncTimer?.cancel();
     _liveReconnectTimer?.cancel();
+    _presencePingTimer?.cancel();
+    for (final timer in _typingExpiryTimers.values) {
+      timer.cancel();
+    }
+    _typingExpiryTimers.clear();
     unawaited(_closeLiveSocket());
     unawaited(_callEvents.close());
     super.dispose();
@@ -904,7 +1062,7 @@ class Property24State extends ChangeNotifier {
   ) async {
     final activeToken = _requireToken();
     final bytes = await file.readAsBytes();
-    await _api.sendMessageAttachment(
+    final response = await _api.sendMessageAttachment(
       token: activeToken,
       conversationId: conversationId,
       bytes: bytes,
@@ -912,7 +1070,11 @@ class Property24State extends ChangeNotifier {
       attachmentType: attachmentType,
       mimeType: file.mimeType,
     );
-    await refresh();
+    final message = ChatMessageItem.fromJson(response);
+    _applyMessageToConversation(message);
+    _conversationRevisions[conversationId] =
+        conversationRevision(conversationId) + 1;
+    notifyListeners();
   }
 
   Future<List<ChatMessageItem>> loadConversationMessages(
@@ -979,8 +1141,11 @@ class Property24State extends ChangeNotifier {
 
   Future<void> sendMessage(String conversationId, String body) async {
     final activeToken = _requireToken();
-    await _api.sendMessage(activeToken, conversationId, body);
-    await refresh();
+    final message = await _api.sendMessage(activeToken, conversationId, body);
+    _applyMessageToConversation(message);
+    _conversationRevisions[conversationId] =
+        conversationRevision(conversationId) + 1;
+    notifyListeners();
   }
 
   Future<void> deleteConversationMessage(

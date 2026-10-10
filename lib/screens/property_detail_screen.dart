@@ -279,7 +279,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       ),
     );
     controller.dispose();
-    if (body == null || body.isEmpty) return;
+    if (!mounted || body == null || body.isEmpty) return;
     final updated = await context.read<Property24State>().editPropertyComment(
           widget.property.id,
           comment.id,

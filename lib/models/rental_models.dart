@@ -146,6 +146,8 @@ class AccountUser {
     required this.profilePicture,
     required this.coverPhoto,
     required this.bio,
+    this.online = false,
+    this.lastSeenAt,
   });
 
   factory AccountUser.fromJson(
@@ -171,6 +173,8 @@ class AccountUser {
       profilePicture: textValue(json, 'profile_picture'),
       coverPhoto: textValue(json, 'cover_photo'),
       bio: textValue(json, 'bio'),
+      online: json['online'] == true,
+      lastSeenAt: localDateTime(json['last_seen_at']),
     );
   }
 
@@ -188,6 +192,13 @@ class AccountUser {
   final String profilePicture;
   final String coverPhoto;
   final String bio;
+  final bool? online;
+  final DateTime? lastSeenAt;
+
+  bool get isCurrentlyOnline =>
+      online == true &&
+      lastSeenAt != null &&
+      DateTime.now().difference(lastSeenAt!).inSeconds <= 45;
 }
 
 class AccountContext {
@@ -1360,14 +1371,19 @@ class ConversationItem {
   final List<AccountUser> participants;
   final int unreadCount;
 
-  ConversationItem copyWith({int? unreadCount}) {
+  ConversationItem copyWith({
+    String? preview,
+    String? updatedAt,
+    DateTime? updatedAtDate,
+    int? unreadCount,
+  }) {
     return ConversationItem(
       id: id,
       propertyId: propertyId,
       title: title,
-      preview: preview,
-      updatedAt: updatedAt,
-      updatedAtDate: updatedAtDate,
+      preview: preview ?? this.preview,
+      updatedAt: updatedAt ?? this.updatedAt,
+      updatedAtDate: updatedAtDate ?? this.updatedAtDate,
       phoneNumbersRevealed: phoneNumbersRevealed,
       participants: participants,
       unreadCount: unreadCount ?? this.unreadCount,

@@ -1226,12 +1226,12 @@ class Property24Api {
     return _decode(response);
   }
 
-  Future<void> sendMessage(
+  Future<ChatMessageItem> sendMessage(
     String token,
     String conversationId,
     String body,
   ) async {
-    await _post(
+    final message = await _post(
       'conversations/$conversationId/messages/',
       token: token,
       body: {
@@ -1239,6 +1239,7 @@ class Property24Api {
         'client_message_id': 'flutter-${DateTime.now().microsecondsSinceEpoch}',
       },
     );
+    return ChatMessageItem.fromJson(message);
   }
 
   Future<void> deleteConversationMessage(

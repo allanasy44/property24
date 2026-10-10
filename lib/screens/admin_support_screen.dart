@@ -72,6 +72,7 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
         status: status,
       );
       await _reload();
+      if (!mounted) return;
       await context.read<Property24State>().refresh(silent: true);
     } catch (exception) {
       _showError(exception);

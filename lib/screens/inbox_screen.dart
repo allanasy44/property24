@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +13,7 @@ import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
 import 'live_call_screen.dart';
+import 'property_detail_screen.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -62,39 +65,44 @@ class _InboxScreenState extends State<InboxScreen> {
         child: RefreshIndicator(
           onRefresh: state.refresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Chats',
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
+              Text(
+                'Chats',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.6,
+                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
+              Text(
+                'Your conversations about properties and services',
+                style: TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 16),
               Container(
-                height: 44,
+                height: 48,
                 decoration: BoxDecoration(
-                  color: AppTheme.bgSurface,
-                  borderRadius: BorderRadius.circular(28),
+                  color: AppTheme.bgCard,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.border),
                 ),
                 child: TextField(
                   controller: _searchController,
                   onChanged: (value) => setState(() => _query = value),
                   textInputAction: TextInputAction.search,
-                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 13.5),
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
-                    hintText: 'Search',
+                    hintText: 'Search conversations',
                     hintStyle: TextStyle(
                       color: AppTheme.textMuted,
-                      fontSize: 13.5,
+                      fontSize: 13,
                     ),
                     prefixIcon: Icon(
                       CupertinoIcons.search,
@@ -105,21 +113,24 @@ class _InboxScreenState extends State<InboxScreen> {
                         ? null
                         : IconButton(
                             tooltip: 'Clear search',
-                            onPressed: _searchController.clear,
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _query = '');
+                            },
                             icon: Icon(
-                              CupertinoIcons.xmark,
+                              CupertinoIcons.xmark_circle_fill,
                               color: AppTheme.textMuted,
                               size: 18,
                             ),
                           ),
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 13),
                   ),
                 ),
               ),
               const SizedBox(height: 14),
               SizedBox(
-                height: 34,
+                height: 36,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
@@ -135,30 +146,21 @@ class _InboxScreenState extends State<InboxScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               const ErrorBanner(),
               if (conversations.isEmpty)
                 const EmptyState(
                   icon: CupertinoIcons.chat_bubble_2,
-                  title: 'No conversations',
-                  body: '',
+                  title: 'No conversations yet',
+                  body:
+                      'Messages about your property enquiries will appear here.',
                 )
               else
                 for (var index = 0; index < conversations.length; index++) ...[
-                  if (index == 0 ||
-                      _conversationGroup(
-                            conversations[index - 1].updatedAtDate,
-                          ) !=
-                          _conversationGroup(
-                            conversations[index].updatedAtDate,
-                          ))
-                    _ConversationGroupHeading(
-                      label: _conversationGroup(
-                        conversations[index].updatedAtDate,
-                      ),
-                    ),
                   _ConversationTile(
                     conversation: conversations[index],
+                    currentUserId: state.user?.id,
+                    state: state,
                     property: _propertyFor(state, conversations[index]),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
@@ -169,6 +171,11 @@ class _InboxScreenState extends State<InboxScreen> {
                       ),
                     ),
                   ),
+                  if (index != conversations.length - 1)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 68),
+                      child: Divider(height: 1, color: AppTheme.border),
+                    ),
                 ],
             ],
           ),
@@ -186,38 +193,18 @@ class _InboxScreenState extends State<InboxScreen> {
     }
     return null;
   }
-
-  String _conversationGroup(DateTime? updatedAt) {
-    if (updatedAt == null) return 'Earlier';
-    final now = DateTime.now();
-    if (isSameLocalDay(updatedAt, now)) return 'Today';
-    if (isSameLocalDay(updatedAt, now.subtract(const Duration(days: 1)))) {
-      return 'Yesterday';
-    }
-    return 'Earlier';
-  }
 }
 
-class _ConversationGroupHeading extends StatelessWidget {
-  const _ConversationGroupHeading({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
-      child: Text(
-        label.toUpperCase(),
-        style: TextStyle(
-          color: AppTheme.textMuted,
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1,
-        ),
-      ),
-    );
+AccountUser? _otherParticipant(
+  ConversationItem conversation,
+  String? currentUserId,
+) {
+  for (final participant in conversation.participants) {
+    if (participant.id != currentUserId) return participant;
   }
+  return conversation.participants.isEmpty
+      ? null
+      : conversation.participants.first;
 }
 
 class _ChatFilter extends StatelessWidget {
@@ -260,38 +247,42 @@ class _ChatFilter extends StatelessWidget {
 class _ConversationTile extends StatelessWidget {
   const _ConversationTile({
     required this.conversation,
+    required this.currentUserId,
+    required this.state,
     required this.property,
     required this.onTap,
   });
 
   final ConversationItem conversation;
+  final String? currentUserId;
+  final Property24State state;
   final PropertyListing? property;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final participant = conversation.participants.isNotEmpty
-        ? conversation.participants.first
-        : null;
+    final participant = _otherParticipant(conversation, currentUserId);
+    final isOnline =
+        participant != null &&
+        state.isUserOnline(
+          participant.id,
+          fallback: participant.isCurrentlyOnline,
+        );
+    final typingPreview = state.typingUserForConversation(conversation.id);
     final contactName = participant?.name.isNotEmpty == true
         ? participant!.name
         : conversation.title;
-    final subtitle = [
-      if (property?.title.isNotEmpty == true) property!.title,
-      conversation.preview,
-    ].join('  ·  ');
-
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           child: Row(
             children: [
-              _ChatAvatar(participant: participant),
-              const SizedBox(width: 12),
+              _ChatAvatar(participant: participant, online: isOnline),
+              const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,7 +296,7 @@ class _ConversationTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: AppTheme.textPrimary,
-                              fontSize: 15,
+                              fontSize: 14,
                               fontWeight: conversation.unreadCount > 0
                                   ? FontWeight.w800
                                   : FontWeight.w600,
@@ -316,24 +307,26 @@ class _ConversationTile extends StatelessWidget {
                           conversation.updatedAt,
                           style: TextStyle(
                             color: conversation.unreadCount > 0
-                                ? AppTheme.accent
+                                ? AppTheme.accentTeal
                                 : AppTheme.textMuted,
-                            fontSize: 10,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     Row(
                       children: [
                         Expanded(
                           child: Text(
-                            subtitle,
+                            typingPreview ?? conversation.preview,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: conversation.unreadCount > 0
+                              color: typingPreview != null
+                                  ? AppTheme.accentTeal
+                                  : conversation.unreadCount > 0
                                   ? AppTheme.textPrimary
                                   : AppTheme.textMuted,
                               fontSize: 12,
@@ -349,10 +342,142 @@ class _ConversationTile extends StatelessWidget {
                         ],
                       ],
                     ),
+                    if (property?.title.isNotEmpty == true) ...[
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Icon(
+                            CupertinoIcons.house,
+                            size: 11,
+                            color: AppTheme.textMuted,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              property!.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppTheme.textMuted,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConversationListingCard extends StatelessWidget {
+  const _ConversationListingCard({required this.property, required this.onTap});
+
+  final PropertyListing property;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = property.photos.isEmpty ? '' : property.photos.first;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Material(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(11),
+                  child: SizedBox(
+                    width: 58,
+                    height: 58,
+                    child: imageUrl.isEmpty
+                        ? ColoredBox(
+                            color: AppTheme.bgSurface,
+                            child: Icon(
+                              CupertinoIcons.house_fill,
+                              color: AppTheme.textMuted,
+                            ),
+                          )
+                        : Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => ColoredBox(
+                              color: AppTheme.bgSurface,
+                              child: Icon(
+                                CupertinoIcons.house_fill,
+                                color: AppTheme.textMuted,
+                              ),
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        property.listingIntent == 'sale'
+                            ? 'Enquiry about a property for sale'
+                            : 'Enquiry about a property for rent',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        property.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${property.rentLabel}${property.heroLocation.isEmpty ? '' : '  ·  ${property.heroLocation}'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 16,
+                  color: AppTheme.textMuted,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -403,12 +528,18 @@ class ConversationScreen extends StatefulWidget {
 
 class _ConversationScreenState extends State<ConversationScreen> {
   final _message = TextEditingController();
+  final _messagesScrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
   final AudioRecorder _audioRecorder = AudioRecorder();
   List<ChatMessageItem> _messages = <ChatMessageItem>[];
   bool _loading = false;
   bool _recording = false;
   bool _uploading = false;
+  bool _reloadPending = false;
+  bool _sending = false;
+  bool _typingSent = false;
+  Timer? _typingTimer;
+  DateTime? _lastTypingAt;
   int _revision = -1;
   Property24State? _observedState;
 
@@ -424,6 +555,17 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final state = context.read<Property24State>();
     if (_observedState != state) {
       _observedState?.removeListener(_onStateChanged);
+      _typingTimer?.cancel();
+      state.joinConversation(widget.conversation.id);
+      if (_typingSent) {
+        _observedState?.sendLiveEvent(
+          'typing',
+          widget.conversation.id,
+          payload: const {'is_typing': false},
+        );
+        _typingSent = false;
+      }
+      _lastTypingAt = null;
       _observedState = state..addListener(_onStateChanged);
     }
     final next = context.read<Property24State>().conversationRevision(
@@ -438,7 +580,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
   @override
   void dispose() {
     _observedState?.removeListener(_onStateChanged);
+    _typingTimer?.cancel();
+    if (_typingSent) {
+      _observedState?.sendLiveEvent(
+        'typing',
+        widget.conversation.id,
+        payload: const {'is_typing': false},
+      );
+    }
     _message.dispose();
+    _messagesScrollController.dispose();
     _audioRecorder.dispose();
     super.dispose();
   }
@@ -455,7 +606,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   Future<void> _loadMessages() async {
     final state = context.read<Property24State>();
-    if (!state.signedIn || _loading) return;
+    if (!state.signedIn) return;
+    if (_loading) {
+      _reloadPending = true;
+      return;
+    }
+    final wasNearLatest =
+        !_messagesScrollController.hasClients ||
+        _messagesScrollController.position.maxScrollExtent -
+                _messagesScrollController.position.pixels <
+            160;
     if (mounted) setState(() => _loading = true);
     try {
       final messages = await state.loadConversationMessages(
@@ -463,7 +623,19 @@ class _ConversationScreenState extends State<ConversationScreen> {
       );
       state.sendLiveEvent('delivered', widget.conversation.id);
       state.sendLiveEvent('read', widget.conversation.id);
-      if (mounted) setState(() => _messages = messages);
+      if (mounted) {
+        setState(() => _messages = messages);
+        if (wasNearLatest) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_messagesScrollController.hasClients) return;
+            _messagesScrollController.animateTo(
+              _messagesScrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+            );
+          });
+        }
+      }
     } catch (exception) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -472,6 +644,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+      if (_reloadPending && mounted) {
+        _reloadPending = false;
+        unawaited(_loadMessages());
+      }
     }
   }
 
@@ -485,6 +661,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final contactName = participant?.name.isNotEmpty == true
         ? participant!.name
         : widget.conversation.title;
+    final isOnline =
+        participant != null &&
+        state.isUserOnline(
+          participant.id,
+          fallback: participant.isCurrentlyOnline,
+        );
+    final typingText = state.typingUserForConversation(widget.conversation.id);
     final activeCall = state.activeCallForConversation(widget.conversation.id);
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -492,7 +675,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
         titleSpacing: 0,
         title: Row(
           children: [
-            _ChatAvatar(participant: participant),
+            _ChatAvatar(participant: participant, online: isOnline),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -508,11 +691,24 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     ),
                   ),
                   Text(
-                    state.typingUserForConversation(widget.conversation.id) ??
-                        (property?.title ?? 'Property24 chat'),
+                    typingText ??
+                        (isOnline
+                            ? 'online'
+                            : state.liveConnected
+                            ? 'Property24 chat'
+                            : state.liveConnectionIssue ??
+                                  'Connecting to live chat…'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                    style: TextStyle(
+                      color: typingText != null || isOnline
+                          ? AppTheme.accentTeal
+                          : AppTheme.textMuted,
+                      fontSize: 11,
+                      fontWeight: isOnline || typingText != null
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                    ),
                   ),
                 ],
               ),
@@ -523,12 +719,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
           IconButton(
             tooltip: 'Voice call',
             onPressed: () => _startCall(CallMode.voice),
-            icon: const Icon(CupertinoIcons.phone, size: 20),
+            icon: const Icon(CupertinoIcons.phone, size: 22),
           ),
           IconButton(
             tooltip: 'Video call',
             onPressed: () => _startCall(CallMode.video),
-            icon: const Icon(CupertinoIcons.videocam, size: 21),
+            icon: const Icon(CupertinoIcons.videocam, size: 23),
           ),
           PopupMenuButton<String>(
             tooltip: 'Chat options',
@@ -576,8 +772,18 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 ],
               ),
             ),
+          if (property != null)
+            _ConversationListingCard(
+              property: property,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => PropertyDetailScreen(property: property),
+                ),
+              ),
+            ),
           Expanded(
             child: ListView(
+              controller: _messagesScrollController,
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
               children: [
                 if (_loading && _messages.isEmpty)
@@ -604,12 +810,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
           ),
           SafeArea(
             top: false,
-            minimum: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+            minimum: const EdgeInsets.fromLTRB(12, 6, 12, 10),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               decoration: BoxDecoration(
                 color: AppTheme.bgCard,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(26),
                 border: Border.all(color: AppTheme.border),
                 boxShadow: [
                   BoxShadow(
@@ -622,74 +828,76 @@ class _ConversationScreenState extends State<ConversationScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    tooltip: 'Capture photo or video',
+                    tooltip: 'Add photo or video',
                     onPressed: _uploading ? null : _showAttachmentSheet,
-                    icon: const Icon(CupertinoIcons.add_circled_solid),
+                    icon: const Icon(CupertinoIcons.add),
                     color: AppTheme.textSecondary,
-                    visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
-                      width: 34,
-                      height: 34,
+                      width: 44,
+                      height: 46,
                     ),
+                    iconSize: 23,
                   ),
-                  IconButton(
-                    tooltip: canShareLocation
-                        ? 'Share location'
-                        : 'Location unavailable',
-                    onPressed: canShareLocation
-                        ? () async {
-                            await state.shareLocation(
-                              widget.conversation.id,
-                              property: property!,
-                            );
-                            await _loadMessages();
-                          }
-                        : null,
-                    icon: const Icon(CupertinoIcons.location),
-                    color: canShareLocation
-                        ? AppTheme.textSecondary
-                        : AppTheme.textMuted,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 34,
-                      height: 34,
+                  if (canShareLocation)
+                    IconButton(
+                      tooltip: 'Share location',
+                      onPressed: _uploading || _sending
+                          ? null
+                          : () async {
+                              await state.shareLocation(
+                                widget.conversation.id,
+                                property: property!,
+                              );
+                              await _loadMessages();
+                            },
+                      icon: const Icon(CupertinoIcons.location),
+                      color: AppTheme.textSecondary,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 42,
+                        height: 46,
+                      ),
+                      iconSize: 21,
                     ),
-                  ),
                   Expanded(
                     child: Container(
-                      constraints: const BoxConstraints(minHeight: 34),
+                      constraints: const BoxConstraints(minHeight: 46),
                       decoration: BoxDecoration(
                         color: AppTheme.bgSurface,
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(22),
                       ),
                       child: TextField(
                         controller: _message,
                         minLines: 1,
                         maxLines: 3,
-                        onChanged: (value) => state.sendLiveEvent(
-                          'typing',
-                          widget.conversation.id,
-                          payload: {'is_typing': value.trim().isNotEmpty},
+                        onChanged: _sendTypingStatus,
+                        textCapitalization: TextCapitalization.sentences,
+                        textInputAction: TextInputAction.newline,
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 14,
+                          height: 1.25,
                         ),
                         decoration: InputDecoration(
-                          hintText: 'Message',
+                          hintText: _recording
+                              ? 'Recording voice message…'
+                              : 'Message',
                           border: InputBorder.none,
                           prefixIcon: IconButton(
                             tooltip: 'Emoji',
                             onPressed: _showEmojiPicker,
                             icon: const Icon(CupertinoIcons.smiley),
                             color: AppTheme.textSecondary,
-                            visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints.tightFor(
-                              width: 32,
-                              height: 32,
+                              width: 40,
+                              height: 44,
                             ),
+                            iconSize: 21,
                           ),
                           contentPadding: const EdgeInsets.symmetric(
-                            vertical: 6,
+                            vertical: 12,
                           ),
                         ),
                       ),
@@ -700,10 +908,14 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     builder: (context, value, child) {
                       final hasText = value.text.trim().isNotEmpty;
                       return Container(
-                        width: 34,
-                        height: 34,
+                        width: 46,
+                        height: 46,
                         decoration: BoxDecoration(
-                          color: hasText ? AppTheme.accent : AppTheme.bgSurface,
+                          color: hasText
+                              ? AppTheme.accent
+                              : _recording
+                              ? const Color(0xffd92d45)
+                              : AppTheme.accentTeal,
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
@@ -712,15 +924,15 @@ class _ConversationScreenState extends State<ConversationScreen> {
                               : (_recording
                                     ? 'Stop recording'
                                     : 'Record audio'),
-                          onPressed: _uploading
+                          onPressed: _uploading || _sending
                               ? null
                               : hasText
                               ? _send
                               : _toggleRecording,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(
-                            width: 34,
-                            height: 34,
+                            width: 46,
+                            height: 46,
                           ),
                           icon: Icon(
                             hasText
@@ -728,10 +940,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
                                 : (_recording
                                       ? CupertinoIcons.stop_fill
                                       : CupertinoIcons.mic),
-                            size: 18,
-                            color: hasText
-                                ? Colors.white
-                                : AppTheme.textSecondary,
+                            size: 23,
+                            color: Colors.white,
                           ),
                         ),
                       );
@@ -744,6 +954,59 @@ class _ConversationScreenState extends State<ConversationScreen> {
         ],
       ),
     );
+  }
+
+  void _sendTypingStatus(String value) {
+    final state = _observedState;
+    if (state == null) return;
+    if (value.trim().isEmpty) {
+      _typingTimer?.cancel();
+      _lastTypingAt = null;
+      if (_typingSent) {
+        state.sendLiveEvent(
+          'typing',
+          widget.conversation.id,
+          payload: const {'is_typing': false},
+        );
+        _typingSent = false;
+      }
+      return;
+    }
+    _lastTypingAt = DateTime.now();
+    if (!_typingSent) {
+      state.sendLiveEvent(
+        'typing',
+        widget.conversation.id,
+        payload: const {'is_typing': true},
+      );
+      _typingSent = true;
+      _scheduleTypingRefresh();
+    }
+  }
+
+  void _scheduleTypingRefresh() {
+    _typingTimer?.cancel();
+    _typingTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted || !_typingSent) return;
+      final lastTypingAt = _lastTypingAt;
+      if (lastTypingAt == null ||
+          DateTime.now().difference(lastTypingAt) >=
+              const Duration(seconds: 3)) {
+        _observedState?.sendLiveEvent(
+          'typing',
+          widget.conversation.id,
+          payload: const {'is_typing': false},
+        );
+        _typingSent = false;
+        return;
+      }
+      _observedState?.sendLiveEvent(
+        'typing',
+        widget.conversation.id,
+        payload: const {'is_typing': true},
+      );
+      _scheduleTypingRefresh();
+    });
   }
 
   AccountUser? _participant(Property24State state) {
@@ -1071,7 +1334,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
         file,
         type,
       );
-      await _loadMessages();
     } catch (exception) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1085,20 +1347,24 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   Future<void> _send() async {
     final body = _message.text.trim();
-    if (body.isEmpty) return;
+    if (body.isEmpty || _sending) return;
+    setState(() => _sending = true);
     _message.clear();
+    _sendTypingStatus('');
     try {
       await context.read<Property24State>().sendMessage(
         widget.conversation.id,
         body,
       );
-      await _loadMessages();
     } catch (exception) {
       if (mounted) {
+        if (_message.text.isEmpty) _message.text = body;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 }
@@ -1132,27 +1398,55 @@ class _MessageDateDivider extends StatelessWidget {
 }
 
 class _ChatAvatar extends StatelessWidget {
-  const _ChatAvatar({required this.participant, this.large = false});
+  const _ChatAvatar({
+    required this.participant,
+    this.large = false,
+    this.online = false,
+  });
 
   final AccountUser? participant;
   final bool large;
+  final bool online;
 
   @override
   Widget build(BuildContext context) {
     final radius = large ? 38.0 : 19.0;
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: AppTheme.bgSurface,
-      backgroundImage: participant?.profilePicture.isNotEmpty == true
-          ? NetworkImage(participant!.profilePicture)
-          : null,
-      child: participant?.profilePicture.isNotEmpty == true
-          ? null
-          : Icon(
-              CupertinoIcons.person_fill,
-              size: large ? 32 : 17,
-              color: AppTheme.textMuted,
+    return SizedBox(
+      width: radius * 2,
+      height: radius * 2,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CircleAvatar(
+            radius: radius,
+            backgroundColor: AppTheme.bgSurface,
+            backgroundImage: participant?.profilePicture.isNotEmpty == true
+                ? NetworkImage(participant!.profilePicture)
+                : null,
+            child: participant?.profilePicture.isNotEmpty == true
+                ? null
+                : Icon(
+                    CupertinoIcons.person_fill,
+                    size: large ? 32 : 17,
+                    color: AppTheme.textMuted,
+                  ),
+          ),
+          if (online)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Container(
+                width: large ? 15 : 13,
+                height: large ? 15 : 13,
+                decoration: BoxDecoration(
+                  color: AppTheme.accentTeal,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.bg, width: 2),
+                ),
+              ),
             ),
+        ],
+      ),
     );
   }
 }
@@ -1266,10 +1560,7 @@ class _MessageBubble extends StatelessWidget {
                 ),
                 if (mine) ...[
                   const SizedBox(width: 4),
-                  _DeliveryTicks(
-                    status: item.deliveryStatus,
-                    mutedColor: muted,
-                  ),
+                  _DeliveryTicks(status: item.deliveryStatus),
                 ],
               ],
             ),
@@ -1281,31 +1572,30 @@ class _MessageBubble extends StatelessWidget {
 }
 
 class _DeliveryTicks extends StatelessWidget {
-  const _DeliveryTicks({required this.status, required this.mutedColor});
+  const _DeliveryTicks({required this.status});
 
   final String status;
-  final Color mutedColor;
 
   @override
   Widget build(BuildContext context) {
     final read = status.toLowerCase() == 'read';
     final delivered = read || status.toLowerCase() == 'delivered';
-    final color = read ? const Color(0xff53bdeb) : mutedColor;
+    final color = read ? const Color(0xff53bdeb) : const Color(0xffaeb7c2);
     if (!delivered) {
-      return Icon(CupertinoIcons.checkmark, size: 12, color: color);
+      return Icon(CupertinoIcons.checkmark, size: 14, color: color);
     }
     return SizedBox(
-      width: 16,
-      height: 13,
+      width: 18,
+      height: 15,
       child: Stack(
         children: [
           Positioned(
             left: 0,
-            child: Icon(CupertinoIcons.checkmark_alt, size: 12, color: color),
+            child: Icon(CupertinoIcons.checkmark_alt, size: 14, color: color),
           ),
           Positioned(
-            left: 4,
-            child: Icon(CupertinoIcons.checkmark_alt, size: 12, color: color),
+            left: 5,
+            child: Icon(CupertinoIcons.checkmark_alt, size: 14, color: color),
           ),
         ],
       ),

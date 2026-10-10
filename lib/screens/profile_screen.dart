@@ -636,32 +636,6 @@ class _MenuCardTile extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Circular outlined back button
-// ─────────────────────────────────────────────────────────────
-class _CircleIconButton extends StatelessWidget {
-  const _CircleIconButton({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: AppTheme.border, width: 1.2),
-        ),
-        child: Icon(icon, color: AppTheme.textPrimary, size: 18),
-      ),
-    );
-  }
-}
-
 // ═════════════════════════════════════════════════════════════
 //  SETTINGS SHEET (image layout, AppTheme colors, real-time)
 // ═════════════════════════════════════════════════════════════

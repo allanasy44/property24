@@ -33,7 +33,6 @@ class _ListingsScreenState extends State<ListingsScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _returnToOriginOnCancel = false;
 
-  static const _primary = AppTheme.accent;
   static Color get _searchFill => AppTheme.bgSurface;
   static Color get _textDark => AppTheme.textPrimary;
   static Color get _textMuted => AppTheme.textMuted;
@@ -58,8 +57,6 @@ class _ListingsScreenState extends State<ListingsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    final isLandlord = state.canManageListings;
-    final displayName = state.user?.name.trim() ?? '';
     final accountListings = state.snapshot.properties.where(
       (property) =>
           property.owner?.id == state.user?.id ||
@@ -104,132 +101,121 @@ class _ListingsScreenState extends State<ListingsScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: isLandlord
-                                ? const SizedBox.shrink()
-                                : Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${greetingForTime()},',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          height: 1.3,
-                                          color: _textMuted,
-                                          fontWeight: FontWeight.w500,
-                                          letterSpacing: 0.1,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        displayName.isEmpty
-                                            ? greetingForTime()
-                                            : displayName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 23,
-                                          height: 1.15,
-                                          color: _textDark,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: -0.5,
-                                        ),
-                                      ),
-                                    ],
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'My listings',
+                                  style: TextStyle(
+                                    fontSize: 25,
+                                    height: 1.15,
+                                    color: _textDark,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.6,
                                   ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Manage your property adverts',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: _textMuted,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          InkWell(
-                            borderRadius: BorderRadius.circular(24),
-                            onTap: () => _openEditor(context),
-                            child: Container(
-                              height: 48,
-                              width: 48,
-                              decoration: BoxDecoration(
-                                color: _primary,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _primary.withValues(alpha: 0.2),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
+                          const SizedBox(width: 12),
+                          FilledButton.icon(
+                            onPressed: () => _openEditor(context),
+                            icon: const Icon(CupertinoIcons.add, size: 18),
+                            label: const Text('Add listing'),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
                               ),
-                              child: const Icon(
-                                CupertinoIcons.add,
-                                color: Colors.white,
-                                size: 22,
+                              textStyle: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 18),
-                      Text(
-                        'Listings',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: _textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          Expanded(
-                            child: Container(
-                              height: 54,
-                              decoration: BoxDecoration(
-                                color: _searchFill,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: AppTheme.border),
-                              ),
-                              child: TextField(
-                                controller: _searchController,
-                                onChanged: (value) =>
-                                    setState(() => _query = value),
-                                textInputAction: TextInputAction.search,
-                                style: TextStyle(
-                                  color: _textDark,
-                                  fontSize: 13.5,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Search your listings',
-                                  hintStyle: TextStyle(
-                                    color: _textMuted,
-                                    fontSize: 13.5,
-                                  ),
-                                  prefixIcon: Icon(
-                                    CupertinoIcons.search,
-                                    color: _textMuted,
-                                    size: 20,
-                                  ),
-                                  suffixIcon: _query.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          tooltip: 'Clear search',
-                                          onPressed: _searchController.clear,
-                                          icon: Icon(
-                                            CupertinoIcons.xmark,
-                                            color: _textMuted,
-                                            size: 18,
-                                          ),
-                                        ),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 17,
-                                  ),
-                                ),
-                              ),
+                          Text(
+                            '${accountListings.length} ${accountListings.length == 1 ? 'listing' : 'listings'}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: _textDark,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
+                          if (_query.trim().isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              '· ${listings.length} found',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _textMuted,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 10),
+                      Container(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: _searchFill,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (value) => setState(() => _query = value),
+                          textInputAction: TextInputAction.search,
+                          style: TextStyle(color: _textDark, fontSize: 13.5),
+                          decoration: InputDecoration(
+                            hintText: 'Search your listings',
+                            hintStyle: TextStyle(
+                              color: _textMuted,
+                              fontSize: 13,
+                            ),
+                            prefixIcon: Icon(
+                              CupertinoIcons.search,
+                              color: _textMuted,
+                              size: 20,
+                            ),
+                            suffixIcon: _query.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Clear search',
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _query = '');
+                                    },
+                                    icon: Icon(
+                                      CupertinoIcons.xmark_circle_fill,
+                                      color: _textMuted,
+                                      size: 18,
+                                    ),
+                                  ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                     ],
                   ),
                 ),
