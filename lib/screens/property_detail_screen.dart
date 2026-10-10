@@ -34,6 +34,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   bool _supplierFollowLoading = false;
   bool _commentsLoading = false;
   bool _similarPropertiesLoading = false;
+  String? _commentsError;
   final TextEditingController _commentController = TextEditingController();
   List<PropertyCommentItem> _comments = <PropertyCommentItem>[];
   List<ComparisonSuggestion> _similarProperties = <ComparisonSuggestion>[];
@@ -66,9 +67,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       if (mounted) setState(() => _listingViews = views);
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -88,15 +89,16 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       if (mounted) {
         setState(() {
           _saved = state.savedPropertyIds.contains(widget.property.id);
-          _savedCount =
-              (_savedCount + (wasSaved ? -1 : 1)).clamp(0, 1 << 31).toInt();
+          _savedCount = (_savedCount + (wasSaved ? -1 : 1))
+              .clamp(0, 1 << 31)
+              .toInt();
         });
       }
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -110,10 +112,23 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   Future<void> _loadComments() async {
     final state = context.read<Property24State>();
     if (!state.signedIn) return;
-    if (mounted) setState(() => _commentsLoading = true);
+    if (mounted) {
+      setState(() {
+        _commentsLoading = true;
+        _commentsError = null;
+      });
+    }
     try {
       final comments = await state.loadPropertyComments(widget.property.id);
       if (mounted) setState(() => _comments = comments);
+    } catch (exception) {
+      if (!mounted) return;
+      setState(() {
+        _commentsError =
+            exception is ApiException && exception.statusCode == 403
+            ? 'Comments are not available for this listing.'
+            : userFacingError(exception);
+      });
     } finally {
       if (mounted) setState(() => _commentsLoading = false);
     }
@@ -124,14 +139,15 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     if (!state.signedIn) return;
     setState(() => _similarPropertiesLoading = true);
     try {
-      final suggestions =
-          await state.comparisonSuggestionsFor(widget.property.id);
+      final suggestions = await state.comparisonSuggestionsFor(
+        widget.property.id,
+      );
       if (mounted) setState(() => _similarProperties = suggestions);
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     } finally {
       if (mounted) setState(() => _similarPropertiesLoading = false);
@@ -155,9 +171,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   Future<void> _toggleLike() async {
     try {
       final result = await context.read<Property24State>().togglePropertyLike(
-            widget.property.id,
-            liked: !_liked,
-          );
+        widget.property.id,
+        liked: !_liked,
+      );
       if (mounted) {
         setState(() {
           _liked = result['liked'] == true;
@@ -166,9 +182,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       }
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -192,9 +208,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       });
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -224,9 +240,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       });
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     } finally {
       if (mounted) setState(() => _supplierFollowLoading = false);
@@ -237,12 +253,13 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     final body = _commentController.text.trim();
     if (body.isEmpty) return;
     try {
-      final comment =
-          await context.read<Property24State>().createPropertyComment(
-                widget.property.id,
-                body,
-                parentId: _replyTo?.id,
-              );
+      final comment = await context
+          .read<Property24State>()
+          .createPropertyComment(
+            widget.property.id,
+            body,
+            parentId: _replyTo?.id,
+          );
       _commentController.clear();
       if (mounted) {
         setState(() {
@@ -252,9 +269,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       }
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -281,10 +298,10 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     controller.dispose();
     if (!mounted || body == null || body.isEmpty) return;
     final updated = await context.read<Property24State>().editPropertyComment(
-          widget.property.id,
-          comment.id,
-          body,
-        );
+      widget.property.id,
+      comment.id,
+      body,
+    );
     if (mounted) {
       setState(() {
         _comments = _comments
@@ -295,9 +312,10 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   }
 
   Future<void> _deleteComment(PropertyCommentItem comment) async {
-    await context
-        .read<Property24State>()
-        .deletePropertyComment(widget.property.id, comment.id);
+    await context.read<Property24State>().deletePropertyComment(
+      widget.property.id,
+      comment.id,
+    );
     if (mounted) {
       setState(
         () => _comments = _comments
@@ -361,7 +379,8 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       if (property.sharedRoom ||
                           (property.isStudentAccommodation &&
                               property
-                                  .accommodationInstitution.isNotEmpty)) ...[
+                                  .accommodationInstitution
+                                  .isNotEmpty)) ...[
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
@@ -375,8 +394,10 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                             if (property.isStudentAccommodation &&
                                 property.accommodationInstitution.isNotEmpty)
                               Chip(
-                                avatar:
-                                    const Icon(CupertinoIcons.book, size: 16),
+                                avatar: const Icon(
+                                  CupertinoIcons.book,
+                                  size: 16,
+                                ),
                                 label: Text(
                                   'For ${property.accommodationInstitution}',
                                 ),
@@ -415,8 +436,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                tooltip:
-                                    _liked ? 'Unlike listing' : 'Like listing',
+                                tooltip: _liked
+                                    ? 'Unlike listing'
+                                    : 'Like listing',
                                 onPressed: _toggleLike,
                                 icon: Icon(
                                   _liked
@@ -573,13 +595,26 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                           padding: EdgeInsets.all(16),
                           child: Center(child: CircularProgressIndicator()),
                         ),
+                      if (_commentsError != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            _commentsError!,
+                            style: TextStyle(
+                              color: AppTheme.textMuted,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
                       for (final comment in _comments.where(
                         (item) => item.parentId.isEmpty,
                       )) ...[
                         _CommentTile(
                           comment: comment,
-                          currentUserId:
-                              context.read<Property24State>().user?.id,
+                          currentUserId: context
+                              .read<Property24State>()
+                              .user
+                              ?.id,
                           onReply: () => setState(() => _replyTo = comment),
                           onEdit: () => _editComment(comment),
                           onDelete: () => _deleteComment(comment),
@@ -589,8 +624,10 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         ))
                           _CommentTile(
                             comment: reply,
-                            currentUserId:
-                                context.read<Property24State>().user?.id,
+                            currentUserId: context
+                                .read<Property24State>()
+                                .user
+                                ?.id,
                             isReply: true,
                             onReply: () => setState(() => _replyTo = comment),
                             onEdit: () => _editComment(reply),
@@ -694,8 +731,10 @@ class _CommentTile extends StatelessWidget {
               children: [
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
                   decoration: BoxDecoration(
                     color: AppTheme.bgSurface,
                     borderRadius: BorderRadius.circular(12),
@@ -855,8 +894,9 @@ class _HeroGallery extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 _CircleAction(
-                  icon:
-                      saved ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
+                  icon: saved
+                      ? CupertinoIcons.heart_fill
+                      : CupertinoIcons.heart,
                   tooltip: saved ? 'Remove saved home' : 'Save home',
                   onPressed: onSave,
                 ),
@@ -956,10 +996,7 @@ class _PriceHeader extends StatelessWidget {
                 property.heroLocation,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppTheme.textMuted,
-                  fontSize: 11.5,
-                ),
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 11.5),
               ),
             ],
           ),
@@ -1009,18 +1046,11 @@ class _MetaLine extends StatelessWidget {
         const SizedBox(height: 6),
         Row(
           children: [
-            Icon(
-              CupertinoIcons.eye,
-              size: 13,
-              color: AppTheme.textMuted,
-            ),
+            Icon(CupertinoIcons.eye, size: 13, color: AppTheme.textMuted),
             const SizedBox(width: 5),
             Text(
               property.availabilityLabel,
-              style: TextStyle(
-                color: AppTheme.textMuted,
-                fontSize: 11,
-              ),
+              style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
             ),
           ],
         ),
@@ -1040,7 +1070,8 @@ class _AvailabilityCard extends StatelessWidget {
     final theme = Theme.of(context);
     final liveProperty = state.currentProperty(property);
     final userId = state.user?.id;
-    final canConfirm = userId != null &&
+    final canConfirm =
+        userId != null &&
         (userId == liveProperty.owner?.id || userId == liveProperty.agent?.id);
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1062,7 +1093,8 @@ class _AvailabilityCard extends StatelessWidget {
                     ? CupertinoIcons.exclamationmark_triangle
                     : CupertinoIcons.checkmark_seal,
                 size: 18,
-                color: liveProperty.availabilityNeedsConfirmation ||
+                color:
+                    liveProperty.availabilityNeedsConfirmation ||
                         liveProperty.availabilityState == 'available_from' ||
                         liveProperty.availabilityState == 'rented' ||
                         liveProperty.availabilityState == 'sold'
@@ -1236,16 +1268,18 @@ class _AffordabilityCardState extends State<_AffordabilityCard> {
       _error = null;
     });
     try {
-      final result =
-          await context.read<Property24State>().calculateAffordability(
-                widget.property,
-                monthlyIncome: _income.text.trim(),
-                monthlyCommitments: _commitments.text.trim().isEmpty
-                    ? '0'
-                    : _commitments.text.trim(),
-                savingsAvailable:
-                    _savings.text.trim().isEmpty ? '0' : _savings.text.trim(),
-              );
+      final result = await context
+          .read<Property24State>()
+          .calculateAffordability(
+            widget.property,
+            monthlyIncome: _income.text.trim(),
+            monthlyCommitments: _commitments.text.trim().isEmpty
+                ? '0'
+                : _commitments.text.trim(),
+            savingsAvailable: _savings.text.trim().isEmpty
+                ? '0'
+                : _savings.text.trim(),
+          );
       if (mounted) setState(() => _result = result);
     } catch (error) {
       if (mounted) setState(() => _error = userFacingError(error));
@@ -1504,9 +1538,7 @@ class _StayVenueDetails extends StatelessWidget {
       if (property.guestAccommodation) 'Guest accommodation',
     ];
     final sections = <(String, List<String>)>[
-      if (property.isStay &&
-          property.isVenue &&
-          property.eventRate.isNotEmpty)
+      if (property.isStay && property.isVenue && property.eventRate.isNotEmpty)
         ('Venue pricing', ['From ${money(property.eventRate)} / event']),
       ('Rooms', property.roomTypes),
       ('Amenities', property.listingAmenities),
@@ -1571,16 +1603,18 @@ class _DetailTabs extends StatelessWidget {
                         ? AppTheme.accent
                         : AppTheme.textSecondary,
                     fontSize: 11.5,
-                    fontWeight:
-                        tab == tabs.first ? FontWeight.w800 : FontWeight.w600,
+                    fontWeight: tab == tabs.first
+                        ? FontWeight.w800
+                        : FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Container(
                   height: 2,
                   width: 36,
-                  color:
-                      tab == tabs.first ? AppTheme.accent : Colors.transparent,
+                  color: tab == tabs.first
+                      ? AppTheme.accent
+                      : Colors.transparent,
                 ),
               ],
             ),
@@ -1683,20 +1717,20 @@ class _HostCard extends StatelessWidget {
     final initials = name.isEmpty
         ? 'P'
         : name
-            .trim()
-            .split(RegExp(r'\s+'))
-            .take(2)
-            .map((part) => part.characters.first.toUpperCase())
-            .join();
+              .trim()
+              .split(RegExp(r'\s+'))
+              .take(2)
+              .map((part) => part.characters.first.toUpperCase())
+              .join();
 
     return InkWell(
       onTap: supplier == null
           ? null
           : () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => SupplierProfileScreen(supplier: supplier),
-                ),
+              MaterialPageRoute<void>(
+                builder: (_) => SupplierProfileScreen(supplier: supplier),
               ),
+            ),
       borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.all(13),
@@ -1789,10 +1823,7 @@ class _HostCard extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     '$followersCount followers',
-                    style: TextStyle(
-                      color: AppTheme.textMuted,
-                      fontSize: 10.5,
-                    ),
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 10.5),
                   ),
                 ),
               ),
@@ -1811,8 +1842,7 @@ class _BottomActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    final canInteract = state.signedIn &&
-        state.user?.id != property.owner?.id;
+    final canInteract = state.signedIn && state.user?.id != property.owner?.id;
     return Container(
       padding: EdgeInsets.fromLTRB(
         22,
@@ -1876,8 +1906,8 @@ class _BottomActions extends StatelessWidget {
                     property.isStay
                         ? 'Enquire about stay'
                         : property.isVenue
-                            ? 'Enquire about venue'
-                            : 'Reserve',
+                        ? 'Enquire about venue'
+                        : 'Reserve',
                   ),
                 ),
               ),
@@ -1956,9 +1986,9 @@ class _BottomActions extends StatelessWidget {
       );
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -1974,9 +2004,9 @@ class _BottomActions extends StatelessWidget {
       if (context.mounted) context.go(AppRoutes.chatScreen);
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }

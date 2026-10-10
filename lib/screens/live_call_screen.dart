@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +11,15 @@ import '../core/config.dart';
 import '../models/rental_models.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
+
+class CallSetupException implements Exception {
+  const CallSetupException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 class LiveCallScreen extends StatefulWidget {
   const LiveCallScreen({
@@ -28,17 +39,30 @@ class LiveCallScreen extends StatefulWidget {
   final String peerName;
   final bool isOutgoing;
 
-  static Future<MediaStream> _requestMedia(CallMode mode) {
-    return navigator.mediaDevices.getUserMedia({
-      'audio': true,
-      'video': mode == CallMode.video
-          ? {
-              'facingMode': 'user',
-              'width': {'ideal': 1280, 'max': 1920},
-              'height': {'ideal': 720, 'max': 1080},
-            }
-          : false,
-    });
+  static Future<MediaStream> _requestMedia(CallMode mode) async {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        'audio': true,
+        'video': mode == CallMode.video
+            ? {
+                'facingMode': 'user',
+                'width': {'ideal': 1280, 'max': 1920},
+                'height': {'ideal': 720, 'max': 1080},
+              }
+            : false,
+      });
+    } on PlatformException catch (exception) {
+      final reason = switch (exception.code.toLowerCase()) {
+        'permission_denied' || 'permissiondenied' || 'notallowederror' =>
+          'Allow camera and microphone access in your device settings, then try again.',
+        'notfounderror' =>
+          'A camera or microphone could not be found on this device.',
+        _ =>
+          'Could not access the camera and microphone '
+              '(${exception.code}). ${exception.message ?? ''}',
+      };
+      throw CallSetupException(reason);
+    }
   }
 
   static Future<void> startOutgoing(
@@ -49,17 +73,29 @@ class LiveCallScreen extends StatefulWidget {
   }) async {
     final state = context.read<Property24State>();
     final userId = state.user?.id ?? '';
-    String? peerId;
+    AccountUser? peer;
     for (final participant in conversation.participants) {
       if (participant.id != userId) {
-        peerId = participant.id;
+        peer = participant;
         break;
       }
     }
-    if (peerId == null || peerId.isEmpty) {
-      throw StateError('This conversation has no other participant to call.');
+    if (peer == null || peer.id.isEmpty) {
+      throw const CallSetupException(
+        'This conversation has no other participant to call.',
+      );
     }
-    final targetPeerId = peerId;
+    final targetPeerId = peer.id;
+    if (!state.liveConnected) {
+      throw const CallSetupException(
+        'Chat is reconnecting. Wait for it to reconnect before calling.',
+      );
+    }
+    if (!state.isUserOnline(peer.id, fallback: peer.isCurrentlyOnline)) {
+      throw const CallSetupException(
+        'This person is offline right now. Try again when they are online.',
+      );
+    }
 
     final localStream = await _requestMedia(mode);
     try {
@@ -128,6 +164,7 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
   DateTime? _connectedAt;
   Duration _duration = Duration.zero;
   bool _muted = false;
+  bool _speakerOn = false;
   bool _cameraEnabled = true;
   bool _makingOffer = false;
   bool _offerCreated = false;
@@ -139,6 +176,11 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
   bool _remoteCameraEnabled = true;
   String _status = 'Connecting…';
   late Property24State _appState;
+
+  bool get _supportsSpeakerRouting =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   @override
   void initState() {
@@ -158,7 +200,15 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
     _callSubscription = _appState.callEvents.listen(_handleCallEvent);
     _callTimeout = Timer(const Duration(seconds: 60), () {
       if (_connectedAt == null && !_callEnded) {
-        unawaited(_failCall(StateError('The call was not answered in time.')));
+        unawaited(
+          _failCall(
+            StateError(
+              widget.isOutgoing
+                  ? 'The call was not answered in time.'
+                  : 'The call could not connect after it was answered.',
+            ),
+          ),
+        );
       }
     });
     unawaited(_initializeCall());
@@ -179,6 +229,15 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
         _remoteRenderer.initialize(),
       ]);
       if (_callEnded) return;
+      if (_supportsSpeakerRouting) {
+        final speakerOn = widget.call.mode == CallMode.video;
+        try {
+          await Helper.setSpeakerphoneOn(speakerOn);
+          _speakerOn = speakerOn;
+        } catch (exception) {
+          _showError(exception);
+        }
+      }
       _localRenderer.srcObject = widget.localStream;
       final peerConnection = await createPeerConnection({
         'iceServers': AppConfig.webrtcIceServers,
@@ -224,16 +283,16 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
           setState(() => _status = 'Connection interrupted');
         } else if (connectionState ==
             RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-          unawaited(
-            _failCall(StateError('The call connection failed.')),
-          );
+          unawaited(_failCall(StateError('The call connection failed.')));
         }
       };
       for (final track in widget.localStream.getTracks()) {
         await peerConnection.addTrack(track, widget.localStream);
       }
       if (widget.isOutgoing) {
-        if (mounted) setState(() => _status = 'Ringing…');
+        if (mounted) {
+          setState(() => _status = _remoteReady ? 'Connecting…' : 'Calling…');
+        }
         if (_remoteReady) await _makeOffer();
       } else {
         _sendSignal('ready', const {});
@@ -253,7 +312,8 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
     }
     final type = '${event['type'] ?? ''}';
     if (type == 'call.ended') {
-      _finishFromRemote();
+      final status = '${payload['status'] ?? ''}';
+      _finishFromRemote(status: status == 'missed' ? 'No answer' : 'Call ended');
       return;
     }
     if (type != 'call.signal') return;
@@ -268,9 +328,16 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
     if (signal is! Map) return;
     try {
       switch ('${payload['signal_type'] ?? ''}') {
+        case 'reject':
+          _finishFromRemote(status: 'Call declined');
+          break;
+        case 'busy':
+          _finishFromRemote(status: 'Busy');
+          break;
         case 'ready':
           if (widget.isOutgoing) {
             _remoteReady = true;
+            if (mounted) setState(() => _status = 'Connecting…');
             await _makeOffer();
           }
           break;
@@ -291,7 +358,7 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
           break;
       }
     } catch (exception) {
-      _showError(exception);
+      unawaited(_failCall(exception));
     }
   }
 
@@ -334,8 +401,9 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
     if (sdp is! String || sdp.isEmpty || signal['type'] != 'answer') {
       throw const FormatException('The incoming call answer is invalid.');
     }
-    await peerConnection
-        .setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
+    await peerConnection.setRemoteDescription(
+      RTCSessionDescription(sdp, 'answer'),
+    );
     _hasRemoteDescription = true;
     await _applyPendingCandidates();
   }
@@ -396,14 +464,19 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
     setState(() => _status = _formatDuration(_duration));
   }
 
-  void _finishFromRemote() {
-    if (_callEnded) return;
+  void _finishFromRemote({String status = 'Call ended'}) {
+    if (_callEnded) {
+      if (status != 'Call ended' && mounted) {
+        setState(() => _status = status);
+      }
+      return;
+    }
     _callEnded = true;
     _closing = true;
     _callTimeout?.cancel();
     _disconnectTimer?.cancel();
     unawaited(_releaseResources());
-    if (mounted) setState(() => _status = 'Call ended');
+    if (mounted) setState(() => _status = status);
   }
 
   Future<void> _endCall() async {
@@ -474,6 +547,16 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
     _sendSignal(_muted ? 'mute' : 'unmute', const {});
   }
 
+  Future<void> _toggleSpeaker() async {
+    final speakerOn = !_speakerOn;
+    try {
+      await Helper.setSpeakerphoneOn(speakerOn);
+      if (mounted) setState(() => _speakerOn = speakerOn);
+    } catch (exception) {
+      _showError(exception);
+    }
+  }
+
   void _toggleCamera() {
     _cameraEnabled = !_cameraEnabled;
     for (final track in widget.localStream.getVideoTracks()) {
@@ -485,9 +568,14 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
 
   void _showError(Object exception) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(exception.toString())),
-    );
+    final message = exception is CallSetupException
+        ? exception.message
+        : exception is StateError
+        ? exception.message.toString()
+        : exception.toString();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String _formatDuration(Duration duration) {
@@ -535,15 +623,6 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
                         size: 50,
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    Text(
-                      widget.peerName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 23,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
                     const SizedBox(height: 8),
                     Text(
                       connected ? _formatDuration(_duration) : _status,
@@ -585,6 +664,19 @@ class _LiveCallScreenState extends State<LiveCallScreen> {
                       label: _muted ? 'Unmute' : 'Mute',
                       onTap: _callEnded ? null : _toggleMute,
                     ),
+                    if (_supportsSpeakerRouting) ...[
+                      const SizedBox(width: 22),
+                      _CallControl(
+                        icon: _speakerOn
+                            ? CupertinoIcons.speaker_2_fill
+                            : CupertinoIcons.phone_fill,
+                        label: _speakerOn ? 'Speaker' : 'Earpiece',
+                        color: _speakerOn
+                            ? AppTheme.accentTeal
+                            : const Color(0xff303840),
+                        onTap: _callEnded ? null : _toggleSpeaker,
+                      ),
+                    ],
                     if (widget.call.mode == CallMode.video) ...[
                       const SizedBox(width: 22),
                       _CallControl(

@@ -89,6 +89,7 @@ class _AppScaffoldState extends State<AppScaffold> {
     if (state.hasLocalActiveCall ||
         _showingIncomingCallId != null ||
         _answeringIncomingCallId != null) {
+      _sendCallDisposition(state, targetConversation, call, 'busy');
       try {
         await state.endCall(targetConversation.id, call.id, status: 'missed');
       } catch (exception) {
@@ -120,8 +121,10 @@ class _AppScaffoldState extends State<AppScaffold> {
     final callerName = caller?.name.isNotEmpty == true
         ? caller!.name
         : conversation.title;
+    var timedOut = false;
     final timeout = Timer(const Duration(seconds: 60), () {
       if (mounted && _showingIncomingCallId == call.id) {
+        timedOut = true;
         Navigator.of(context, rootNavigator: true).pop(false);
       }
     });
@@ -207,6 +210,9 @@ class _AppScaffoldState extends State<AppScaffold> {
         }
       }
     } else {
+      if (!timedOut) {
+        _sendCallDisposition(state, conversation, call, 'reject');
+      }
       try {
         await state.endCall(conversation.id, call.id, status: 'missed');
       } catch (exception) {
@@ -217,6 +223,24 @@ class _AppScaffoldState extends State<AppScaffold> {
         }
       }
     }
+  }
+
+  void _sendCallDisposition(
+    Property24State state,
+    ConversationItem conversation,
+    CallLogItem call,
+    String signalType,
+  ) {
+    state.sendLiveEvent(
+      'call.signal',
+      conversation.id,
+      payload: {
+        'call_id': call.id,
+        'target_user_id': call.initiatorId,
+        'signal_type': signalType,
+        'signal': const <String, dynamic>{},
+      },
+    );
   }
 
   @override

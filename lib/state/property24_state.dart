@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/config.dart';
@@ -1427,6 +1428,15 @@ class Property24State extends ChangeNotifier {
       ),
     );
     notifyListeners();
+    unawaited(_playNotificationSound());
+  }
+
+  Future<void> _playNotificationSound() async {
+    try {
+      await SystemSound.play(SystemSoundType.alert);
+    } on PlatformException catch (exception, stackTrace) {
+      debugPrint('Could not play notification sound: $exception\n$stackTrace');
+    }
   }
 
   Future<void> markNotificationRead(String notificationId) async {

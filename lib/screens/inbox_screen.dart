@@ -13,7 +13,6 @@ import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
 import 'live_call_screen.dart';
-import 'property_detail_screen.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -286,7 +285,7 @@ class _ConversationTile extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  children: <Widget>[
                     Row(
                       children: [
                         Expanded(
@@ -371,113 +370,6 @@ class _ConversationTile extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ConversationListingCard extends StatelessWidget {
-  const _ConversationListingCard({required this.property, required this.onTap});
-
-  final PropertyListing property;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final imageUrl = property.photos.isEmpty ? '' : property.photos.first;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Material(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.border),
-            ),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(11),
-                  child: SizedBox(
-                    width: 58,
-                    height: 58,
-                    child: imageUrl.isEmpty
-                        ? ColoredBox(
-                            color: AppTheme.bgSurface,
-                            child: Icon(
-                              CupertinoIcons.house_fill,
-                              color: AppTheme.textMuted,
-                            ),
-                          )
-                        : Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => ColoredBox(
-                              color: AppTheme.bgSurface,
-                              child: Icon(
-                                CupertinoIcons.house_fill,
-                                color: AppTheme.textMuted,
-                              ),
-                            ),
-                          ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        property.listingIntent == 'sale'
-                            ? 'Enquiry about a property for sale'
-                            : 'Enquiry about a property for rent',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: AppTheme.textMuted,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        property.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${property.rentLabel}${property.heroLocation.isEmpty ? '' : '  ·  ${property.heroLocation}'}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  CupertinoIcons.chevron_right,
-                  size: 16,
-                  color: AppTheme.textMuted,
-                ),
-              ],
-            ),
           ),
         ),
       ),
@@ -691,13 +583,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     ),
                   ),
                   Text(
-                    typingText ??
-                        (isOnline
-                            ? 'online'
-                            : state.liveConnected
-                            ? 'Property24 chat'
-                            : state.liveConnectionIssue ??
-                                  'Connecting to live chat…'),
+                    typingText ?? (isOnline ? 'online' : 'offline'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -759,7 +645,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '${activeCall.mode == CallMode.video ? 'Video' : 'Voice'} call in progress',
+                      activeCall.status.toLowerCase() == 'ringing'
+                          ? activeCall.initiatorId == state.user?.id
+                                ? 'Calling…'
+                                : 'Incoming call'
+                          : '${activeCall.mode == CallMode.video ? 'Video' : 'Voice'} call active',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -770,15 +660,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     child: const Text('End'),
                   ),
                 ],
-              ),
-            ),
-          if (property != null)
-            _ConversationListingCard(
-              property: property,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => PropertyDetailScreen(property: property),
-                ),
               ),
             ),
           Expanded(
@@ -915,7 +796,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                               ? AppTheme.accent
                               : _recording
                               ? const Color(0xffd92d45)
-                              : AppTheme.accentTeal,
+                              : AppTheme.accent,
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
@@ -1106,9 +987,15 @@ class _ConversationScreenState extends State<ConversationScreen> {
       );
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              exception is CallSetupException
+                  ? exception.message
+                  : userFacingError(exception),
+            ),
+          ),
+        );
       }
     }
   }
