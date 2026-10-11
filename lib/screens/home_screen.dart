@@ -10,7 +10,6 @@ import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/notification_button.dart';
 import '../widgets/property_card.dart';
-import 'discover_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
+  String _query = '';
 
   @override
   void dispose() {
@@ -32,12 +32,24 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
     final name = state.user?.name.trim().split(RegExp(r'\s+')).first ?? '';
+    final query = _query.trim().toLowerCase();
     final properties = state.snapshot.properties
-        .where(
-          (property) =>
-              property.owner?.id != state.user?.id &&
-              property.agent?.id != state.user?.id,
-        )
+        .where((property) {
+          if (property.owner?.id == state.user?.id ||
+              property.agent?.id == state.user?.id) {
+            return false;
+          }
+          if (query.isEmpty) return true;
+          final searchableText = [
+            property.title,
+            property.address,
+            property.city,
+            property.suburb,
+            property.propertyType,
+            property.description,
+          ].join(' ').toLowerCase();
+          return searchableText.contains(query);
+        })
         .take(4)
         .toList();
 
@@ -89,8 +101,8 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 18),
               _HomeSearch(
                 controller: _searchController,
-                onSubmitted: (query) =>
-                    _openSearch(context, 'properties', query: query),
+                onChanged: (value) => setState(() => _query = value),
+                onSubmitted: (value) => setState(() => _query = value),
               ),
               const SizedBox(height: 22),
               Row(
@@ -117,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.only(right: 10),
                         child: _ActionTile(
                           action: action,
-                          onTap: () => _openSearch(context, action.market),
+                          onTap: () => _openExplore(context, action.market),
                         ),
                       ),
                     ),
@@ -137,7 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () => _openSearch(context, 'properties'),
+                    onPressed: () => _openExplore(context, 'properties'),
                     child: const Text('See all'),
                   ),
                 ],
@@ -151,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
               else if (properties.isEmpty)
                 _EmptyRecommendations(
-                  onExplore: () => _openSearch(context, 'properties'),
+                  onExplore: () => _openExplore(context, 'properties'),
                 )
               else
                 for (final property in properties)
@@ -183,20 +195,28 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openSearch(BuildContext context, String market, {String? query}) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            DiscoverScreen(initialMarket: market, initialQuery: query?.trim()),
-      ),
+  void _openExplore(BuildContext context, String market, {String? query}) {
+    context.go(
+      Uri(
+        path: AppRoutes.exploreScreen,
+        queryParameters: {
+          'market': market,
+          if (query?.trim().isNotEmpty == true) 'q': query!.trim(),
+        },
+      ).toString(),
     );
   }
 }
 
 class _HomeSearch extends StatelessWidget {
-  const _HomeSearch({required this.controller, required this.onSubmitted});
+  const _HomeSearch({
+    required this.controller,
+    required this.onChanged,
+    required this.onSubmitted,
+  });
 
   final TextEditingController controller;
+  final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
 
   @override
@@ -212,6 +232,7 @@ class _HomeSearch extends StatelessWidget {
         ),
         child: TextField(
           controller: controller,
+          onChanged: onChanged,
           onSubmitted: onSubmitted,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
