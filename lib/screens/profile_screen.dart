@@ -178,21 +178,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 28),
 
             const _ProfileSectionHeading('ACTIVITY'),
-            _MenuCardTile(
-              icon: CupertinoIcons.house,
-              label: state.canManageListings ? 'Overview' : 'My Rentals',
-              onTap: () => context.push(AppRoutes.activityScreen),
-            ),
+            if (!state.canManageListings)
+              _MenuCardTile(
+                icon: CupertinoIcons.house,
+                label: 'My Rentals',
+                onTap: () => context.push(AppRoutes.activityScreen),
+              ),
             _MenuCardTile(
               icon: CupertinoIcons.heart,
               label: 'Saved',
               onTap: () => context.push(AppRoutes.callsScreen),
-            ),
-            _MenuCardTile(
-              icon: CupertinoIcons.chat_bubble,
-              label: 'Messages',
-              onTap: () => context.go(AppRoutes.chatScreen),
-              showBottomSpacing: false,
             ),
             if (hasBusinessActivity) ...[
               const SizedBox(height: 24),
