@@ -475,7 +475,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         child: TextField(
                           controller: _searchController,
                           onChanged: (value) => setState(() => _query = value),
-                          onSubmitted: _submitSearch,
+                          onSubmitted: _applySearch,
                           textInputAction: TextInputAction.search,
                           style: TextStyle(color: _textDark, fontSize: 14),
                           decoration: InputDecoration(
@@ -1083,6 +1083,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         builder: (_) => PropertyDetailScreen(property: property),
       ),
     );
+  }
+
+  void _applySearch(String submittedQuery) {
+    final query = submittedQuery
+        .trim()
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .join(' ');
+    _searchController.value = TextEditingValue(
+      text: query,
+      selection: TextSelection.collapsed(offset: query.length),
+    );
+    setState(() => _query = query);
   }
 
   Future<void> _submitSearch([String? submittedQuery]) async {
