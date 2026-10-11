@@ -10,6 +10,7 @@ import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/notification_button.dart';
 import '../widgets/property_card.dart';
+import 'discover_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -89,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _HomeSearch(
                 controller: _searchController,
                 onSubmitted: (query) =>
-                    _openExplore(context, 'properties', query: query),
+                    _openSearch(context, 'properties', query: query),
               ),
               const SizedBox(height: 22),
               Row(
@@ -116,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.only(right: 10),
                         child: _ActionTile(
                           action: action,
-                          onTap: () => _openExplore(context, action.market),
+                          onTap: () => _openSearch(context, action.market),
                         ),
                       ),
                     ),
@@ -136,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () => _openExplore(context, 'properties'),
+                    onPressed: () => _openSearch(context, 'properties'),
                     child: const Text('See all'),
                   ),
                 ],
@@ -150,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
               else if (properties.isEmpty)
                 _EmptyRecommendations(
-                  onExplore: () => _openExplore(context, 'properties'),
+                  onExplore: () => _openSearch(context, 'properties'),
                 )
               else
                 for (final property in properties)
@@ -182,15 +183,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openExplore(BuildContext context, String market, {String? query}) {
-    context.go(
-      Uri(
-        path: AppRoutes.exploreScreen,
-        queryParameters: {
-          'market': market,
-          if (query?.trim().isNotEmpty == true) 'q': query!.trim(),
-        },
-      ).toString(),
+  void _openSearch(BuildContext context, String market, {String? query}) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            DiscoverScreen(initialMarket: market, initialQuery: query?.trim()),
+      ),
     );
   }
 }

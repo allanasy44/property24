@@ -78,7 +78,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            12,
+            16,
+            MediaQuery.paddingOf(context).bottom + 128,
+          ),
           physics: const BouncingScrollPhysics(),
           children: [
             Text(
