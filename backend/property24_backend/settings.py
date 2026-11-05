@@ -35,6 +35,8 @@ CORS_ALLOWED_ORIGINS = env_list(
         "http://192.168.100.34:8093",
         "http://127.0.0.1:8093",
         "http://localhost:8093",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
         "http://localhost:19006",
         "http://127.0.0.1:19006",
     ] if DEBUG else [],
