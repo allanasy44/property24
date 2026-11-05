@@ -460,22 +460,27 @@ class _AuthScreenState extends State<AuthScreen> {
           ],
           const SizedBox(height: 14),
           if (widget.role != AccountRole.admin) ...[
-            SizedBox(
-              width: double.infinity,
-              height: 44,
-              child: OutlinedButton.icon(
-                onPressed: _submitting ? null : _googleAuth,
-                icon: const _GoogleMark(size: 20),
-                label: Text(
-                  _registering ? 'Create with Google' : 'Continue with Google',
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.textPrimary,
-                  side: BorderSide(color: AppTheme.border),
-                  backgroundColor: AppTheme.bgCard.withAlpha(210),
+            if (kIsWeb)
+              GoogleWebSignInButton(onCredential: _googleAuthWithToken)
+            else
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: OutlinedButton.icon(
+                  onPressed: _submitting ? null : _googleAuth,
+                  icon: const _GoogleMark(size: 20),
+                  label: Text(
+                    _registering
+                        ? 'Create with Google'
+                        : 'Continue with Google',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.textPrimary,
+                    side: BorderSide(color: AppTheme.border),
+                    backgroundColor: AppTheme.bgCard.withAlpha(210),
+                  ),
                 ),
               ),
-            ),
             const SizedBox(height: 10),
             Center(
               child: Text(

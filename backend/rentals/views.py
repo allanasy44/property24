@@ -759,6 +759,7 @@ def auth_google(request):
 
     user, error = create_google_account(claims, data)
     if error:
+        logger.warning("Google account creation rejected: %s", error)
         return json_error(error)
     return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user), "tokens": issue_token_pair(user)})
 
