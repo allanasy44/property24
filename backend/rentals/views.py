@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import logging
 import mimetypes
 import re
 import smtplib
@@ -126,6 +127,7 @@ from .services import record_property_view
 
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 PUBLIC_ACCOUNT_ROLES = {User.Roles.TENANT, User.Roles.LANDLORD}
 VERIFICATION_REQUIRED_ROLES = {User.Roles.TENANT, User.Roles.LANDLORD, User.Roles.AGENT}
@@ -752,6 +754,7 @@ def auth_google(request):
     try:
         claims = verify_google_id_token(token)
     except GoogleAuthError as exc:
+        logger.warning("Google sign-in token rejected: %s", exc)
         return json_error(str(exc), status=401)
 
     user, error = create_google_account(claims, data)

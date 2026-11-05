@@ -1,6 +1,7 @@
 Django==6.0.7
 argon2-cffi>=25.1.0,<26
 google-auth>=2.0,<3
+requests>=2.31,<3
 Pillow==12.3.0
 pytesseract>=0.3.13,<0.4
 psycopg[binary]==3.3.2
