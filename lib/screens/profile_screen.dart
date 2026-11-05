@@ -20,6 +20,150 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
+class _ProfileHero extends StatelessWidget {
+  const _ProfileHero({
+    required this.name,
+    required this.email,
+    required this.initials,
+    required this.profilePicture,
+    required this.onEdit,
+    required this.verified,
+  });
+
+  final String name;
+  final String email;
+  final String initials;
+  final String? profilePicture;
+  final VoidCallback? onEdit;
+  final bool verified;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = profilePicture?.isNotEmpty == true;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppTheme.accent, AppTheme.accent.withValues(alpha: 0.78)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accent.withValues(alpha: 0.22),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.18),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    width: 2,
+                  ),
+                  image: hasImage
+                      ? DecorationImage(
+                          image: NetworkImage(profilePicture!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: hasImage
+                    ? null
+                    : Center(
+                        child: Text(
+                          initials,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 25,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+              ),
+              if (verified)
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentTeal,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppTheme.accent, width: 2),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.checkmark,
+                      color: Colors.white,
+                      size: 12,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'My account',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.78),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.78),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Edit profile',
+            onPressed: onEdit,
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.16),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(CupertinoIcons.pencil, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileScreenState extends State<ProfileScreen> {
   Timer? _refreshTimer;
 
@@ -46,8 +190,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final state = context.watch<Property24State>();
     final user = state.user;
 
-    final name =
-        user?.name.trim().isNotEmpty == true ? user!.name : 'Property24 member';
+    final name = user?.name.trim().isNotEmpty == true
+        ? user!.name
+        : 'Property24 member';
     final initials = name
         .split(RegExp(r'\s+'))
         .where((p) => p.isNotEmpty)
@@ -67,7 +212,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       (application) => application.ownerId == userId,
     );
     final hasJobProfile = user?.bio.trim().isNotEmpty == true;
-    final hasBusinessActivity = state.canManageListings ||
+    final hasBusinessActivity =
+        state.canManageListings ||
         hasMyServices ||
         state.snapshot.serviceRequests.isNotEmpty ||
         hasMyJobs ||
@@ -86,101 +232,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           physics: const BouncingScrollPhysics(),
           children: [
-            Text(
-              'My Account',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: AppTheme.textPrimary,
-              ),
+            _ProfileHero(
+              name: name,
+              email: user?.email.isNotEmpty == true
+                  ? user!.email
+                  : 'Not signed in',
+              initials: initials.isEmpty ? 'P' : initials,
+              profilePicture: hasImage ? user!.profilePicture : null,
+              onEdit: user == null
+                  ? null
+                  : () => _openProfileEditor(context, user),
+              verified: user?.verified == true,
             ),
-            const SizedBox(height: 28),
-
-            // ─── Avatar + edit badge ───
-            Center(
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppTheme.bgCard,
-                      border: Border.all(color: AppTheme.border, width: 2),
-                      image: hasImage
-                          ? DecorationImage(
-                              image: NetworkImage(user!.profilePicture),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
-                    ),
-                    child: !hasImage
-                        ? Center(
-                            child: Text(
-                              initials.isEmpty ? 'P' : initials,
-                              style: TextStyle(
-                                fontSize: 40,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                          )
-                        : null,
-                  ),
-                  Positioned(
-                    bottom: 2,
-                    right: 2,
-                    child: GestureDetector(
-                      onTap: user == null
-                          ? null
-                          : () => _openProfileEditor(context, user),
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: AppTheme.accent,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppTheme.bg, width: 3),
-                        ),
-                        child: const Icon(
-                          CupertinoIcons.pencil,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-
-            // ─── Name ───
-            Center(
-              child: Text(
-                name,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-
-            // ─── Email ───
-            Center(
-              child: Text(
-                user?.email.isNotEmpty == true ? user!.email : 'Not signed in',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  color: AppTheme.textMuted,
-                ),
-              ),
-            ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 26),
 
             const _ProfileSectionHeading('ACTIVITY'),
             if (!state.canManageListings)
@@ -202,7 +266,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: CupertinoIcons.building_2_fill,
                   label: 'My Properties',
                   onTap: () => context.push(AppRoutes.listingsScreen),
-                  showBottomSpacing: !hasMyServices &&
+                  showBottomSpacing:
+                      !hasMyServices &&
                       state.snapshot.serviceRequests.isEmpty &&
                       !hasMyJobs,
                 ),
@@ -270,10 +335,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       state.canManageListings
                           ? 'Offer a service or explore jobs when you are ready.'
                           : 'Enable property listings now. You can still use the rest of the marketplace.',
-                      style: TextStyle(
-                        color: AppTheme.textMuted,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                     ),
                     const SizedBox(height: 8),
                     Wrap(
@@ -292,8 +354,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       );
                                     } catch (exception) {
                                       if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         SnackBar(
                                           content: Text(
                                             userFacingError(exception),
@@ -356,8 +419,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _MenuCardTile(
               icon: CupertinoIcons.person,
               label: 'Edit profile',
-              onTap:
-                  user == null ? null : () => _openProfileEditor(context, user),
+              onTap: user == null
+                  ? null
+                  : () => _openProfileEditor(context, user),
             ),
             _MenuCardTile(
               icon: CupertinoIcons.gear,
@@ -393,10 +457,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               icon: const Icon(CupertinoIcons.square_arrow_right, size: 18),
               label: const Text(
                 'Sign out',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
             ),
           ],
@@ -424,17 +485,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _openSettings(BuildContext context) {
-    _openSidePanel<void>(
-      context: context,
-      child: const _SettingsSheet(),
-    );
+    _openSidePanel<void>(context: context, child: const _SettingsSheet());
   }
 
   void _openHelp(BuildContext context) {
-    _openSidePanel<void>(
-      context: context,
-      child: const _HelpCenterSheet(),
-    );
+    _openSidePanel<void>(context: context, child: const _HelpCenterSheet());
   }
 
   void _openVerification(BuildContext context, AccountUser? user) {
@@ -542,92 +597,107 @@ class _MenuCardTile extends StatelessWidget {
       child: Material(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            child: Row(
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppTheme.accent.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(12),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.border),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A000000),
+                blurRadius: 14,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              child: Row(
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          icon,
+                          size: 22,
+                          color: enabled ? AppTheme.accent : AppTheme.textMuted,
+                        ),
                       ),
-                      child: Icon(
-                        icon,
-                        size: 22,
-                        color: enabled ? AppTheme.accent : AppTheme.textMuted,
-                      ),
-                    ),
-                    if (badge != null && badge! > 0)
-                      Positioned(
-                        top: -4,
-                        right: -4,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 18,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.accent,
-                            shape: BoxShape.circle,
-                            border:
-                                Border.all(color: AppTheme.bgCard, width: 2),
-                          ),
-                          child: Text(
-                            '$badge',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                      if (badge != null && badge! > 0)
+                        Positioned(
+                          top: -4,
+                          right: -4,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(
+                              minWidth: 18,
+                              minHeight: 18,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppTheme.bgCard,
+                                width: 2,
+                              ),
+                            ),
+                            child: Text(
+                              '$badge',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: enabled
-                              ? AppTheme.textPrimary
-                              : AppTheme.textMuted,
-                        ),
-                      ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          subtitle!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.textMuted,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
-                ),
-                Icon(
-                  CupertinoIcons.chevron_forward,
-                  size: 18,
-                  color: AppTheme.textMuted,
-                ),
-              ],
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: enabled
+                                ? AppTheme.textPrimary
+                                : AppTheme.textMuted,
+                          ),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textMuted,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    CupertinoIcons.chevron_forward,
+                    size: 18,
+                    color: AppTheme.textMuted,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -964,10 +1034,7 @@ class _TextInfoPanel extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               body,
-              style: TextStyle(
-                color: AppTheme.textMuted,
-                height: 1.45,
-              ),
+              style: TextStyle(color: AppTheme.textMuted, height: 1.45),
             ),
           ],
         ),
@@ -1071,11 +1138,7 @@ class _SettingsTile extends StatelessWidget {
         if (showDivider)
           Padding(
             padding: const EdgeInsets.only(left: 70, right: 14),
-            child: Divider(
-              height: 1,
-              thickness: 0.6,
-              color: AppTheme.border,
-            ),
+            child: Divider(height: 1, thickness: 0.6, color: AppTheme.border),
           ),
       ],
     );
@@ -1165,14 +1228,15 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                 selectedImageBytes: _selectedImageBytes,
                 removeImage: _removeImage,
                 onPick: _pickImage,
-                onRemove: widget.user.profilePicture.isEmpty &&
+                onRemove:
+                    widget.user.profilePicture.isEmpty &&
                         _selectedImageBytes == null
                     ? null
                     : () => setState(() {
-                          _selectedImage = null;
-                          _selectedImageBytes = null;
-                          _removeImage = true;
-                        }),
+                        _selectedImage = null;
+                        _selectedImageBytes = null;
+                        _removeImage = true;
+                      }),
               ),
               const SizedBox(height: 16),
               _ThemedField(controller: _name, label: 'Full name'),
@@ -1231,20 +1295,21 @@ class _ProfileEditorState extends State<_ProfileEditor> {
     setState(() => _saving = true);
     try {
       await context.read<Property24State>().updateProfile(
-            username: _username.text.trim(),
-            name: _name.text.trim(),
-            bio: _bio.text.trim(),
-            phone: _phone.text.trim(),
-            profilePictureBytes: _selectedImageBytes,
-            profilePictureName: _selectedImage?.name,
-            profilePictureMimeType: _selectedImage?.mimeType,
-            removeProfilePicture: _removeImage,
-          );
+        username: _username.text.trim(),
+        name: _name.text.trim(),
+        bio: _bio.text.trim(),
+        phone: _phone.text.trim(),
+        profilePictureBytes: _selectedImageBytes,
+        profilePictureName: _selectedImage?.name,
+        profilePictureMimeType: _selectedImage?.mimeType,
+        removeProfilePicture: _removeImage,
+      );
       if (mounted) Navigator.pop(context);
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1287,15 +1352,15 @@ class _ProfileImagePicker extends StatelessWidget {
               child: selectedImageBytes != null
                   ? Image.memory(selectedImageBytes!, fit: BoxFit.cover)
                   : hasCurrentImage
-                      ? Image.network(currentImageUrl, fit: BoxFit.cover)
-                      : ColoredBox(
-                          color: AppTheme.bgCard,
-                          child: Icon(
-                            CupertinoIcons.person_crop_circle,
-                            color: AppTheme.textMuted,
-                            size: 34,
-                          ),
-                        ),
+                  ? Image.network(currentImageUrl, fit: BoxFit.cover)
+                  : ColoredBox(
+                      color: AppTheme.bgCard,
+                      child: Icon(
+                        CupertinoIcons.person_crop_circle,
+                        color: AppTheme.textMuted,
+                        size: 34,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(width: 14),
@@ -1647,8 +1712,10 @@ class _VerificationSheetState extends State<_VerificationSheet> {
     final latestVerification = state.snapshot.verifications.isEmpty
         ? null
         : state.snapshot.verifications.first;
-    final latestStatus =
-        latestVerification?.status.toLowerCase().replaceAll('_', ' ');
+    final latestStatus = latestVerification?.status.toLowerCase().replaceAll(
+      '_',
+      ' ',
+    );
     final verificationUnderReview = {
       'pending',
       'processing',
@@ -1678,8 +1745,10 @@ class _VerificationSheetState extends State<_VerificationSheet> {
               if (user.phone.trim().isNotEmpty)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading:
-                      Icon(CupertinoIcons.phone, color: AppTheme.textMuted),
+                  leading: Icon(
+                    CupertinoIcons.phone,
+                    color: AppTheme.textMuted,
+                  ),
                   title: const Text('Phone number'),
                   subtitle: Text(
                     user.phone,
@@ -1704,10 +1773,10 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                 value: user.verified
                     ? 'National ID verified'
                     : verificationUnderReview
-                        ? 'Submitted for review'
-                        : latestStatus == 'rejected'
-                            ? 'ID details need correction'
-                            : 'National ID required',
+                    ? 'Submitted for review'
+                    : latestStatus == 'rejected'
+                    ? 'ID details need correction'
+                    : 'National ID required',
                 verified: user.verified,
               ),
               if (_submissionMessage != null) ...[
@@ -1869,8 +1938,8 @@ class _VerificationSheetState extends State<_VerificationSheet> {
           _submissionMessage = status == 'verified'
               ? 'Your identity has been verified.'
               : status == 'rejected'
-                  ? 'The ID number did not match the document. Check your details and try again.'
-                  : 'Your documents were submitted for manual review. We will notify you when it is complete.';
+              ? 'The ID number did not match the document. Check your details and try again.'
+              : 'Your documents were submitted for manual review. We will notify you when it is complete.';
           _frontDocument = null;
           _backDocument = null;
           _frontBytes = null;
@@ -1931,10 +2000,7 @@ class _DocumentPickerTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       fileName?.isNotEmpty == true ? fileName! : 'Choose image',
-                      style: TextStyle(
-                        color: AppTheme.textMuted,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                     ),
                   ],
                 ),
