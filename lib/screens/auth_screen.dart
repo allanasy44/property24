@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,7 @@ import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/inprop_brand.dart';
+import '../widgets/google_web_sign_in_button.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({
@@ -57,9 +59,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
   List<String> get _propertyListingCapability =>
       widget.initialIntent == 'list-property' &&
-              widget.role != AccountRole.admin
-          ? const ['list_properties']
-          : const [];
+          widget.role != AccountRole.admin
+      ? const ['list_properties']
+      : const [];
 
   @override
   Widget build(BuildContext context) {
@@ -79,8 +81,9 @@ class _AuthScreenState extends State<AuthScreen> {
                     bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
                   ),
                   child: ConstrainedBox(
-                    constraints:
-                        BoxConstraints(minHeight: constraints.maxHeight - 48),
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight - 48,
+                    ),
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 460),
@@ -106,10 +109,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const InPropBrand(
-                                showWordmark: false,
-                                size: 80,
-                              ),
+                              const InPropBrand(showWordmark: false, size: 80),
                               const SizedBox(height: 26),
                               if (_showForm)
                                 _formContent()
@@ -272,6 +272,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _socialButtons() {
+    if (kIsWeb) {
+      return GoogleWebSignInButton(onCredential: _googleAuthWithToken);
+    }
     return SizedBox(
       width: double.infinity,
       height: 48,
@@ -290,18 +293,32 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  Future<void> _googleAuthWithToken(String idToken) async {
+    await _completeGoogleAuth(
+      () => context.read<Property24State>().signInWithGoogleToken(
+        idToken,
+        _registering && widget.role != AccountRole.admin ? widget.role : null,
+        marketplaceCapabilities: _propertyListingCapability,
+      ),
+    );
+  }
+
   Future<void> _googleAuth() async {
+    await _completeGoogleAuth(
+      () => context.read<Property24State>().signInWithGoogle(
+        _registering && widget.role != AccountRole.admin ? widget.role : null,
+        marketplaceCapabilities: _propertyListingCapability,
+      ),
+    );
+  }
+
+  Future<void> _completeGoogleAuth(Future<void> Function() authenticate) async {
     setState(() {
       _submitting = true;
       _error = null;
     });
     try {
-      await context.read<Property24State>().signInWithGoogle(
-            _registering && widget.role != AccountRole.admin
-                ? widget.role
-                : null,
-            marketplaceCapabilities: _propertyListingCapability,
-          );
+      await authenticate();
       if (mounted) context.go(AppRoutes.homeScreen);
     } catch (exception) {
       if (mounted) {
@@ -366,18 +383,12 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 10),
           ],
-          _field(
-            _email,
-            'Email address',
-            CupertinoIcons.at,
-            (value) {
-              final email = value?.trim() ?? '';
-              return email.contains('@') && email.contains('.')
-                  ? null
-                  : 'Enter a valid email address';
-            },
-            focusNode: _emailFocusNode,
-          ),
+          _field(_email, 'Email address', CupertinoIcons.at, (value) {
+            final email = value?.trim() ?? '';
+            return email.contains('@') && email.contains('.')
+                ? null
+                : 'Enter a valid email address';
+          }, focusNode: _emailFocusNode),
           const SizedBox(height: 10),
           TextFormField(
             controller: _password,
@@ -489,8 +500,8 @@ class _AuthScreenState extends State<AuthScreen> {
                       _registrationChallengeId != null
                           ? 'Verify email'
                           : _registering
-                              ? 'Signup'
-                              : 'Login',
+                          ? 'Signup'
+                          : 'Login',
                     ),
             ),
           ),
@@ -532,8 +543,10 @@ class _AuthScreenState extends State<AuthScreen> {
       keyboardType: hint == 'Email address'
           ? TextInputType.emailAddress
           : TextInputType.text,
-      decoration:
-          InputDecoration(hintText: hint, prefixIcon: Icon(icon, size: 18)),
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: Icon(icon, size: 18),
+      ),
     );
   }
 

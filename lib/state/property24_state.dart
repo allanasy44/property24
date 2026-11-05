@@ -580,6 +580,20 @@ class Property24State extends ChangeNotifier {
     });
   }
 
+  Future<void> signInWithGoogleToken(
+    String idToken,
+    AccountRole? role, {
+    List<String> marketplaceCapabilities = const [],
+  }) async {
+    await _authenticate(
+      () => _api.loginWithGoogle(
+        idToken: idToken,
+        role: role,
+        marketplaceCapabilities: marketplaceCapabilities,
+      ),
+    );
+  }
+
   Future<String> register({
     required AccountRole role,
     required String name,

@@ -25,8 +25,7 @@ String userFacingError(Object error) {
       401 => 'Your session has expired. Please sign in again.',
       500 ||
       502 ||
-      503 =>
-        'The service is temporarily unavailable. Please try again later.',
+      503 => 'The service is temporarily unavailable. Please try again later.',
       _ => 'Something went wrong. Please try again.',
     };
   }
@@ -175,10 +174,8 @@ class Property24Api {
   final http.Client _client;
 
   Future<String> googleSignIn() async {
-    final clientId = kIsWeb ? await _googleWebClientId() : null;
-    final account = await GoogleSignIn(
-      clientId: clientId,
-    ).signIn();
+    final clientId = kIsWeb ? await googleWebClientId() : null;
+    final account = await GoogleSignIn(clientId: clientId).signIn();
     if (account == null) {
       throw const ApiException('Google sign-in was cancelled');
     }
@@ -190,7 +187,7 @@ class Property24Api {
     return idToken;
   }
 
-  Future<String> _googleWebClientId() async {
+  Future<String> googleWebClientId() async {
     final config = await _get('auth/google/config/');
     final clientId = config['client_id'];
     if (clientId is! String || clientId.isEmpty) {
@@ -218,10 +215,7 @@ class Property24Api {
   }
 
   Future<AuthSession> refresh(String refreshToken) async {
-    final body = await _post(
-      'auth/refresh/',
-      body: {'refresh': refreshToken},
-    );
+    final body = await _post('auth/refresh/', body: {'refresh': refreshToken});
     return _authSessionFromBody(body);
   }
 
@@ -501,8 +495,9 @@ class Property24Api {
     if (isAdmin) {
       final response = await _get('verifications/', token: token);
       return PlatformSnapshot.empty().copyWith(
-        verifications:
-            _results(response).map(VerificationItem.fromJson).toList(),
+        verifications: _results(
+          response,
+        ).map(VerificationItem.fromJson).toList(),
       );
     }
 
@@ -511,10 +506,12 @@ class Property24Api {
       _get('services/', token: token),
       _get('jobs/', token: token),
     ]);
-    final properties =
-        _results(publicResponses[0]).map(PropertyListing.fromJson).toList();
-    final services =
-        _results(publicResponses[1]).map(ServiceListing.fromJson).toList();
+    final properties = _results(
+      publicResponses[0],
+    ).map(PropertyListing.fromJson).toList();
+    final services = _results(
+      publicResponses[1],
+    ).map(ServiceListing.fromJson).toList();
     final jobs = _results(publicResponses[2]).map(JobPosting.fromJson).toList();
 
     if (token == null || token.isEmpty) {
@@ -541,33 +538,42 @@ class Property24Api {
 
     return PlatformSnapshot(
       properties: properties,
-      applications:
-          _results(responses[0]).map(ApplicationItem.fromJson).toList(),
-      verifications:
-          _results(responses[1]).map(VerificationItem.fromJson).toList(),
-      conversations:
-          _results(responses[2]).map(ConversationItem.fromJson).toList(),
+      applications: _results(
+        responses[0],
+      ).map(ApplicationItem.fromJson).toList(),
+      verifications: _results(
+        responses[1],
+      ).map(VerificationItem.fromJson).toList(),
+      conversations: _results(
+        responses[2],
+      ).map(ConversationItem.fromJson).toList(),
       calls: _results(responses[3]).map(CallLogItem.fromJson).toList(),
       viewings: _results(responses[4]).map(ViewingItem.fromJson).toList(),
-      savedProperties:
-          _results(responses[5]).map(PropertyListing.fromJson).toList(),
-      notifications:
-          _results(responses[6]).map(NotificationItem.fromJson).toList(),
-      comparisonProperties:
-          _results(responses[7]).map(PropertyListing.fromJson).toList(),
+      savedProperties: _results(
+        responses[5],
+      ).map(PropertyListing.fromJson).toList(),
+      notifications: _results(
+        responses[6],
+      ).map(NotificationItem.fromJson).toList(),
+      comparisonProperties: _results(
+        responses[7],
+      ).map(PropertyListing.fromJson).toList(),
       comparisonSuggestions:
           (responses[7]['suggestions'] as List<dynamic>? ?? const [])
               .whereType<Map<String, dynamic>>()
               .map(ComparisonSuggestion.fromJson)
               .toList(),
-      savedSearches:
-          _results(responses[8]).map(SavedSearchItem.fromJson).toList(),
+      savedSearches: _results(
+        responses[8],
+      ).map(SavedSearchItem.fromJson).toList(),
       services: services,
-      serviceRequests:
-          _results(responses[9]).map(ServiceRequestItem.fromJson).toList(),
+      serviceRequests: _results(
+        responses[9],
+      ).map(ServiceRequestItem.fromJson).toList(),
       jobs: jobs,
-      jobApplications:
-          _results(responses[10]).map(JobApplicationItem.fromJson).toList(),
+      jobApplications: _results(
+        responses[10],
+      ).map(JobApplicationItem.fromJson).toList(),
     );
   }
 
@@ -580,26 +586,23 @@ class Property24Api {
   Future<void> deactivateAdminUser({
     required String token,
     required String userId,
-  }) =>
-      _delete('users/$userId/', token: token);
+  }) => _delete('users/$userId/', token: token);
 
   Future<List<VerificationItem>> adminFailedLandlordVerifications(
     String token,
-  ) async =>
-      _results(await _get('verifications/', token: token))
-          .map(VerificationItem.fromJson)
-          .toList();
+  ) async => _results(
+    await _get('verifications/', token: token),
+  ).map(VerificationItem.fromJson).toList();
 
   Future<Map<String, dynamic>> reviewAdminVerification({
     required String token,
     required String verificationId,
     required String status,
-  }) =>
-      _post(
-        'verifications/$verificationId/review/',
-        token: token,
-        body: {'status': status},
-      );
+  }) => _post(
+    'verifications/$verificationId/review/',
+    token: token,
+    body: {'status': status},
+  );
 
   Future<Uint8List> adminVerificationDocument({
     required String token,
@@ -621,8 +624,9 @@ class Property24Api {
   Future<PlatformSnapshot> comparisonsSnapshot(String token) async {
     final body = await _get('tenant/comparisons/', token: token);
     return PlatformSnapshot.empty().copyWith(
-      comparisonProperties:
-          _results(body).map(PropertyListing.fromJson).toList(),
+      comparisonProperties: _results(
+        body,
+      ).map(PropertyListing.fromJson).toList(),
       comparisonSuggestions: (body['suggestions'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(ComparisonSuggestion.fromJson)
@@ -728,11 +732,7 @@ class Property24Api {
   }
 
   Future<void> markAllNotificationsRead({required String token}) async {
-    await _post(
-      'notifications/read-all/',
-      token: token,
-      body: const {},
-    );
+    await _post('notifications/read-all/', token: token, body: const {});
   }
 
   Future<void> deleteNotification({
@@ -756,12 +756,7 @@ class Property24Api {
     final response = await _get(
       'properties/',
       token: token,
-      query: {
-        'search': query,
-        'city': city,
-        'suburb': suburb,
-        'type': type,
-      },
+      query: {'search': query, 'city': city, 'suburb': suburb, 'type': type},
     );
     return _results(response).map(PropertyListing.fromJson).toList();
   }
@@ -891,11 +886,7 @@ class Property24Api {
     String jobId,
     Map<String, dynamic> payload,
   ) async {
-    final body = await _patch(
-      'jobs/$jobId/',
-      token: token,
-      body: payload,
-    );
+    final body = await _patch('jobs/$jobId/', token: token, body: payload);
     return JobPosting.fromJson(body);
   }
 
@@ -943,10 +934,7 @@ class Property24Api {
   }
 
   Future<int> recordPropertyView(String propertyId) async {
-    final result = await _post(
-      'properties/$propertyId/view/',
-      body: const {},
-    );
+    final result = await _post('properties/$propertyId/view/', body: const {});
     return int.tryParse('${result['views_count'] ?? 0}') ?? 0;
   }
 
@@ -990,10 +978,7 @@ class Property24Api {
     final response = await _post(
       'properties/$propertyId/comments/',
       token: token,
-      body: {
-        'body': body,
-        if (parentId != null) 'parent_id': parentId,
-      },
+      body: {'body': body, if (parentId != null) 'parent_id': parentId},
     );
     return PropertyCommentItem.fromJson(response);
   }
@@ -1017,10 +1002,7 @@ class Property24Api {
     String propertyId,
     String commentId,
   ) async {
-    await _delete(
-      'properties/$propertyId/comments/$commentId/',
-      token: token,
-    );
+    await _delete('properties/$propertyId/comments/$commentId/', token: token);
   }
 
   Future<Map<String, dynamic>> toggleSupplierFollow(
@@ -1146,20 +1128,21 @@ class Property24Api {
     required String filename,
     String? mimeType,
   }) async {
-    final request = http.MultipartRequest(
-      'POST',
-      AppConfig.apiUri('properties/$propertyId/photos/'),
-    )
-      ..headers.addAll(_multipartHeaders(token))
-      ..fields['caption'] = filename
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'image',
-          bytes,
-          filename: filename,
-          contentType: _mediaTypeFor(mimeType, filename),
-        ),
-      );
+    final request =
+        http.MultipartRequest(
+            'POST',
+            AppConfig.apiUri('properties/$propertyId/photos/'),
+          )
+          ..headers.addAll(_multipartHeaders(token))
+          ..fields['caption'] = filename
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'image',
+              bytes,
+              filename: filename,
+              contentType: _mediaTypeFor(mimeType, filename),
+            ),
+          );
     final response = await http.Response.fromStream(await request.send());
     _decode(response);
     return PropertyListing.fromJson(
@@ -1174,20 +1157,21 @@ class Property24Api {
     required String filename,
     String? mimeType,
   }) async {
-    final request = http.MultipartRequest(
-      'POST',
-      AppConfig.apiUri('properties/$propertyId/videos/'),
-    )
-      ..headers.addAll(_multipartHeaders(token))
-      ..fields['caption'] = filename
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'video',
-          bytes,
-          filename: filename,
-          contentType: _mediaTypeFor(mimeType, filename),
-        ),
-      );
+    final request =
+        http.MultipartRequest(
+            'POST',
+            AppConfig.apiUri('properties/$propertyId/videos/'),
+          )
+          ..headers.addAll(_multipartHeaders(token))
+          ..fields['caption'] = filename
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'video',
+              bytes,
+              filename: filename,
+              contentType: _mediaTypeFor(mimeType, filename),
+            ),
+          );
     final response = await http.Response.fromStream(await request.send());
     _decode(response);
     return PropertyListing.fromJson(
@@ -1204,24 +1188,25 @@ class Property24Api {
     String? mimeType,
     String body = '',
   }) async {
-    final request = http.MultipartRequest(
-      'POST',
-      AppConfig.apiUri('conversations/$conversationId/messages/'),
-    )
-      ..headers.addAll(_multipartHeaders(token))
-      ..fields['body'] = body
-      ..fields['attachment_type'] = attachmentType
-      ..fields['attachment_name'] = filename
-      ..fields['client_message_id'] =
-          'flutter-media-${DateTime.now().microsecondsSinceEpoch}'
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'attachment',
-          bytes,
-          filename: filename,
-          contentType: _mediaTypeFor(mimeType, filename),
-        ),
-      );
+    final request =
+        http.MultipartRequest(
+            'POST',
+            AppConfig.apiUri('conversations/$conversationId/messages/'),
+          )
+          ..headers.addAll(_multipartHeaders(token))
+          ..fields['body'] = body
+          ..fields['attachment_type'] = attachmentType
+          ..fields['attachment_name'] = filename
+          ..fields['client_message_id'] =
+              'flutter-media-${DateTime.now().microsecondsSinceEpoch}'
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'attachment',
+              bytes,
+              filename: filename,
+              contentType: _mediaTypeFor(mimeType, filename),
+            ),
+          );
     final response = await http.Response.fromStream(await request.send());
     return _decode(response);
   }
@@ -1288,11 +1273,7 @@ class Property24Api {
     await _post(
       'conversations/$conversationId/report/',
       token: token,
-      body: {
-        'message_id': messageId,
-        'reason': reason,
-        'details': details,
-      },
+      body: {'message_id': messageId, 'reason': reason, 'details': details},
     );
   }
 
@@ -1346,8 +1327,10 @@ class Property24Api {
   }
 
   Future<void> _delete(String path, {required String token}) async {
-    final response =
-        await _client.delete(AppConfig.apiUri(path), headers: _headers(token));
+    final response = await _client.delete(
+      AppConfig.apiUri(path),
+      headers: _headers(token),
+    );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _decode(response);
     }
