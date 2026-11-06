@@ -8,6 +8,7 @@ import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/market_navigation.dart';
 
 class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({
@@ -185,9 +186,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       ],
                     ),
                     const SizedBox(height: 14),
-                    _MarketTabs(
+                    MarketNavigation(
                       selected: widget.market,
-                      onSelected: widget.onSelectMarket,
+                      onSelected: widget.onSelectMarket ?? (_) {},
                     ),
                     const SizedBox(height: 16),
                     _SearchField(
@@ -515,54 +516,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
-  }
-}
-
-class _MarketTabs extends StatelessWidget {
-  const _MarketTabs({required this.selected, required this.onSelected});
-
-  final String selected;
-  final ValueChanged<String>? onSelected;
-
-  static const _markets = [
-    ('Properties', 'properties'),
-    ('Stays', 'stays'),
-    ('Venues', 'venues'),
-    ('Services', 'services'),
-    ('Jobs', 'jobs'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: _markets.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final (label, market) = _markets[index];
-          final isSelected = market == selected;
-          return ChoiceChip(
-            label: Text(label),
-            selected: isSelected,
-            showCheckmark: false,
-            onSelected: onSelected == null ? null : (_) => onSelected!(market),
-            selectedColor: AppTheme.accent,
-            backgroundColor: AppTheme.bgSurface,
-            side: BorderSide(color: AppTheme.border),
-            labelStyle: TextStyle(
-              color: isSelected ? Colors.white : AppTheme.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-          );
-        },
-      ),
-    );
   }
 }
 
@@ -908,12 +861,23 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
                           _title,
                           widget.isServices ? 'Service title' : 'Job title',
                         ),
-                        Row(
-                          children: [
-                            Expanded(child: _input(_category, 'Category')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _input(_location, 'Location')),
-                          ],
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final fields = [
+                              Expanded(child: _input(_category, 'Category')),
+                              Expanded(child: _input(_location, 'Location')),
+                            ];
+                            if (constraints.maxWidth < 430) {
+                              return Column(children: [fields[0], fields[1]]);
+                            }
+                            return Row(
+                              children: [
+                                fields[0],
+                                const SizedBox(width: 12),
+                                fields[1],
+                              ],
+                            );
+                          },
                         ),
                         _input(
                           _description,

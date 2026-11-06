@@ -13,6 +13,7 @@ import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
+import '../widgets/market_navigation.dart';
 import '../widgets/property_card.dart';
 import 'ai_search_screen.dart';
 import 'property_comparison_screen.dart';
@@ -97,14 +98,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     'stays' || 'venues' || 'services' || 'jobs' => value!,
     _ => 'properties',
   };
-
-  static const _markets = [
-    ('Properties', 'properties'),
-    ('Stays', 'stays'),
-    ('Venues', 'venues'),
-    ('Services', 'services'),
-    ('Jobs', 'jobs'),
-  ];
 
   @override
   void didChangeDependencies() {
@@ -552,44 +545,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       ),
 
                       const SizedBox(height: 18),
-                      SizedBox(
-                        height: 42,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _markets.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            final (label, value) = _markets[index];
-                            final selected = _market == value;
-                            return ChoiceChip(
-                              label: Text(label),
-                              selected: selected,
-                              onSelected: (_) {
-                                setState(() {
-                                  _market = value;
-                                  _type = 'Popular';
-                                  _marketView = 'browse';
-                                  _createOnOpen = false;
-                                  _createRequestId = null;
-                                });
-                              },
-                              labelStyle: TextStyle(
-                                color: selected
-                                    ? Colors.white
-                                    : AppTheme.textPrimary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                              selectedColor: AppTheme.accent,
-                              backgroundColor: AppTheme.bgSurface,
-                              side: BorderSide(color: AppTheme.border),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              showCheckmark: false,
-                            );
-                          },
-                        ),
+                      MarketNavigation(
+                        selected: _market,
+                        onSelected: (value) {
+                          setState(() {
+                            _market = value;
+                            _type = 'Popular';
+                            _marketView = 'browse';
+                            _createOnOpen = false;
+                            _createRequestId = null;
+                          });
+                        },
                       ),
 
                       const SizedBox(height: 22),
