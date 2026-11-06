@@ -1208,7 +1208,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
     final phoneLocked = widget.user.phone.trim().isNotEmpty;
     return SafeArea(
       child: ColoredBox(
-        color: const Color(0xFFF7F7F7),
+        color: AppTheme.bg,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             16,
@@ -1271,7 +1271,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                         label: 'Username',
                         controller: _username,
                         emptyValue: 'Reserve username',
-                        actionColor: const Color(0xFF198754),
+                        actionColor: AppTheme.accentTeal,
                       ),
                       _ProfileEditRow(
                         label: 'Phone number',
@@ -1287,7 +1287,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                   width: double.infinity,
                   child: FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF198754),
+                      backgroundColor: AppTheme.accent,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -1377,10 +1377,10 @@ class _ProfileImagePicker extends StatelessWidget {
                 : hasCurrentImage
                 ? Image.network(currentImageUrl, fit: BoxFit.cover)
                 : ColoredBox(
-                    color: const Color(0xFFF5A2C0),
+                    color: AppTheme.accent.withValues(alpha: 0.18),
                     child: Icon(
                       CupertinoIcons.person_crop_circle,
-                      color: const Color(0xFFA12659),
+                      color: AppTheme.accent,
                       size: 50,
                     ),
                   ),
@@ -1390,7 +1390,7 @@ class _ProfileImagePicker extends StatelessWidget {
         TextButton(
           onPressed: onPick,
           style: TextButton.styleFrom(
-            foregroundColor: const Color(0xFF198754),
+            foregroundColor: AppTheme.accentTeal,
             textStyle: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
@@ -1427,17 +1427,15 @@ class _ProfileEditRow extends StatelessWidget {
     final value = controller.text.trim();
     return Container(
       constraints: const BoxConstraints(minHeight: 43),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFF7F7F7), width: 0.5),
-        ),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppTheme.border, width: 0.5)),
       ),
       child: Row(
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: Color(0xFF171717),
+            style: TextStyle(
+              color: AppTheme.textPrimary,
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -1450,14 +1448,14 @@ class _ProfileEditRow extends StatelessWidget {
               keyboardType: keyboardType,
               textAlign: TextAlign.right,
               style: TextStyle(
-                color: actionColor ?? const Color(0xFF777777),
+                color: actionColor ?? AppTheme.textSecondary,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
               decoration: InputDecoration(
                 hintText: value.isEmpty ? (emptyValue ?? hint) : null,
                 hintStyle: TextStyle(
-                  color: actionColor ?? const Color(0xFF777777),
+                  color: actionColor ?? AppTheme.textSecondary,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1472,9 +1470,9 @@ class _ProfileEditRow extends StatelessWidget {
               ),
             ),
           ),
-          const Icon(
+          Icon(
             CupertinoIcons.chevron_right,
-            color: Color(0xFFB7B7B7),
+            color: AppTheme.textMuted,
             size: 18,
           ),
         ],
