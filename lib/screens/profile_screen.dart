@@ -1224,14 +1224,18 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                     IconButton(
                       tooltip: 'Back',
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(CupertinoIcons.chevron_left, size: 28),
+                      icon: Icon(
+                        CupertinoIcons.chevron_left,
+                        color: AppTheme.textPrimary,
+                        size: 28,
+                      ),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Center(
                         child: Text(
                           'Profile',
                           style: TextStyle(
-                            color: Colors.black,
+                            color: AppTheme.textPrimary,
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
                           ),
@@ -1251,7 +1255,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                 const SizedBox(height: 30),
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.bgCard,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -1295,7 +1299,9 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                     ),
                     onPressed: _saving ? null : _save,
                     child: _saving
-                        ? const CupertinoActivityIndicator(color: Colors.white)
+                        ? CupertinoActivityIndicator(
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          )
                         : const Text('Save changes'),
                   ),
                 ),
