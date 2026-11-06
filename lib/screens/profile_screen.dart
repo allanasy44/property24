@@ -417,6 +417,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 24),
             const _ProfileSectionHeading('ACCOUNT'),
             _MenuCardTile(
+              icon: CupertinoIcons.checkmark_shield,
+              label: 'Verification',
+              subtitle: _verificationSummary(user),
+              onTap: () => _openVerification(context, user),
+            ),
+            _MenuCardTile(
               icon: CupertinoIcons.gear,
               label: 'Settings',
               onTap: () => _openSettings(context),
@@ -425,13 +431,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               icon: CupertinoIcons.person_2,
               label: 'Help center',
               onTap: () => _openHelp(context),
-            ),
-            _MenuCardTile(
-              icon: CupertinoIcons.checkmark_shield,
-              label: 'Verification',
-              subtitle: _verificationSummary(user),
-              onTap: () => _openVerification(context, user),
-              showBottomSpacing: false,
             ),
 
             const SizedBox(height: 24),
@@ -461,8 +460,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String _verificationSummary(AccountUser? user) {
     if (user == null) return 'Sign in to verify your account';
-    if (user.verified) return 'Identity verification complete';
-    return 'Identity verification pending';
+    final phoneStatus = user.phoneVerified
+        ? 'Phone verified'
+        : 'Phone verification required';
+    final identityStatus = user.verified
+        ? 'Identity verified'
+        : 'Identity verification required';
+    return '$phoneStatus • $identityStatus';
   }
 
   Future<void> _signOut(BuildContext context) async {

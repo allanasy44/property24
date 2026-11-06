@@ -189,9 +189,9 @@ ROLE_VISIBLE_SECTIONS = {
 }
 
 ROLE_ONBOARDING_REQUIREMENTS = {
-    User.Roles.TENANT: ["identity_verification"],
-    User.Roles.LANDLORD: ["identity_verification"],
-    User.Roles.AGENT: ["identity_verification"],
+    User.Roles.TENANT: ["phone_verification", "identity_verification"],
+    User.Roles.LANDLORD: ["phone_verification", "identity_verification"],
+    User.Roles.AGENT: ["phone_verification", "identity_verification"],
     User.Roles.ADMIN: [],
 }
 MARKETPLACE_CAPABILITIES = {"list_properties"}
@@ -4839,7 +4839,7 @@ def serialize_ai_analysis(analysis):
 def account_onboarding_complete(user):
     if not user or user.role not in VERIFICATION_REQUIRED_ROLES:
         return True
-    return bool(user.is_verified)
+    return bool(user.is_verified and user.phone_verified)
 
 
 def full_verification_required(user):

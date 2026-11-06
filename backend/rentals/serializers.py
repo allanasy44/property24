@@ -4,6 +4,8 @@ def serialize_user(user):
         "name": str(user),
         "email": user.email,
         "phone": user.phone,
+        "email_verified": user.email_verified,
+        "phone_verified": user.phone_verified,
         "role": user.role,
         "verified": user.is_verified,
         "profile_picture": account_media_url(user, "profile_picture"),
