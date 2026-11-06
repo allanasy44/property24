@@ -8,8 +8,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
-import '../localization/app_language.dart';
-import '../localization/app_strings.dart';
 import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
@@ -715,7 +713,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    final strings = AppStrings.of(context);
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -729,19 +726,19 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _PanelHeader(
-                title: strings.settings,
+                title: 'Settings',
                 onClose: () => Navigator.of(context).pop(),
               ),
               const SizedBox(height: 20),
               _SyncSummary(state: state),
               const SizedBox(height: 20),
-              _SectionLabel(strings.account),
+              const _SectionLabel('Account'),
               const SizedBox(height: 10),
               _MenuCard(
                 children: [
                   _SettingsTile(
                     icon: CupertinoIcons.person,
-                    label: strings.accountInformation,
+                    label: 'Account Information',
                     onTap: () => _openNestedPanel(
                       context,
                       _InfoPanel(
@@ -767,7 +764,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ),
                   _SettingsTile(
                     icon: CupertinoIcons.shield_lefthalf_fill,
-                    label: strings.privacyPolicy,
+                    label: 'Privacy Policy',
                     onTap: () => _openNestedPanel(
                       context,
                       const _TextInfoPanel(
@@ -779,7 +776,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ),
                   _SettingsTile(
                     icon: CupertinoIcons.doc_text,
-                    label: strings.myBookings,
+                    label: 'My Bookings',
                     trailing: _CountBadge(
                       count: state.snapshot.viewings
                           .where((item) => item.isAvailableBooking)
@@ -798,23 +795,28 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 ],
               ),
               const SizedBox(height: 26),
-              _SectionLabel(strings.app),
+              const _SectionLabel('App'),
               const SizedBox(height: 10),
               _MenuCard(
                 children: [
                   _SettingsTile(
                     icon: CupertinoIcons.globe,
-                    label: strings.language,
+                    label: 'Language',
                     trailing: Text(
-                      state.language.nativeLabel,
+                      'English',
                       style: TextStyle(color: AppTheme.textMuted),
                     ),
-                    onTap: () =>
-                        _openNestedPanel(context, const _LanguagePanel()),
+                    onTap: () => _openNestedPanel(
+                      context,
+                      const _TextInfoPanel(
+                        title: 'Language',
+                        body: 'English is the current app language.',
+                      ),
+                    ),
                   ),
                   _SettingsTile(
                     icon: CupertinoIcons.moon,
-                    label: strings.darkMode,
+                    label: 'Dark Mode',
                     trailing: _ThemedSwitch(
                       value: state.darkMode,
                       onChanged: state.toggleThemeMode,
@@ -834,70 +836,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
 
   void _openNestedPanel(BuildContext context, Widget child) {
     _openSidePanel<void>(context: context, child: child);
-  }
-}
-
-class _LanguagePanel extends StatelessWidget {
-  const _LanguagePanel();
-
-  @override
-  Widget build(BuildContext context) {
-    final state = context.watch<Property24State>();
-    final strings = AppStrings.of(context);
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _PanelHeader(
-              title: strings.language,
-              onClose: () => Navigator.of(context).pop(),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              strings.chooseLanguage,
-              style: TextStyle(color: AppTheme.textMuted),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.separated(
-                itemCount: AppLanguage.values.length,
-                separatorBuilder: (_, _) => Divider(color: AppTheme.border),
-                itemBuilder: (context, index) {
-                  final language = AppLanguage.values[index];
-                  final selected = state.language == language;
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      language.nativeLabel,
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    subtitle: Text(
-                      language.label,
-                      style: TextStyle(color: AppTheme.textMuted),
-                    ),
-                    trailing: selected
-                        ? Icon(
-                            CupertinoIcons.checkmark_alt,
-                            color: AppTheme.accent,
-                          )
-                        : null,
-                    onTap: () {
-                      state.setLanguage(language);
-                      Navigator.of(context).pop();
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
