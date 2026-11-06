@@ -1773,148 +1773,232 @@ class _VerificationSheetState extends State<_VerificationSheet> {
       'reviewing',
     }.contains(latestStatus);
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          12,
-          20,
-          MediaQuery.viewInsetsOf(context).bottom + 24,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _PanelHeader(
-                title: 'Verification',
-                onClose: () => Navigator.of(context).pop(),
-              ),
-              const SizedBox(height: 14),
-              if (user.phone.trim().isNotEmpty)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    CupertinoIcons.phone,
-                    color: AppTheme.textMuted,
-                  ),
-                  title: const Text('Phone number'),
-                  subtitle: Text(
-                    user.phone,
-                    style: TextStyle(color: AppTheme.textMuted),
-                  ),
-                  trailing: Icon(
-                    CupertinoIcons.lock_fill,
-                    size: 16,
-                    color: AppTheme.textMuted,
-                  ),
-                )
-              else
-                _ThemedField(
-                  controller: _phone,
-                  label: 'Zimbabwe phone number',
-                  hint: '077 123 4567 or +263 77 123 4567',
-                  keyboardType: TextInputType.phone,
-                ),
-              const SizedBox(height: 18),
-              _VerificationRow(
-                label: 'Identity',
-                value: user.verified
-                    ? 'National ID verified'
-                    : verificationUnderReview
-                    ? 'Submitted for review'
-                    : latestStatus == 'rejected'
-                    ? 'ID details need correction'
-                    : 'National ID required',
-                verified: user.verified,
-              ),
-              if (_submissionMessage != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _submissionMessage!,
-                  style: TextStyle(
-                    color: AppTheme.textMuted,
-                    fontSize: 13,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-              if (verificationUnderReview && !user.verified) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Your documents are being checked. We will notify you when the review is complete.',
-                  style: TextStyle(
-                    color: AppTheme.textMuted,
-                    fontSize: 13,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-              if (latestStatus == 'rejected' && !user.verified) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'The number read from the ID did not match. Check your entry and upload clear images of both sides.',
-                  style: TextStyle(
-                    color: AppTheme.textMuted,
-                    fontSize: 13,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-              if (!user.verified) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Used as contact information.',
-                  style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
-                ),
-              ],
-              if (!user.verified && !verificationUnderReview) ...[
-                const SizedBox(height: 12),
-                _ThemedField(
-                  controller: _nationalId,
-                  label: 'National ID number',
-                  hint: '63-123456-A-12',
-                ),
-                const SizedBox(height: 12),
-                _DocumentPickerTile(
-                  label: 'ID front image',
-                  fileName: _frontDocument?.name,
-                  selected: _frontBytes != null,
-                  onPick: () => _pickDocument(front: true),
-                ),
-                const SizedBox(height: 10),
-                _DocumentPickerTile(
-                  label: 'ID back image',
-                  fileName: _backDocument?.name,
-                  selected: _backBytes != null,
-                  onPick: () => _pickDocument(front: false),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Upload clear JPEG, PNG, or WEBP images of both sides. Automated checks compare the printed ID number with your entry; unreadable images need manual review. This does not check a government ID registry.',
-                  style: TextStyle(
-                    color: AppTheme.textMuted,
-                    fontSize: 12,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppTheme.accent,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: ColoredBox(
+        color: AppTheme.bg,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            MediaQuery.viewInsetsOf(context).bottom + 18,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: Icon(
+                        CupertinoIcons.chevron_left,
+                        color: AppTheme.textPrimary,
+                        size: 28,
+                      ),
                     ),
-                    onPressed: _busy ? null : _submitIdentity,
-                    icon: const Icon(CupertinoIcons.checkmark_shield),
-                    label: const Text('Submit identity verification'),
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          'Verification',
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.checkmark_shield,
+                    color: AppTheme.accent,
+                    size: 48,
                   ),
                 ),
+                const SizedBox(height: 12),
+                Text(
+                  'Verify your account',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'Confirm your phone number and identity to unlock all account features.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgCard,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Column(
+                    children: [
+                      if (user.phone.trim().isNotEmpty)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            CupertinoIcons.phone,
+                            color: AppTheme.textMuted,
+                          ),
+                          title: Text(
+                            'Phone number',
+                            style: TextStyle(color: AppTheme.textPrimary),
+                          ),
+                          subtitle: Text(
+                            user.phone,
+                            style: TextStyle(color: AppTheme.textMuted),
+                          ),
+                          trailing: Icon(
+                            CupertinoIcons.lock_fill,
+                            size: 16,
+                            color: AppTheme.textMuted,
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: _ThemedField(
+                            controller: _phone,
+                            label: 'Zimbabwe phone number',
+                            hint: '077 123 4567 or +263 77 123 4567',
+                            keyboardType: TextInputType.phone,
+                          ),
+                        ),
+                      _VerificationRow(
+                        label: 'Identity',
+                        value: user.verified
+                            ? 'National ID verified'
+                            : verificationUnderReview
+                            ? 'Submitted for review'
+                            : latestStatus == 'rejected'
+                            ? 'ID details need correction'
+                            : 'National ID required',
+                        verified: user.verified,
+                      ),
+                    ],
+                  ),
+                ),
+                if (_submissionMessage != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _submissionMessage!,
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 13,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+                if (verificationUnderReview && !user.verified) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your documents are being checked. We will notify you when the review is complete.',
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 13,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+                if (latestStatus == 'rejected' && !user.verified) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'The number read from the ID did not match. Check your entry and upload clear images of both sides.',
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 13,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+                if (!user.verified) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Used as contact information.',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+                  ),
+                ],
+                if (!user.verified && !verificationUnderReview) ...[
+                  const SizedBox(height: 24),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgCard,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      children: [
+                        _ThemedField(
+                          controller: _nationalId,
+                          label: 'National ID number',
+                          hint: '63-123456-A-12',
+                        ),
+                        const SizedBox(height: 12),
+                        _DocumentPickerTile(
+                          label: 'ID front image',
+                          fileName: _frontDocument?.name,
+                          selected: _frontBytes != null,
+                          onPick: () => _pickDocument(front: true),
+                        ),
+                        const SizedBox(height: 10),
+                        _DocumentPickerTile(
+                          label: 'ID back image',
+                          fileName: _backDocument?.name,
+                          selected: _backBytes != null,
+                          onPick: () => _pickDocument(front: false),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Upload clear JPEG, PNG, or WEBP images of both sides. Automated checks compare the printed ID number with your entry; unreadable images need manual review. This does not check a government ID registry.',
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 12,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.accent,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: _busy ? null : _submitIdentity,
+                      icon: const Icon(CupertinoIcons.checkmark_shield),
+                      label: const Text('Submit identity verification'),
+                    ),
+                  ),
+                ],
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_error!, style: const TextStyle(color: AppTheme.accent)),
+                ],
               ],
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(_error!, style: const TextStyle(color: AppTheme.accent)),
-              ],
-            ],
+            ),
           ),
         ),
       ),

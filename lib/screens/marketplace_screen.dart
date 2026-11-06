@@ -653,6 +653,13 @@ class _SearchField extends StatelessWidget {
         textInputAction: TextInputAction.search,
         decoration: InputDecoration(
           border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          focusedErrorBorder: InputBorder.none,
+          filled: false,
+          fillColor: Colors.transparent,
           hintText: hintText,
           hintStyle: TextStyle(color: AppTheme.textMuted, fontSize: 12),
           prefixIcon: Icon(
@@ -660,7 +667,8 @@ class _SearchField extends StatelessWidget {
             color: AppTheme.textMuted,
             size: 19,
           ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 15),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 16),
         ),
       ),
     );

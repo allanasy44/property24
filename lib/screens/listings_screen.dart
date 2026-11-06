@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/rental_models.dart';
+import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
@@ -52,6 +54,14 @@ class _ListingsScreenState extends State<ListingsScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _goBack() {
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go(AppRoutes.profileScreen);
   }
 
   @override
@@ -100,6 +110,18 @@ class _ListingsScreenState extends State<ListingsScreen> {
                     children: [
                       Row(
                         children: [
+                          IconButton(
+                            tooltip: 'Back to profile',
+                            onPressed: _goBack,
+                            icon: const Icon(CupertinoIcons.chevron_left),
+                            color: _textDark,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 40,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
