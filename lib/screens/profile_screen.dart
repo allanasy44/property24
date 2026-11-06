@@ -1207,91 +1207,110 @@ class _ProfileEditorState extends State<_ProfileEditor> {
   Widget build(BuildContext context) {
     final phoneLocked = widget.user.phone.trim().isNotEmpty;
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          12,
-          20,
-          MediaQuery.viewInsetsOf(context).bottom + 24,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _PanelHeader(
-                title: 'Profile',
-                onClose: () => Navigator.of(context).pop(),
-              ),
-              const SizedBox(height: 8),
-              _ProfileImagePicker(
-                currentImageUrl: widget.user.profilePicture,
-                selectedImageBytes: _selectedImageBytes,
-                removeImage: _removeImage,
-                onPick: _pickImage,
-                onRemove:
-                    widget.user.profilePicture.isEmpty &&
-                        _selectedImageBytes == null
-                    ? null
-                    : () => setState(() {
-                        _selectedImage = null;
-                        _selectedImageBytes = null;
-                        _removeImage = true;
-                      }),
-              ),
-              const SizedBox(height: 22),
-              _ProfileFieldsCard(
-                children: [
-                  _ThemedField(
-                    controller: _name,
-                    label: 'Name',
-                    hint: 'Your name',
-                  ),
-                  _ThemedField(
-                    controller: _bio,
-                    label: 'About',
-                    hint: 'Tell people about yourself',
-                    maxLines: 2,
-                  ),
-                  _ThemedField(
-                    controller: _username,
-                    label: 'Username',
-                    hint: 'Choose a username',
-                  ),
-                  _ThemedField(
-                    controller: _phone,
-                    label: 'Phone number',
-                    hint: '+263771234567',
-                    keyboardType: TextInputType.phone,
-                    enabled: !phoneLocked,
-                    suffixIcon: phoneLocked ? CupertinoIcons.lock_fill : null,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                phoneLocked
-                    ? 'Your phone number is verified and cannot be changed here.'
-                    : 'Your phone number helps people connect with you.',
-                style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
-              ),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.accent,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+      child: ColoredBox(
+        color: const Color(0xFFF7F7F7),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            MediaQuery.viewInsetsOf(context).bottom + 18,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(CupertinoIcons.chevron_left, size: 28),
                     ),
-                  ),
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const CupertinoActivityIndicator(color: Colors.white)
-                      : const Text('Save changes'),
+                    const Expanded(
+                      child: Center(
+                        child: Text(
+                          'Profile',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 28),
+                _ProfileImagePicker(
+                  currentImageUrl: widget.user.profilePicture,
+                  selectedImageBytes: _selectedImageBytes,
+                  removeImage: _removeImage,
+                  onPick: _pickImage,
+                  onRemove: null,
+                ),
+                const SizedBox(height: 30),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Column(
+                    children: [
+                      _ProfileEditRow(
+                        label: 'Name',
+                        controller: _name,
+                        keyboardType: TextInputType.name,
+                      ),
+                      _ProfileEditRow(
+                        label: 'About',
+                        controller: _bio,
+                        hint: '',
+                      ),
+                      _ProfileEditRow(
+                        label: 'Username',
+                        controller: _username,
+                        emptyValue: 'Reserve username',
+                        actionColor: const Color(0xFF198754),
+                      ),
+                      _ProfileEditRow(
+                        label: 'Phone number',
+                        controller: _phone,
+                        enabled: !phoneLocked,
+                        keyboardType: TextInputType.phone,
+                      ),
+                      _ProfileActionRow(
+                        label: 'Links',
+                        value: 'Add links',
+                        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Links can be added soon.'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF198754),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: _saving ? null : _save,
+                    child: _saving
+                        ? const CupertinoActivityIndicator(color: Colors.white)
+                        : const Text('Save changes'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1363,18 +1382,18 @@ class _ProfileImagePicker extends StatelessWidget {
       children: [
         ClipOval(
           child: SizedBox(
-            width: 104,
-            height: 104,
+            width: 100,
+            height: 100,
             child: selectedImageBytes != null
                 ? Image.memory(selectedImageBytes!, fit: BoxFit.cover)
                 : hasCurrentImage
                 ? Image.network(currentImageUrl, fit: BoxFit.cover)
                 : ColoredBox(
-                    color: AppTheme.accent.withValues(alpha: 0.14),
+                    color: const Color(0xFFF5A2C0),
                     child: Icon(
                       CupertinoIcons.person_crop_circle,
-                      color: AppTheme.textMuted,
-                      size: 48,
+                      color: const Color(0xFFA12659),
+                      size: 50,
                     ),
                   ),
           ),
@@ -1383,7 +1402,7 @@ class _ProfileImagePicker extends StatelessWidget {
         TextButton(
           onPressed: onPick,
           style: TextButton.styleFrom(
-            foregroundColor: AppTheme.accentTeal,
+            foregroundColor: const Color(0xFF198754),
             textStyle: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
@@ -1391,34 +1410,129 @@ class _ProfileImagePicker extends StatelessWidget {
           ),
           child: const Text('Edit photo'),
         ),
-        if (onRemove != null)
-          TextButton(
-            onPressed: onRemove,
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-              visualDensity: VisualDensity.compact,
-            ),
-            child: const Text('Remove photo'),
-          ),
       ],
     );
   }
 }
 
-class _ProfileFieldsCard extends StatelessWidget {
-  const _ProfileFieldsCard({required this.children});
+class _ProfileEditRow extends StatelessWidget {
+  const _ProfileEditRow({
+    required this.label,
+    required this.controller,
+    this.emptyValue,
+    this.actionColor,
+    this.hint,
+    this.keyboardType,
+    this.enabled = true,
+  });
 
-  final List<Widget> children;
+  final String label;
+  final TextEditingController controller;
+  final String? emptyValue;
+  final Color? actionColor;
+  final String? hint;
+  final TextInputType? keyboardType;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
+    final value = controller.text.trim();
     return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppTheme.border),
+      constraints: const BoxConstraints(minHeight: 43),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFE5E5E5))),
       ),
-      child: Column(children: children),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              enabled: enabled,
+              keyboardType: keyboardType,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: actionColor ?? const Color(0xFF686868),
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: InputDecoration(
+                hintText: value.isEmpty ? (emptyValue ?? hint) : null,
+                hintStyle: TextStyle(
+                  color: actionColor ?? const Color(0xFF686868),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 11),
+              ),
+            ),
+          ),
+          const Icon(
+            CupertinoIcons.chevron_right,
+            color: Color(0xFFB7B7B7),
+            size: 18,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileActionRow extends StatelessWidget {
+  const _ProfileActionRow({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: 43,
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.black,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Color(0xFF198754),
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              CupertinoIcons.chevron_right,
+              color: Color(0xFFB7B7B7),
+              size: 18,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1430,8 +1544,6 @@ class _ThemedField extends StatelessWidget {
     this.hint,
     this.maxLines = 1,
     this.keyboardType,
-    this.enabled = true,
-    this.suffixIcon,
   });
 
   final TextEditingController controller;
@@ -1439,36 +1551,22 @@ class _ThemedField extends StatelessWidget {
   final String? hint;
   final int maxLines;
   final TextInputType? keyboardType;
-  final bool enabled;
-  final IconData? suffixIcon;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      enabled: enabled,
       maxLines: maxLines,
       keyboardType: keyboardType,
       style: TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
-        prefixText: '$label  ',
+        labelText: label,
         hintText: hint,
-        prefixStyle: TextStyle(
-          color: AppTheme.textPrimary,
-          fontWeight: FontWeight.w600,
-          fontSize: 15,
-        ),
-        hintStyle: TextStyle(color: AppTheme.textMuted),
-        filled: false,
-        suffixIcon: suffixIcon == null
-            ? null
-            : Icon(suffixIcon, size: 16, color: AppTheme.textMuted),
-        border: const UnderlineInputBorder(borderSide: BorderSide.none),
-        enabledBorder: UnderlineInputBorder(
-          borderSide: BorderSide(color: AppTheme.border),
-        ),
-        focusedBorder: const UnderlineInputBorder(
-          borderSide: BorderSide(color: AppTheme.accent, width: 1.2),
+        filled: true,
+        fillColor: AppTheme.bgSurface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
       ),
     );
