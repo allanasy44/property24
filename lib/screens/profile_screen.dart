@@ -1441,7 +1441,7 @@ class _ProfileEditRow extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 43),
       decoration: const BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: Color(0xFFF0F0F0), width: 0.7),
+          bottom: BorderSide(color: Color(0xFFF7F7F7), width: 0.5),
         ),
       ),
       child: Row(
@@ -1474,6 +1474,9 @@ class _ProfileEditRow extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
                 border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(vertical: 11),
               ),
@@ -1566,10 +1569,10 @@ class _ThemedField extends StatelessWidget {
         hintText: hint,
         filled: true,
         fillColor: AppTheme.bgSurface,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
       ),
     );
   }
