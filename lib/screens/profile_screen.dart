@@ -1440,14 +1440,16 @@ class _ProfileEditRow extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 43),
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E5E5))),
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFF0F0F0), width: 0.7),
+        ),
       ),
       child: Row(
         children: [
           Text(
             label,
             style: const TextStyle(
-              color: Colors.black,
+              color: Color(0xFF171717),
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -1460,14 +1462,14 @@ class _ProfileEditRow extends StatelessWidget {
               keyboardType: keyboardType,
               textAlign: TextAlign.right,
               style: TextStyle(
-                color: actionColor ?? const Color(0xFF686868),
+                color: actionColor ?? const Color(0xFF777777),
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
               decoration: InputDecoration(
                 hintText: value.isEmpty ? (emptyValue ?? hint) : null,
                 hintStyle: TextStyle(
-                  color: actionColor ?? const Color(0xFF686868),
+                  color: actionColor ?? const Color(0xFF777777),
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1510,7 +1512,7 @@ class _ProfileActionRow extends StatelessWidget {
             Text(
               label,
               style: const TextStyle(
-                color: Colors.black,
+                color: Color(0xFF171717),
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
