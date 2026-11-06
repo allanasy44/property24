@@ -1247,7 +1247,6 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                   selectedImageBytes: _selectedImageBytes,
                   removeImage: _removeImage,
                   onPick: _pickImage,
-                  onRemove: null,
                 ),
                 const SizedBox(height: 30),
                 Container(
@@ -1279,15 +1278,6 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                         controller: _phone,
                         enabled: !phoneLocked,
                         keyboardType: TextInputType.phone,
-                      ),
-                      _ProfileActionRow(
-                        label: 'Links',
-                        value: 'Add links',
-                        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Links can be added soon.'),
-                          ),
-                        ),
                       ),
                     ],
                   ),
@@ -1366,14 +1356,12 @@ class _ProfileImagePicker extends StatelessWidget {
     required this.selectedImageBytes,
     required this.removeImage,
     required this.onPick,
-    required this.onRemove,
   });
 
   final String currentImageUrl;
   final Uint8List? selectedImageBytes;
   final bool removeImage;
   final VoidCallback onPick;
-  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -1473,6 +1461,8 @@ class _ProfileEditRow extends StatelessWidget {
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
+                filled: false,
+                fillColor: Colors.transparent,
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
@@ -1488,55 +1478,6 @@ class _ProfileEditRow extends StatelessWidget {
             size: 18,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ProfileActionRow extends StatelessWidget {
-  const _ProfileActionRow({
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: SizedBox(
-        height: 43,
-        child: Row(
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF171717),
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Color(0xFF198754),
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Icon(
-              CupertinoIcons.chevron_right,
-              color: Color(0xFFB7B7B7),
-              size: 18,
-            ),
-          ],
-        ),
       ),
     );
   }
