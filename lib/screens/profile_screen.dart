@@ -417,13 +417,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 24),
             const _ProfileSectionHeading('ACCOUNT'),
             _MenuCardTile(
-              icon: CupertinoIcons.person,
-              label: 'Edit profile',
-              onTap: user == null
-                  ? null
-                  : () => _openProfileEditor(context, user),
-            ),
-            _MenuCardTile(
               icon: CupertinoIcons.gear,
               label: 'Settings',
               onTap: () => _openSettings(context),
