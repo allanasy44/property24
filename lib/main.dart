@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:sizer/sizer.dart';
 
 import 'routes/app_routes.dart';
+import 'localization/app_language.dart';
 import 'state/property24_state.dart';
 import 'theme/app_theme.dart';
 import 'widgets/custom_error_widget.dart';
@@ -55,6 +57,11 @@ class MyApp extends StatelessWidget {
               AppTheme.setDarkMode(state.darkMode);
               return MaterialApp.router(
                 title: 'inprop',
+                locale: state.language.locale,
+                supportedLocales: [
+                  for (final language in AppLanguage.values) language.locale,
+                ],
+                localizationsDelegates: GlobalMaterialLocalizations.delegates,
                 theme: AppTheme.lightTheme,
                 darkTheme: AppTheme.darkTheme,
                 themeMode: state.darkMode ? ThemeMode.dark : ThemeMode.light,

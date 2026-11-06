@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/config.dart';
 
 import '../models/rental_models.dart';
+import '../localization/app_language.dart';
 import '../services/property24_api.dart';
 
 class Property24State extends ChangeNotifier {
@@ -21,6 +22,7 @@ class Property24State extends ChangeNotifier {
   static const _refreshTokenKey = 'property24.flutter.refreshToken';
   static const _sessionCacheKey = 'property24.flutter.sessionCache';
   static const _darkModeKey = 'property24.flutter.darkMode';
+  static const _languageKey = 'property24.flutter.language';
 
   final Property24Api _api;
   WebSocketChannel? _liveChannel;
@@ -57,6 +59,7 @@ class Property24State extends ChangeNotifier {
   bool loading = true;
   String? error;
   bool darkMode = false;
+  AppLanguage language = AppLanguage.english;
   String publicUsername = 'property24_member';
   String profileImageUrl = '';
   bool usernameVerified = false;
@@ -138,6 +141,7 @@ class Property24State extends ChangeNotifier {
       final preferences = await SharedPreferences.getInstance();
       _token = preferences.getString(_tokenKey);
       darkMode = preferences.getBool(_darkModeKey) ?? false;
+      language = AppLanguage.fromCode(preferences.getString(_languageKey));
       notifyListeners();
       _refreshToken = preferences.getString(_refreshTokenKey);
       _restoreCachedSession(preferences.getString(_sessionCacheKey));
@@ -1419,6 +1423,16 @@ class Property24State extends ChangeNotifier {
       (preferences) => preferences.setBool(_darkModeKey, value),
     );
     notifyListeners();
+  }
+
+  void setLanguage(AppLanguage value) {
+    if (language == value) return;
+    language = value;
+    notifyListeners();
+    SharedPreferences.getInstance().then(
+      (preferences) =>
+          preferences.setString(_languageKey, value.locale.languageCode),
+    );
   }
 
   void updatePublicProfile({

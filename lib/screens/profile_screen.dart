@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
+import '../localization/app_language.dart';
 import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
@@ -803,16 +804,11 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                     icon: CupertinoIcons.globe,
                     label: 'Language',
                     trailing: Text(
-                      'English',
+                      state.language.nativeLabel,
                       style: TextStyle(color: AppTheme.textMuted),
                     ),
-                    onTap: () => _openNestedPanel(
-                      context,
-                      const _TextInfoPanel(
-                        title: 'Language',
-                        body: 'English is the current app language.',
-                      ),
-                    ),
+                    onTap: () =>
+                        _openNestedPanel(context, const _LanguagePanel()),
                   ),
                   _SettingsTile(
                     icon: CupertinoIcons.moon,
@@ -836,6 +832,69 @@ class _SettingsSheetState extends State<_SettingsSheet> {
 
   void _openNestedPanel(BuildContext context, Widget child) {
     _openSidePanel<void>(context: context, child: child);
+  }
+}
+
+class _LanguagePanel extends StatelessWidget {
+  const _LanguagePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<Property24State>();
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _PanelHeader(
+              title: 'Language',
+              onClose: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Choose the language for the app interface.',
+              style: TextStyle(color: AppTheme.textMuted),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.separated(
+                itemCount: AppLanguage.values.length,
+                separatorBuilder: (_, _) => Divider(color: AppTheme.border),
+                itemBuilder: (context, index) {
+                  final language = AppLanguage.values[index];
+                  final selected = state.language == language;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      language.nativeLabel,
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      language.label,
+                      style: TextStyle(color: AppTheme.textMuted),
+                    ),
+                    trailing: selected
+                        ? Icon(
+                            CupertinoIcons.checkmark_alt,
+                            color: AppTheme.accent,
+                          )
+                        : null,
+                    onTap: () {
+                      state.setLanguage(language);
+                      Navigator.of(context).pop();
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
