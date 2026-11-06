@@ -1219,10 +1219,10 @@ class _ProfileEditorState extends State<_ProfileEditor> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _PanelHeader(
-                title: 'Edit profile',
+                title: 'Profile',
                 onClose: () => Navigator.of(context).pop(),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               _ProfileImagePicker(
                 currentImageUrl: widget.user.profilePicture,
                 selectedImageBytes: _selectedImageBytes,
@@ -1238,28 +1238,52 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                         _removeImage = true;
                       }),
               ),
-              const SizedBox(height: 16),
-              _ThemedField(controller: _name, label: 'Full name'),
-              const SizedBox(height: 12),
-              _ThemedField(controller: _username, label: 'Username'),
-              const SizedBox(height: 12),
-              _ThemedField(
-                controller: _phone,
-                label: 'Zimbabwe phone number',
-                hint: '+263771234567',
-                keyboardType: TextInputType.phone,
-                enabled: !phoneLocked,
-                suffixIcon: phoneLocked ? CupertinoIcons.lock_fill : null,
+              const SizedBox(height: 22),
+              _ProfileFieldsCard(
+                children: [
+                  _ThemedField(
+                    controller: _name,
+                    label: 'Name',
+                    hint: 'Your name',
+                  ),
+                  _ThemedField(
+                    controller: _bio,
+                    label: 'About',
+                    hint: 'Tell people about yourself',
+                    maxLines: 2,
+                  ),
+                  _ThemedField(
+                    controller: _username,
+                    label: 'Username',
+                    hint: 'Choose a username',
+                  ),
+                  _ThemedField(
+                    controller: _phone,
+                    label: 'Phone number',
+                    hint: '+263771234567',
+                    keyboardType: TextInputType.phone,
+                    enabled: !phoneLocked,
+                    suffixIcon: phoneLocked ? CupertinoIcons.lock_fill : null,
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              _ThemedField(controller: _bio, label: 'Bio', maxLines: 3),
-              const SizedBox(height: 18),
+              const SizedBox(height: 10),
+              Text(
+                phoneLocked
+                    ? 'Your phone number is verified and cannot be changed here.'
+                    : 'Your phone number helps people connect with you.',
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+              ),
+              const SizedBox(height: 22),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: AppTheme.accent,
                     padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
                   onPressed: _saving ? null : _save,
                   child: _saving
@@ -1335,86 +1359,66 @@ class _ProfileImagePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasCurrentImage = currentImageUrl.isNotEmpty && !removeImage;
+    return Column(
+      children: [
+        ClipOval(
+          child: SizedBox(
+            width: 104,
+            height: 104,
+            child: selectedImageBytes != null
+                ? Image.memory(selectedImageBytes!, fit: BoxFit.cover)
+                : hasCurrentImage
+                ? Image.network(currentImageUrl, fit: BoxFit.cover)
+                : ColoredBox(
+                    color: AppTheme.accent.withValues(alpha: 0.14),
+                    child: Icon(
+                      CupertinoIcons.person_crop_circle,
+                      color: AppTheme.textMuted,
+                      size: 48,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: onPick,
+          style: TextButton.styleFrom(
+            foregroundColor: AppTheme.accentTeal,
+            textStyle: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          child: const Text('Edit photo'),
+        ),
+        if (onRemove != null)
+          TextButton(
+            onPressed: onRemove,
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Remove photo'),
+          ),
+      ],
+    );
+  }
+}
+
+class _ProfileFieldsCard extends StatelessWidget {
+  const _ProfileFieldsCard({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.bgSurface,
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppTheme.border),
       ),
-      child: Row(
-        children: [
-          ClipOval(
-            child: SizedBox(
-              width: 72,
-              height: 72,
-              child: selectedImageBytes != null
-                  ? Image.memory(selectedImageBytes!, fit: BoxFit.cover)
-                  : hasCurrentImage
-                  ? Image.network(currentImageUrl, fit: BoxFit.cover)
-                  : ColoredBox(
-                      color: AppTheme.bgCard,
-                      child: Icon(
-                        CupertinoIcons.person_crop_circle,
-                        color: AppTheme.textMuted,
-                        size: 34,
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Profile photo',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'JPEG, PNG, or WEBP images are supported for your profile picture.',
-                  style: TextStyle(
-                    color: AppTheme.textMuted,
-                    fontSize: 12,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppTheme.accent,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed: onPick,
-                      icon: const Icon(CupertinoIcons.photo, size: 16),
-                      label: const Text('Upload'),
-                    ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.textPrimary,
-                        side: BorderSide(color: AppTheme.border),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed: onRemove,
-                      icon: const Icon(CupertinoIcons.trash, size: 16),
-                      label: const Text('Remove'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      child: Column(children: children),
     );
   }
 }
@@ -1447,26 +1451,24 @@ class _ThemedField extends StatelessWidget {
       keyboardType: keyboardType,
       style: TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
-        labelText: label,
+        prefixText: '$label  ',
         hintText: hint,
-        labelStyle: TextStyle(color: AppTheme.textMuted),
+        prefixStyle: TextStyle(
+          color: AppTheme.textPrimary,
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
+        ),
         hintStyle: TextStyle(color: AppTheme.textMuted),
-        filled: true,
-        fillColor: enabled ? AppTheme.bgSurface : AppTheme.bgCard,
+        filled: false,
         suffixIcon: suffixIcon == null
             ? null
             : Icon(suffixIcon, size: 16, color: AppTheme.textMuted),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+        border: const UnderlineInputBorder(borderSide: BorderSide.none),
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: AppTheme.border),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.accent, width: 1.2),
+        focusedBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: AppTheme.accent, width: 1.2),
         ),
       ),
     );
