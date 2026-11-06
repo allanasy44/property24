@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
 import '../localization/app_language.dart';
+import '../localization/app_strings.dart';
 import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
@@ -714,6 +715,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
+    final strings = AppStrings.of(context);
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -727,19 +729,19 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _PanelHeader(
-                title: 'Settings',
+                title: strings.settings,
                 onClose: () => Navigator.of(context).pop(),
               ),
               const SizedBox(height: 20),
               _SyncSummary(state: state),
               const SizedBox(height: 20),
-              const _SectionLabel('Account'),
+              _SectionLabel(strings.account),
               const SizedBox(height: 10),
               _MenuCard(
                 children: [
                   _SettingsTile(
                     icon: CupertinoIcons.person,
-                    label: 'Account Information',
+                    label: strings.accountInformation,
                     onTap: () => _openNestedPanel(
                       context,
                       _InfoPanel(
@@ -765,7 +767,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ),
                   _SettingsTile(
                     icon: CupertinoIcons.shield_lefthalf_fill,
-                    label: 'Privacy Policy',
+                    label: strings.privacyPolicy,
                     onTap: () => _openNestedPanel(
                       context,
                       const _TextInfoPanel(
@@ -777,7 +779,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ),
                   _SettingsTile(
                     icon: CupertinoIcons.doc_text,
-                    label: 'My Bookings',
+                    label: strings.myBookings,
                     trailing: _CountBadge(
                       count: state.snapshot.viewings
                           .where((item) => item.isAvailableBooking)
@@ -796,13 +798,13 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 ],
               ),
               const SizedBox(height: 26),
-              const _SectionLabel('App'),
+              _SectionLabel(strings.app),
               const SizedBox(height: 10),
               _MenuCard(
                 children: [
                   _SettingsTile(
                     icon: CupertinoIcons.globe,
-                    label: 'Language',
+                    label: strings.language,
                     trailing: Text(
                       state.language.nativeLabel,
                       style: TextStyle(color: AppTheme.textMuted),
@@ -812,7 +814,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ),
                   _SettingsTile(
                     icon: CupertinoIcons.moon,
-                    label: 'Dark Mode',
+                    label: strings.darkMode,
                     trailing: _ThemedSwitch(
                       value: state.darkMode,
                       onChanged: state.toggleThemeMode,
@@ -841,6 +843,7 @@ class _LanguagePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
+    final strings = AppStrings.of(context);
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -848,12 +851,12 @@ class _LanguagePanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _PanelHeader(
-              title: 'Language',
+              title: strings.language,
               onClose: () => Navigator.of(context).pop(),
             ),
             const SizedBox(height: 8),
             Text(
-              'Choose the language for the app interface.',
+              strings.chooseLanguage,
               style: TextStyle(color: AppTheme.textMuted),
             ),
             const SizedBox(height: 16),
