@@ -531,15 +531,16 @@ def auth_profile(request):
     }
     phone = normalize_phone(data.get("phone")) if data.get("phone") is not None else None
     if phone is not None:
-        phone_error = validate_phone_field(phone, required=True)
-        if phone_error:
-            return json_error(phone_error)
-        phone_lock_error = phone_change_error(user, phone)
-        if phone_lock_error:
-            return json_error(phone_lock_error)
-        if User.objects.exclude(pk=user.pk).filter(phone_identity_query(phone)).exists():
-            return json_error("An account with this phone number already exists")
-        if normalize_phone(user.phone) != phone:
+        current_phone = normalize_phone(user.phone)
+        if current_phone != phone:
+            phone_error = validate_phone_field(phone, required=True)
+            if phone_error:
+                return json_error(phone_error)
+            phone_lock_error = phone_change_error(user, phone)
+            if phone_lock_error:
+                return json_error(phone_lock_error)
+            if User.objects.exclude(pk=user.pk).filter(phone_identity_query(phone)).exists():
+                return json_error("An account with this phone number already exists")
             user.phone = phone
             user.phone_verified = False
             changed_fields.extend(["phone", "phone_verified"])
