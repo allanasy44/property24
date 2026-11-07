@@ -7,6 +7,7 @@ urlpatterns = [
     path("health/", views.health_check, name="health_check"),
     path("health/live/", views.health_live, name="health_live"),
     path("health/ready/", views.health_ready, name="health_ready"),
+    path("locations/search/", views.location_search, name="location_search"),
     path("auth/register/", views.auth_register, name="auth_register"),
     path("auth/register/verify/", views.auth_register_verify, name="auth_register_verify"),
     path("auth/register/resend/", views.auth_register_resend, name="auth_register_resend"),

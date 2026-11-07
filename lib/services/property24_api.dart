@@ -761,6 +761,13 @@ class Property24Api {
     return _results(response).map(PropertyListing.fromJson).toList();
   }
 
+  Future<List<Map<String, dynamic>>> searchLocations(String query) async {
+    final response = await _get('locations/search/', query: {'q': query});
+    return (response['results'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList(growable: false);
+  }
+
   Future<AiSearchResponse> aiPropertySearch({
     String? token,
     required String query,

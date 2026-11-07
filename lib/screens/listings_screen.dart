@@ -447,6 +447,70 @@ class _Section extends StatelessWidget {
   }
 }
 
+class _PurposeChoice extends StatelessWidget {
+  const _PurposeChoice({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: Material(
+        color: selected ? AppTheme.accent : AppTheme.bgSurface,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected ? AppTheme.accent : AppTheme.border,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 17,
+                  color: selected ? Colors.white : AppTheme.textMuted,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selected ? Colors.white : AppTheme.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LandlordListingTile extends StatelessWidget {
   const _LandlordListingTile({
     required this.property,
@@ -1070,51 +1134,26 @@ class _PropertyEditorState extends State<PropertyEditor> {
                             ),
                           );
                         }
-                        return SegmentedButton<String>(
-                          segments: [
-                            if (!hasStays && !hasVenues)
-                              const ButtonSegment(
-                                value: 'Sale',
-                                label: Text('For sale'),
-                                icon: Icon(CupertinoIcons.tag),
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: _PurposeChoice(
+                                label: 'For sale',
+                                icon: CupertinoIcons.tag,
+                                selected: _intent == 'Sale',
+                                onTap: () => setState(() => _intent = 'Sale'),
                               ),
-                            if (_type != 'land')
-                              const ButtonSegment(
-                                value: 'Rent',
-                                label: Text('For rent'),
-                                icon: Icon(CupertinoIcons.calendar),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _PurposeChoice(
+                                label: 'For rent',
+                                icon: CupertinoIcons.calendar,
+                                selected: _intent == 'Rent',
+                                onTap: () => setState(() => _intent = 'Rent'),
                               ),
+                            ),
                           ],
-                          selected: {_intent},
-                          showSelectedIcon: false,
-                          style: ButtonStyle(
-                            backgroundColor: WidgetStateProperty.resolveWith(
-                              (states) => states.contains(WidgetState.selected)
-                                  ? colors.primary
-                                  : colors.surfaceContainerHighest,
-                            ),
-                            foregroundColor: WidgetStateProperty.resolveWith(
-                              (states) => states.contains(WidgetState.selected)
-                                  ? colors.onPrimary
-                                  : colors.onSurface,
-                            ),
-                            side: WidgetStatePropertyAll(
-                              BorderSide(color: colors.outlineVariant),
-                            ),
-                            shape: const WidgetStatePropertyAll(
-                              RoundedRectangleBorder(
-                                borderRadius: BorderRadius.all(
-                                  Radius.circular(8),
-                                ),
-                              ),
-                            ),
-                          ),
-                          onSelectionChanged: (value) {
-                            if (_type == 'land' && value.first == 'Rent') {
-                              return;
-                            }
-                            setState(() => _intent = value.first);
-                          },
                         );
                       },
                     ),
@@ -1361,9 +1400,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       Expanded(child: _field(_suburb, 'Suburb')),
                     ],
                   ),
-                  _field(
-                    _address,
-                    isLand
+                  _locationAutocomplete(
+                    label: isLand
                         ? 'Stand location / address'
                         : isCommercialProperty
                         ? 'Office / shop address'
@@ -1427,6 +1465,38 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       ],
                     ),
                   ),
+                  if (_savedLocation != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            CupertinoIcons.checkmark_seal_fill,
+                            color: AppTheme.accent,
+                            size: 17,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Coordinates synced for map directions',
+                              style: TextStyle(
+                                color: _textDark,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Row(
                     children: [
                       Expanded(
@@ -1988,6 +2058,94 @@ class _PropertyEditorState extends State<PropertyEditor> {
             requiredField && (value == null || value.trim().isEmpty)
             ? 'Required'
             : null,
+      ),
+    );
+  }
+
+  Widget _locationAutocomplete({required String label}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Autocomplete<Map<String, dynamic>>(
+        displayStringForOption: (option) => '${option['display_name'] ?? ''}',
+        optionsBuilder: (value) async {
+          final query = value.text.trim();
+          if (query.length < 3) return const [];
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+          if (query != value.text.trim()) return const [];
+          try {
+            return await Property24Api().searchLocations(query);
+          } catch (_) {
+            return const [];
+          }
+        },
+        onSelected: (place) {
+          final displayName = '${place['display_name'] ?? ''}'.trim();
+          final latitude = place['latitude'];
+          final longitude = place['longitude'];
+          setState(() {
+            _address.text = displayName;
+            if ('${place['city'] ?? ''}'.trim().isNotEmpty) {
+              _city.text = '${place['city']}';
+            }
+            if ('${place['suburb'] ?? ''}'.trim().isNotEmpty) {
+              _suburb.text = '${place['suburb']}';
+            }
+            _latitude.text = '$latitude';
+            _longitude.text = '$longitude';
+          });
+        },
+        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+          if (controller.text != _address.text) {
+            controller.value = _address.value;
+          }
+          return TextFormField(
+            controller: controller,
+            focusNode: focusNode,
+            decoration: _inputDeco(label).copyWith(
+              prefixIcon: const Icon(CupertinoIcons.search),
+              helperText:
+                  'Start typing an address or place and choose a suggestion.',
+            ),
+            style: TextStyle(color: _textDark),
+            validator: (value) =>
+                value == null || value.trim().isEmpty ? 'Required' : null,
+            onChanged: (value) => _address.text = value,
+            onFieldSubmitted: (_) => onFieldSubmitted(),
+          );
+        },
+        optionsViewBuilder: (context, onSelected, options) {
+          return Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              color: AppTheme.bgCard,
+              elevation: 8,
+              borderRadius: BorderRadius.circular(14),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 280),
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  shrinkWrap: true,
+                  itemCount: options.length,
+                  itemBuilder: (context, index) {
+                    final option = options.elementAt(index);
+                    return ListTile(
+                      leading: const Icon(
+                        CupertinoIcons.location_solid,
+                        color: AppTheme.accent,
+                      ),
+                      title: Text(
+                        '${option['display_name'] ?? ''}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () => onSelected(option),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

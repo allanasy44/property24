@@ -264,6 +264,64 @@ def health_ready(request):
     )
 
 
+@require_http_methods(["GET"])
+def location_search(request):
+    query = str(request.GET.get("q") or "").strip()
+    if len(query) < 3:
+        return JsonResponse({"results": []})
+    params = urlencode(
+        {
+            "q": query,
+            "format": "jsonv2",
+            "addressdetails": "1",
+            "limit": "6",
+            "countrycodes": "zw",
+        }
+    )
+    upstream_request = urlrequest.Request(
+        f"https://nominatim.openstreetmap.org/search?{params}",
+        headers={"User-Agent": "Property24 Zimbabwe/1.0 (location search)"},
+    )
+    try:
+        with urlrequest.urlopen(upstream_request, timeout=5) as response:
+            places = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError, urlerror.URLError):
+        logger.warning("Location search provider unavailable", exc_info=True)
+        return JsonResponse(
+            {"results": [], "message": "Location search is temporarily unavailable."},
+            status=503,
+        )
+    results = []
+    for place in places:
+        try:
+            latitude = float(place["lat"])
+            longitude = float(place["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        address = place.get("address") or {}
+        results.append(
+            {
+                "display_name": str(place.get("display_name") or "")[:240],
+                "latitude": latitude,
+                "longitude": longitude,
+                "city": str(
+                    address.get("city")
+                    or address.get("town")
+                    or address.get("municipality")
+                    or address.get("village")
+                    or ""
+                )[:80],
+                "suburb": str(
+                    address.get("suburb")
+                    or address.get("neighbourhood")
+                    or address.get("city_district")
+                    or ""
+                )[:80],
+            }
+        )
+    return JsonResponse({"results": results})
+
+
 def current_user(request):
     user, error = user_from_authorization_header(request.headers.get("Authorization", ""))
     if user and not error:
