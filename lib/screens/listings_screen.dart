@@ -3,13 +3,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/rental_models.dart';
 import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
+import '../services/device_location.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
@@ -402,22 +405,41 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
+    final icon = switch (title) {
+      'Listing purpose' => CupertinoIcons.tag,
+      'Location' => CupertinoIcons.location,
+      'Property details' => CupertinoIcons.house,
+      'Land / stand details' => CupertinoIcons.square_stack_3d_up,
+      'Features' => CupertinoIcons.slider_horizontal_3,
+      'Photos & video' => CupertinoIcons.photo_on_rectangle,
+      _ => CupertinoIcons.doc_text,
+    };
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.border),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 2, bottom: 8),
-            child: Text(
-              title,
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+          Row(
+            children: [
+              Icon(icon, size: 18, color: AppTheme.accent),
+              const SizedBox(width: 9),
+              Text(
+                title,
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-            ),
+            ],
           ),
+          const SizedBox(height: 14),
           child,
         ],
       ),
@@ -646,6 +668,7 @@ class PropertyEditor extends StatefulWidget {
 }
 
 class _PropertyEditorState extends State<PropertyEditor> {
+  static const _defaultMapCenter = LatLng(-17.8252, 31.0335);
   static const _primary = AppTheme.accent;
   static Color get _searchFill => AppTheme.bgSurface;
   static Color get _textDark => AppTheme.textPrimary;
@@ -934,6 +957,68 @@ class _PropertyEditorState extends State<PropertyEditor> {
         child: ListView(
           padding: EdgeInsets.fromLTRB(16, 8, 16, inset + 96),
           children: [
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.accent.withValues(alpha: 0.16),
+                    AppTheme.accentTeal.withValues(alpha: 0.12),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: AppTheme.accent.withValues(alpha: 0.22),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgCard.withValues(alpha: 0.82),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.sparkles,
+                      color: AppTheme.accent,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.property == null
+                              ? 'Create a listing people can trust'
+                              : 'Keep your listing up to date',
+                          style: TextStyle(
+                            color: _textDark,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          'Add clear details, a useful location and great photos. You can save at any time.',
+                          style: TextStyle(
+                            color: _textMuted,
+                            fontSize: 12,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             if (!hasStays && !hasVenues)
               _Section(
                 title: 'Listing purpose',
@@ -1104,7 +1189,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
                                 ? Icons.celebration_outlined
                                 : hasStays
                                 ? CupertinoIcons.bed_double
-                                : CupertinoIcons.house,
+                                : _intent == 'Sale'
+                                ? CupertinoIcons.tag_fill
+                                : CupertinoIcons.calendar,
                             color: AppTheme.accent,
                           ),
                           const SizedBox(width: 12),
@@ -1117,14 +1204,22 @@ class _PropertyEditorState extends State<PropertyEditor> {
                                       ? 'Event venue'
                                       : hasStays
                                       ? 'Accommodation'
-                                      : 'For sale or long-term rent',
+                                      : _intent == 'Sale'
+                                      ? 'For sale'
+                                      : 'For rent',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  categoryDescription,
+                                  hasVenues
+                                      ? categoryDescription
+                                      : hasStays
+                                      ? categoryDescription
+                                      : _intent == 'Sale'
+                                      ? 'List a home, apartment, commercial property, or land for sale.'
+                                      : 'List a home, apartment, or commercial property for long-term rent.',
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
                               ],
@@ -1274,6 +1369,64 @@ class _PropertyEditorState extends State<PropertyEditor> {
                         ? 'Office / shop address'
                         : 'Property address',
                   ),
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgSurface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.border),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: AppTheme.accent.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            CupertinoIcons.map,
+                            color: AppTheme.accent,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _savedLocation == null
+                                    ? 'Add exact map location'
+                                    : 'Exact map location added',
+                                style: TextStyle(
+                                  color: _textDark,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                _savedLocation == null
+                                    ? 'Help users find the property accurately.'
+                                    : '${_latitude.text}, ${_longitude.text}',
+                                style: TextStyle(
+                                  color: _textMuted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        OutlinedButton(
+                          onPressed: _openLocationPicker,
+                          child: Text(
+                            _savedLocation == null ? 'Set map' : 'Change',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   Row(
                     children: [
                       Expanded(
@@ -1315,10 +1468,31 @@ class _PropertyEditorState extends State<PropertyEditor> {
                   : hasStays || hasVenues
                   ? 'Rates and capacity'
                   : isCommercialProperty
-                  ? 'Rental details'
-                  : 'Pricing and rooms',
+                  ? _intent == 'Sale'
+                        ? 'Sale details'
+                        : 'Rental details'
+                  : _intent == 'Sale'
+                  ? 'Sale price and rooms'
+                  : 'Rent and rooms',
               child: Column(
                 children: [
+                  if (!isLand && !hasStays && !hasVenues)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _intent == 'Sale'
+                              ? 'This listing will appear to buyers looking to purchase.'
+                              : 'This listing will appear to tenants looking for a rental.',
+                          style: TextStyle(
+                            color: _textMuted,
+                            fontSize: 12,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ),
                   if (hasHomes || (!hasStays && !hasVenues))
                     Row(
                       children: [
@@ -1333,7 +1507,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                             keyboardType: TextInputType.number,
                           ),
                         ),
-                        if (!isLand) ...[
+                        if (!isLand && _intent == 'Rent') ...[
                           const SizedBox(width: 10),
                           Expanded(
                             child: _field(
@@ -1781,18 +1955,18 @@ class _PropertyEditorState extends State<PropertyEditor> {
     fillColor: _searchFill,
     labelStyle: TextStyle(color: _textMuted, fontWeight: FontWeight.w500),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(14),
       borderSide: BorderSide(color: AppTheme.border),
     ),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(14),
       borderSide: BorderSide(color: AppTheme.border),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(14),
       borderSide: const BorderSide(color: _primary, width: 1.4),
     ),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
   );
 
   Widget _field(
@@ -1820,7 +1994,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
 
   Widget _switch(String label, bool value, ValueChanged<bool> onChanged) {
     return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      tileColor: AppTheme.bgSurface,
       activeThumbColor: _primary,
       title: Text(
         label,
@@ -1898,6 +2074,138 @@ class _PropertyEditorState extends State<PropertyEditor> {
     }
   }
 
+  LatLng? get _savedLocation {
+    final latitude = double.tryParse(_latitude.text.trim());
+    final longitude = double.tryParse(_longitude.text.trim());
+    if (latitude == null || longitude == null) return null;
+    if (latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180) {
+      return null;
+    }
+    return LatLng(latitude, longitude);
+  }
+
+  Future<void> _openLocationPicker() async {
+    var selected = _savedLocation ?? _defaultMapCenter;
+    var usingCurrentLocation = false;
+    final result = await showModalBottomSheet<LatLng>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppTheme.bgCard,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.78,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pin exact property location',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap the map where the property is located, or use your current position.',
+                  style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: FlutterMap(
+                      options: MapOptions(
+                        initialCenter: selected,
+                        initialZoom: 14,
+                        onTap: (_, point) {
+                          setSheetState(() {
+                            selected = point;
+                            usingCurrentLocation = false;
+                          });
+                        },
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.property24.zimbabwe',
+                        ),
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: selected,
+                              width: 52,
+                              height: 52,
+                              child: const Icon(
+                                CupertinoIcons.location_solid,
+                                color: AppTheme.accent,
+                                size: 42,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final location = await getCurrentDeviceLocation();
+                            if (!context.mounted) return;
+                            setSheetState(() {
+                              selected = location;
+                              usingCurrentLocation = true;
+                            });
+                          } catch (exception) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(userFacingError(exception)),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(CupertinoIcons.location),
+                        label: Text(
+                          usingCurrentLocation
+                              ? 'Current location selected'
+                              : 'Use my location',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    FilledButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(selected),
+                      child: const Text('Use this pin'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    setState(() {
+      _latitude.text = result.latitude.toStringAsFixed(6);
+      _longitude.text = result.longitude.toStringAsFixed(6);
+    });
+  }
+
   List<String> _splitDetailList(String value, {bool linesOnly = false}) {
     final parts = value.split(linesOnly ? '\n' : RegExp(r'[,\n]'));
     return parts
@@ -1960,7 +2268,9 @@ class _PropertyEditorState extends State<PropertyEditor> {
           : hasStays
           ? _nightlyRate.text.trim()
           : _eventRate.text.trim(),
-      depositRequired: isLandListing || !hasHomes ? '' : _deposit.text.trim(),
+      depositRequired: isLandListing || !hasHomes || _intent == 'Sale'
+          ? ''
+          : _deposit.text.trim(),
       propertyType: _type,
       ownerId: _ownerId,
       bedrooms:
