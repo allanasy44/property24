@@ -327,7 +327,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
     final returnToOriginOnCancel = _returnToOriginOnCancel;
     _returnToOriginOnCancel = false;
     if (returnToOriginOnCancel && result != true && context.mounted) {
-      Navigator.of(context).pop();
+      context.go(AppRoutes.exploreScreen);
     }
   }
 
@@ -789,6 +789,8 @@ class _PropertyEditorState extends State<PropertyEditor> {
   bool _guestAccommodation = false;
   final ImagePicker _picker = ImagePicker();
   final List<XFile> _newImages = <XFile>[];
+  Timer? _locationSearchDebounce;
+  int _locationSearchRequest = 0;
   XFile? _newVideo;
   late final Future<List<Map<String, dynamic>>> _adminLandlords;
   String? _ownerId;
@@ -935,6 +937,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _maxGuests.dispose();
     _weddingCapacity.dispose();
     _conferenceCapacity.dispose();
+    _locationSearchDebounce?.cancel();
     super.dispose();
   }
 
@@ -2078,22 +2081,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
             return const [];
           }
         },
-        onSelected: (place) {
-          final displayName = '${place['display_name'] ?? ''}'.trim();
-          final latitude = place['latitude'];
-          final longitude = place['longitude'];
-          setState(() {
-            _address.text = displayName;
-            if ('${place['city'] ?? ''}'.trim().isNotEmpty) {
-              _city.text = '${place['city']}';
-            }
-            if ('${place['suburb'] ?? ''}'.trim().isNotEmpty) {
-              _suburb.text = '${place['suburb']}';
-            }
-            _latitude.text = '$latitude';
-            _longitude.text = '$longitude';
-          });
-        },
+        onSelected: _applyLocationPlace,
         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
           if (controller.text != _address.text) {
             controller.value = _address.value;
@@ -2109,7 +2097,32 @@ class _PropertyEditorState extends State<PropertyEditor> {
             style: TextStyle(color: _textDark),
             validator: (value) =>
                 value == null || value.trim().isEmpty ? 'Required' : null,
-            onChanged: (value) => _address.text = value,
+            onChanged: (value) {
+              _address.text = value;
+              _locationSearchDebounce?.cancel();
+              _latitude.clear();
+              _longitude.clear();
+              final query = value.trim();
+              if (query.length < 3) return;
+              final requestId = ++_locationSearchRequest;
+              _locationSearchDebounce = Timer(
+                const Duration(milliseconds: 650),
+                () async {
+                  try {
+                    final places = await Property24Api().searchLocations(query);
+                    if (!mounted ||
+                        requestId != _locationSearchRequest ||
+                        _address.text.trim() != query ||
+                        places.isEmpty) {
+                      return;
+                    }
+                    _applyLocationPlace(places.first);
+                  } catch (_) {
+                    // Suggestions remain available if automatic lookup fails.
+                  }
+                },
+              );
+            },
             onFieldSubmitted: (_) => onFieldSubmitted(),
           );
         },
@@ -2148,6 +2161,24 @@ class _PropertyEditorState extends State<PropertyEditor> {
         },
       ),
     );
+  }
+
+  void _applyLocationPlace(Map<String, dynamic> place) {
+    final displayName = '${place['display_name'] ?? ''}'.trim();
+    final latitude = place['latitude'];
+    final longitude = place['longitude'];
+    if (displayName.isEmpty || latitude == null || longitude == null) return;
+    setState(() {
+      _address.text = displayName;
+      if ('${place['city'] ?? ''}'.trim().isNotEmpty) {
+        _city.text = '${place['city']}';
+      }
+      if ('${place['suburb'] ?? ''}'.trim().isNotEmpty) {
+        _suburb.text = '${place['suburb']}';
+      }
+      _latitude.text = '$latitude';
+      _longitude.text = '$longitude';
+    });
   }
 
   Widget _switch(String label, bool value, ValueChanged<bool> onChanged) {
