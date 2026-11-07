@@ -23,46 +23,80 @@ class MarketNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 46,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 1),
-        itemCount: _markets.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final (label, value, icon) = _markets[index];
-          final isSelected = selected == value;
-          return Semantics(
-            button: true,
-            selected: isSelected,
-            label: label,
-            child: Material(
-              color: isSelected ? AppTheme.accent : AppTheme.bgSurface,
-              borderRadius: BorderRadius.circular(15),
-              child: InkWell(
-                onTap: () => onSelected(value),
-                borderRadius: BorderRadius.circular(15),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  constraints: const BoxConstraints(minWidth: 76),
-                  padding: const EdgeInsets.symmetric(horizontal: 11),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(
-                      color: isSelected ? AppTheme.accent : AppTheme.border,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 500;
+        return SizedBox(
+          height: compact ? 38 : 46,
+          child: compact
+              ? Row(
+                  children: [
+                    for (var index = 0; index < _markets.length; index++) ...[
+                      if (index > 0) const SizedBox(width: 5),
+                      Expanded(child: _item(index, compact: true)),
+                    ],
+                  ],
+                )
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  itemCount: _markets.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) => _item(index),
+                ),
+        );
+      },
+    );
+  }
+
+  Widget _item(int index, {bool compact = false}) {
+    final (label, value, icon) = _markets[index];
+    final isSelected = selected == value;
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: label,
+      child: Material(
+        color: isSelected ? AppTheme.accent : AppTheme.bgSurface,
+        borderRadius: BorderRadius.circular(compact ? 11 : 15),
+        child: InkWell(
+          onTap: () => onSelected(value),
+          borderRadius: BorderRadius.circular(compact ? 11 : 15),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            constraints: compact
+                ? const BoxConstraints(minHeight: 36)
+                : const BoxConstraints(minWidth: 76),
+            padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(compact ? 11 : 15),
+              border: Border.all(
+                color: isSelected ? AppTheme.accent : AppTheme.border,
+              ),
+              boxShadow: isSelected && !compact
+                  ? [
+                      BoxShadow(
+                        color: AppTheme.accent.withValues(alpha: 0.2),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: compact
+                ? Center(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : AppTheme.textPrimary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: AppTheme.accent.withValues(alpha: 0.2),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Row(
+                  )
+                : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
@@ -83,11 +117,8 @@ class MarketNavigation extends StatelessWidget {
                       ),
                     ],
                   ),
-                ),
-              ),
-            ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }

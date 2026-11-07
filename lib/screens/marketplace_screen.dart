@@ -198,45 +198,35 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           : 'Search jobs or locations',
                       onChanged: (value) => setState(() => _query = value),
                     ),
-                    if (_view == 'browse' && _isServices) ...[
-                      const SizedBox(height: 12),
-                      _ContextFilterRow(
-                        selected: _serviceCategory,
-                        items: const [
-                          ('All', ''),
-                          ('Cleaning', 'Cleaning'),
-                          ('Plumbing', 'Plumbing'),
-                          ('Electrical', 'Electrical'),
-                          ('Gardening', 'Gardening'),
-                          ('Solar', 'Solar'),
-                          ('Moving', 'Moving'),
-                        ],
-                        onSelected: (value) =>
-                            setState(() => _serviceCategory = value),
-                      ),
-                    ],
-                    if (_view == 'browse' && !_isServices) ...[
-                      const SizedBox(height: 12),
-                      _ContextFilterRow(
-                        selected: _jobType,
-                        items: const [
-                          ('All', ''),
-                          ('Full-time', 'full_time'),
-                          ('Part-time', 'part_time'),
-                          ('Contract', 'contract'),
-                          ('Temporary', 'temporary'),
-                        ],
-                        onSelected: (value) => setState(() => _jobType = value),
-                      ),
-                    ],
                     const SizedBox(height: 14),
-                    _ViewTabs(
-                      market: widget.market,
-                      selected: _view,
-                      showCandidates: state.snapshot.jobApplications.any(
-                        (application) => application.ownerId == userId,
-                      ),
-                      onSelected: (value) => setState(() => _view = value),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ViewTabs(
+                            market: widget.market,
+                            selected: _view,
+                            showCandidates: state.snapshot.jobApplications.any(
+                              (application) => application.ownerId == userId,
+                            ),
+                            onSelected: (value) =>
+                                setState(() => _view = value),
+                          ),
+                        ),
+                        if (_view == 'browse') ...[
+                          const SizedBox(width: 8),
+                          _FilterButton(
+                            label: _isServices
+                                ? (_serviceCategory.isEmpty
+                                      ? 'Filter'
+                                      : _serviceCategory)
+                                : (_jobType.isEmpty ? 'Filter' : _jobTypeLabel),
+                            active: _isServices
+                                ? _serviceCategory.isNotEmpty
+                                : _jobType.isNotEmpty,
+                            onPressed: _openContextFilter,
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 18),
                     if (_view == 'requests')
@@ -511,6 +501,53 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
+  String get _jobTypeLabel => switch (_jobType) {
+    'full_time' => 'Full-time',
+    'part_time' => 'Part-time',
+    'contract' => 'Contract',
+    'temporary' => 'Temporary',
+    _ => 'Filter',
+  };
+
+  Future<void> _openContextFilter() async {
+    final items = _isServices
+        ? const [
+            ('All services', ''),
+            ('Cleaning', 'Cleaning'),
+            ('Plumbing', 'Plumbing'),
+            ('Electrical', 'Electrical'),
+            ('Gardening', 'Gardening'),
+            ('Solar', 'Solar'),
+            ('Moving', 'Moving'),
+          ]
+        : const [
+            ('All job types', ''),
+            ('Full-time', 'full_time'),
+            ('Part-time', 'part_time'),
+            ('Contract', 'contract'),
+            ('Temporary', 'temporary'),
+          ];
+    final selected = _isServices ? _serviceCategory : _jobType;
+    final value = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: AppTheme.bgCard,
+      builder: (_) => _ContextFilterSheet(
+        title: _isServices ? 'Service category' : 'Job type',
+        selected: selected,
+        items: items,
+      ),
+    );
+    if (!mounted || value == null) return;
+    setState(() {
+      if (_isServices) {
+        _serviceCategory = value;
+      } else {
+        _jobType = value;
+      }
+    });
+  }
+
   void _showError(Object exception) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -580,6 +617,84 @@ class _ViewTabs extends StatelessWidget {
   }
 }
 
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({
+    required this.label,
+    required this.active,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(CupertinoIcons.slider_horizontal_3, size: 15),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: active ? AppTheme.accent : AppTheme.textSecondary,
+        side: BorderSide(color: active ? AppTheme.accent : AppTheme.border),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        minimumSize: const Size(0, 36),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+class _ContextFilterSheet extends StatelessWidget {
+  const _ContextFilterSheet({
+    required this.title,
+    required this.selected,
+    required this.items,
+  });
+
+  final String title;
+  final String selected;
+  final List<(String, String)> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...items.map(
+              (item) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(item.$1),
+                trailing: item.$2 == selected
+                    ? const Icon(
+                        CupertinoIcons.checkmark_circle_fill,
+                        color: AppTheme.accent,
+                      )
+                    : null,
+                onTap: () => Navigator.of(context).pop(item.$2),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SearchField extends StatelessWidget {
   const _SearchField({
     required this.controller,
@@ -623,51 +738,6 @@ class _SearchField extends StatelessWidget {
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 16),
         ),
-      ),
-    );
-  }
-}
-
-class _ContextFilterRow extends StatelessWidget {
-  const _ContextFilterRow({
-    required this.selected,
-    required this.items,
-    required this.onSelected,
-  });
-
-  final String selected;
-  final List<(String, String)> items;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 36,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 7),
-        itemBuilder: (context, index) {
-          final (label, value) = items[index];
-          final isSelected = selected == value;
-          return ChoiceChip(
-            label: Text(label),
-            selected: isSelected,
-            onSelected: (_) => onSelected(value),
-            showCheckmark: false,
-            selectedColor: AppTheme.accent.withAlpha(24),
-            backgroundColor: AppTheme.bgSurface,
-            side: BorderSide(color: AppTheme.border),
-            labelStyle: TextStyle(
-              color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-          );
-        },
       ),
     );
   }
