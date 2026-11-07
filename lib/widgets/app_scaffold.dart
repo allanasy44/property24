@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../models/rental_models.dart';
 import '../screens/live_call_screen.dart';
 import '../routes/app_routes.dart';
+import '../screens/marketplace_screen.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
@@ -505,6 +506,7 @@ class _NavItem {
 }
 
 void _showCreateActions(BuildContext context) {
+  final originContext = context;
   final state = context.read<Property24State>();
   final actions = [
     const _CreateAction(
@@ -527,13 +529,15 @@ void _showCreateActions(BuildContext context) {
     ),
     const _CreateAction(
       icon: CupertinoIcons.wrench,
-      label: 'Offer a service',
+      label: 'Post a service',
       market: 'services',
+      opensComposer: true,
     ),
     const _CreateAction(
       icon: CupertinoIcons.briefcase,
       label: 'Post a job',
       market: 'jobs',
+      opensComposer: true,
     ),
     const _CreateAction(
       icon: CupertinoIcons.doc_text,
@@ -646,19 +650,38 @@ void _showCreateActions(BuildContext context) {
                                 action: action,
                                 onTap: () {
                                   Navigator.of(dialogContext).pop();
-                                  if (!state.signedIn &&
-                                      action.requiresPropertyCapability) {
-                                    context.pushNamed(
-                                      AppRoutes.authName,
-                                      pathParameters: const {
-                                        'role': 'list-property',
-                                      },
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (!originContext.mounted) return;
+                                    if (action.opensComposer &&
+                                        action.market != null) {
+                                      unawaited(
+                                        MarketplaceScreen.openComposer(
+                                          originContext,
+                                          market: action.market!,
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    if (!state.signedIn &&
+                                        action.requiresPropertyCapability) {
+                                      originContext.pushNamed(
+                                        AppRoutes.authName,
+                                        pathParameters: const {
+                                          'role': 'list-property',
+                                        },
+                                      );
+                                      return;
+                                    }
+                                    unawaited(
+                                      _runCreateAction(
+                                        originContext,
+                                        state,
+                                        action,
+                                      ),
                                     );
-                                    return;
-                                  }
-                                  unawaited(
-                                    _runCreateAction(context, state, action),
-                                  );
+                                  });
                                 },
                               );
                             },
@@ -768,6 +791,7 @@ class _CreateAction {
     this.category,
     this.market,
     this.requiresPropertyCapability = false,
+    this.opensComposer = false,
   });
 
   final IconData icon;
@@ -775,6 +799,7 @@ class _CreateAction {
   final String? category;
   final String? market;
   final bool requiresPropertyCapability;
+  final bool opensComposer;
 }
 
 Future<void> _runCreateAction(
@@ -793,12 +818,12 @@ Future<void> _runCreateAction(
       );
       return;
     }
-    await context.push<void>(
+    context.go(
       Uri(
         path: AppRoutes.exploreScreen,
         queryParameters: {
           'market': action.market!,
-          if (action.label != 'Request a service')
+          if (action.opensComposer)
             'create': DateTime.now().microsecondsSinceEpoch.toString(),
         },
       ).toString(),

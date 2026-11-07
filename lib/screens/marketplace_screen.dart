@@ -24,6 +24,51 @@ class MarketplaceScreen extends StatefulWidget {
   final bool createOnOpen;
   final ValueChanged<String>? onSelectMarket;
 
+  static Future<void> openComposer(
+    BuildContext context, {
+    required String market,
+  }) async {
+    final state = context.read<Property24State>();
+    if (!state.signedIn) {
+      context.pushNamed(
+        AppRoutes.authName,
+        pathParameters: const {'role': 'tenant'},
+      );
+      return;
+    }
+    final payload = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withAlpha(105),
+      builder: (_) => _MarketplaceListingForm(isServices: market == 'services'),
+    );
+    if (payload == null || !context.mounted) return;
+    try {
+      if (market == 'services') {
+        await state.createService(payload);
+      } else {
+        await state.createJob(payload);
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              market == 'services' ? 'Service published' : 'Job posted',
+            ),
+          ),
+        );
+      }
+    } catch (exception) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+      }
+    }
+  }
+
   @override
   State<MarketplaceScreen> createState() => _MarketplaceScreenState();
 }
@@ -172,7 +217,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           const SizedBox(width: 12),
                           IconButton.filled(
                             tooltip: _isServices
-                                ? 'Offer a service'
+                                ? 'Post a service'
                                 : 'Post a job',
                             onPressed: _openCreateForm,
                             style: IconButton.styleFrom(
@@ -810,7 +855,7 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
     final title = widget.isServices
         ? isEditing
               ? 'Edit your service'
-              : 'Offer a service'
+              : 'Post a service'
         : isEditing
         ? 'Edit your job post'
         : 'Post a job';
