@@ -505,7 +505,7 @@ class _NavItem {
   final bool isCreate;
 }
 
-void _showCreateActions(BuildContext context) {
+Future<void> _showCreateActions(BuildContext context) async {
   final originContext = context;
   final state = context.read<Property24State>();
   final actions = [
@@ -545,7 +545,7 @@ void _showCreateActions(BuildContext context) {
       market: 'services',
     ),
   ];
-  showGeneralDialog<void>(
+  final action = await showGeneralDialog<_CreateAction>(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Close create menu',
@@ -648,41 +648,8 @@ void _showCreateActions(BuildContext context) {
                               final action = actions[index];
                               return _CreateActionBubble(
                                 action: action,
-                                onTap: () {
-                                  Navigator.of(dialogContext).pop();
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (!originContext.mounted) return;
-                                    if (action.opensComposer &&
-                                        action.market != null) {
-                                      unawaited(
-                                        MarketplaceScreen.openComposer(
-                                          originContext,
-                                          market: action.market!,
-                                        ),
-                                      );
-                                      return;
-                                    }
-                                    if (!state.signedIn &&
-                                        action.requiresPropertyCapability) {
-                                      originContext.pushNamed(
-                                        AppRoutes.authName,
-                                        pathParameters: const {
-                                          'role': 'list-property',
-                                        },
-                                      );
-                                      return;
-                                    }
-                                    unawaited(
-                                      _runCreateAction(
-                                        originContext,
-                                        state,
-                                        action,
-                                      ),
-                                    );
-                                  });
-                                },
+                                onTap: () =>
+                                    Navigator.of(dialogContext).pop(action),
                               );
                             },
                           ),
@@ -713,6 +680,19 @@ void _showCreateActions(BuildContext context) {
       );
     },
   );
+  if (action == null || !originContext.mounted) return;
+  if (action.opensComposer && action.market != null) {
+    await MarketplaceScreen.openComposer(originContext, market: action.market!);
+    return;
+  }
+  if (!state.signedIn && action.requiresPropertyCapability) {
+    originContext.pushNamed(
+      AppRoutes.authName,
+      pathParameters: const {'role': 'list-property'},
+    );
+    return;
+  }
+  await _runCreateAction(originContext, state, action);
 }
 
 class _CreateActionBubble extends StatelessWidget {
