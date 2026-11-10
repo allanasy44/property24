@@ -36,18 +36,13 @@ class MarketplaceScreen extends StatefulWidget {
       );
       return;
     }
-    final payload = await showDialog<Map<String, dynamic>>(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: SizedBox(
-          width: 560,
-          height: MediaQuery.sizeOf(context).height * 0.88,
-          child: _MarketplaceListingForm(isServices: market == 'services'),
-        ),
-      ),
-    );
+    final payload = await Navigator.of(context, rootNavigator: true)
+        .push<Map<String, dynamic>>(
+          MaterialPageRoute<Map<String, dynamic>>(
+            builder: (_) =>
+                _MarketplaceComposerPage(isServices: market == 'services'),
+          ),
+        );
     if (payload == null || !context.mounted) return;
     try {
       if (market == 'services') {
@@ -75,6 +70,29 @@ class MarketplaceScreen extends StatefulWidget {
 
   @override
   State<MarketplaceScreen> createState() => _MarketplaceScreenState();
+}
+
+class _MarketplaceComposerPage extends StatelessWidget {
+  const _MarketplaceComposerPage({required this.isServices});
+
+  final bool isServices;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      appBar: AppBar(
+        title: Text(isServices ? 'Post a service' : 'Post a job'),
+        centerTitle: true,
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(CupertinoIcons.chevron_left),
+        ),
+      ),
+      body: SafeArea(child: _MarketplaceListingForm(isServices: isServices)),
+    );
+  }
 }
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
