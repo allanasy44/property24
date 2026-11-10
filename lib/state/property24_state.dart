@@ -566,6 +566,29 @@ class Property24State extends ChangeNotifier {
     );
   }
 
+  Future<Map<String, dynamic>> sendPhoneLoginCode({
+    required String phone,
+    required String country,
+    String? previousChallengeId,
+  }) => _api.sendPhoneLoginCode(
+    phone: phone,
+    country: country,
+    previousChallengeId: previousChallengeId,
+  );
+
+  Future<Map<String, dynamic>> resendPhoneLoginCode(String challengeId) =>
+      _api.resendPhoneLoginCode(challengeId);
+
+  Future<void> cancelPhoneLoginChallenge(String challengeId) =>
+      _api.cancelPhoneLoginChallenge(challengeId);
+
+  Future<void> verifyPhoneLoginCode({
+    required String challengeId,
+    required String code,
+  }) => _authenticate(
+    () => _api.checkPhoneLoginCode(challengeId: challengeId, code: code),
+  );
+
   Future<void> signInWithGoogle(
     AccountRole? role, {
     List<String> marketplaceCapabilities = const [],

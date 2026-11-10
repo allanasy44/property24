@@ -214,6 +214,34 @@ class Property24Api {
     return _authSessionFromBody(body);
   }
 
+  Future<Map<String, dynamic>> sendPhoneLoginCode({
+    required String phone,
+    required String country,
+    String? previousChallengeId,
+  }) => _post('auth/phone/send/', body: {
+    'phone': phone,
+    'country': country,
+    if (previousChallengeId != null) 'challenge_id': previousChallengeId,
+  });
+
+  Future<Map<String, dynamic>> resendPhoneLoginCode(String challengeId) =>
+      _post('auth/phone/resend/', body: {'challenge_id': challengeId});
+
+  Future<void> cancelPhoneLoginChallenge(String challengeId) async {
+    await _post('auth/phone/cancel/', body: {'challenge_id': challengeId});
+  }
+
+  Future<AuthSession> checkPhoneLoginCode({
+    required String challengeId,
+    required String code,
+  }) async {
+    final body = await _post('auth/phone/check/', body: {
+      'challenge_id': challengeId,
+      'code': code,
+    });
+    return _authSessionFromBody(body);
+  }
+
   Future<AuthSession> refresh(String refreshToken) async {
     final body = await _post('auth/refresh/', body: {'refresh': refreshToken});
     return _authSessionFromBody(body);

@@ -57,6 +57,25 @@ class User(AbstractUser):
         return self.full_name or self.username
 
 
+class PhoneLoginChallenge(models.Model):
+    """Short-lived, server-bound state for a Twilio Verify login attempt."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    destination = models.CharField(max_length=20)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE)
+    purpose = models.CharField(max_length=24, default="login")
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+    send_count = models.PositiveSmallIntegerField(default=0)
+    check_count = models.PositiveSmallIntegerField(default=0)
+    status = models.CharField(max_length=16, default="pending")
+    ip_hash = models.CharField(max_length=64)
+    checking = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [models.Index(fields=["destination", "created_at"]), models.Index(fields=["ip_hash", "created_at"])]
+
+
 class Notification(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
     kind = models.CharField(max_length=80)
