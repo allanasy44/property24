@@ -506,6 +506,73 @@ class _NavItem {
 }
 
 Future<void> _showCreateActions(BuildContext context) async {
+  final action = await showDialog<_CreateAction>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Create something'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _CreateActionListTile(
+            icon: CupertinoIcons.wrench,
+            label: 'Post a service',
+            onTap: () => Navigator.of(dialogContext).pop(
+              const _CreateAction(
+                icon: CupertinoIcons.wrench,
+                label: 'Post a service',
+                market: 'services',
+                opensComposer: true,
+              ),
+            ),
+          ),
+          _CreateActionListTile(
+            icon: CupertinoIcons.briefcase,
+            label: 'Post a job',
+            onTap: () => Navigator.of(dialogContext).pop(
+              const _CreateAction(
+                icon: CupertinoIcons.briefcase,
+                label: 'Post a job',
+                market: 'jobs',
+                opensComposer: true,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (action == null || !context.mounted) return;
+  if (action.opensComposer && action.market != null) {
+    await MarketplaceScreen.openComposer(context, market: action.market!);
+    return;
+  }
+}
+
+class _CreateActionListTile extends StatelessWidget {
+  const _CreateActionListTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: AppTheme.accent),
+      title: Text(label),
+      trailing: const Icon(CupertinoIcons.chevron_right, size: 18),
+      onTap: onTap,
+    );
+  }
+}
+
+// ignore: unused_element
+Future<void> _showLegacyCreateActions(BuildContext context) async {
   final originContext = context;
   final state = context.read<Property24State>();
   final actions = [
@@ -648,8 +715,10 @@ Future<void> _showCreateActions(BuildContext context) async {
                               final action = actions[index];
                               return _CreateActionBubble(
                                 action: action,
-                                onTap: () =>
-                                    Navigator.of(dialogContext).pop(action),
+                                onTap: () => Navigator.of(
+                                  dialogContext,
+                                  rootNavigator: true,
+                                ).pop(action),
                               );
                             },
                           ),
@@ -682,6 +751,8 @@ Future<void> _showCreateActions(BuildContext context) async {
   );
   if (action == null || !originContext.mounted) return;
   if (action.opensComposer && action.market != null) {
+    await Future<void>.delayed(const Duration(milliseconds: 280));
+    if (!originContext.mounted) return;
     await MarketplaceScreen.openComposer(originContext, market: action.market!);
     return;
   }

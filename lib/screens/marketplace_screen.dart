@@ -36,13 +36,17 @@ class MarketplaceScreen extends StatefulWidget {
       );
       return;
     }
-    final payload = await showModalBottomSheet<Map<String, dynamic>>(
+    final payload = await showDialog<Map<String, dynamic>>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withAlpha(105),
-      builder: (_) => _MarketplaceListingForm(isServices: market == 'services'),
+      barrierDismissible: true,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: SizedBox(
+          width: 560,
+          height: MediaQuery.sizeOf(context).height * 0.88,
+          child: _MarketplaceListingForm(isServices: market == 'services'),
+        ),
+      ),
     );
     if (payload == null || !context.mounted) return;
     try {
