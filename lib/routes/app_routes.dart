@@ -13,6 +13,7 @@ import '../screens/discover_screen.dart';
 import '../screens/inbox_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/listings_screen.dart';
+import '../screens/marketplace_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/property_detail_screen.dart';
 import '../screens/splash_screen.dart';
@@ -28,6 +29,7 @@ class AppRoutes {
   static const String callsName = 'calls';
   static const String chatName = 'chat';
   static const String listingsName = 'listings';
+  static const String marketplaceComposerName = 'marketplace-composer';
   static const String inboxName = 'inbox';
   static const String activityName = 'activity';
   static const String profileName = 'profile';
@@ -39,6 +41,7 @@ class AppRoutes {
   static const String callsScreen = '/calls';
   static const String chatScreen = '/chat';
   static const String listingsScreen = '/listings';
+  static const String marketplaceComposerScreen = '/marketplace/create/:market';
   static const String inboxScreen = '/inbox';
   static const String activityScreen = '/activity';
   static const String profileScreen = '/profile';
@@ -157,6 +160,16 @@ final GoRouter appRouter = GoRouter(
             state.uri.queryParameters['category'] ?? 'homes',
           ],
           openComposerOnOpen: state.uri.queryParameters['create'] != null,
+        ),
+      ),
+    ),
+    GoRoute(
+      path: AppRoutes.marketplaceComposerScreen,
+      name: AppRoutes.marketplaceComposerName,
+      pageBuilder: (context, state) => _fadePage(
+        state,
+        MarketplaceComposerPage(
+          market: state.pathParameters['market'] ?? 'services',
         ),
       ),
     ),

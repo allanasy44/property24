@@ -684,9 +684,16 @@ Future<void> _showCreateActions(BuildContext context) async {
   );
   if (action == null || !originContext.mounted) return;
   if (action.opensComposer && action.market != null) {
-    await Future<void>.delayed(const Duration(milliseconds: 280));
-    if (!originContext.mounted) return;
     await MarketplaceScreen.openComposer(originContext, market: action.market!);
+    return;
+  }
+  if (action.label == 'Request a service') {
+    originContext.go(
+      Uri(
+        path: AppRoutes.exploreScreen,
+        queryParameters: const {'market': 'services'},
+      ).toString(),
+    );
     return;
   }
   if (!state.signedIn && action.requiresPropertyCapability) {

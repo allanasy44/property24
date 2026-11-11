@@ -36,13 +36,10 @@ class MarketplaceScreen extends StatefulWidget {
       );
       return;
     }
-    final payload = await Navigator.of(context, rootNavigator: true)
-        .push<Map<String, dynamic>>(
-          MaterialPageRoute<Map<String, dynamic>>(
-            builder: (_) =>
-                _MarketplaceComposerPage(isServices: market == 'services'),
-          ),
-        );
+    final payload = await context.pushNamed<Map<String, dynamic>>(
+      AppRoutes.marketplaceComposerName,
+      pathParameters: {'market': market},
+    );
     if (payload == null || !context.mounted) return;
     try {
       if (market == 'services') {
@@ -72,13 +69,14 @@ class MarketplaceScreen extends StatefulWidget {
   State<MarketplaceScreen> createState() => _MarketplaceScreenState();
 }
 
-class _MarketplaceComposerPage extends StatelessWidget {
-  const _MarketplaceComposerPage({required this.isServices});
+class MarketplaceComposerPage extends StatelessWidget {
+  const MarketplaceComposerPage({required this.market, super.key});
 
-  final bool isServices;
+  final String market;
 
   @override
   Widget build(BuildContext context) {
+    final isServices = market == 'services';
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
@@ -90,7 +88,11 @@ class _MarketplaceComposerPage extends StatelessWidget {
           icon: const Icon(CupertinoIcons.chevron_left),
         ),
       ),
-      body: SafeArea(child: _MarketplaceListingForm(isServices: isServices)),
+      body: SafeArea(
+        child: SizedBox.expand(
+          child: _MarketplaceListingForm(isServices: isServices),
+        ),
+      ),
     );
   }
 }
@@ -973,7 +975,7 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
                       ),
                       IconButton(
                         tooltip: 'Close',
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: () => context.pop(),
                         icon: Icon(
                           CupertinoIcons.xmark_circle_fill,
                           color: AppTheme.textMuted,
@@ -1221,7 +1223,7 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
             'employment_type': _employmentType,
             'compensation': _compensation.text.trim(),
           };
-    if (mounted) Navigator.of(context).pop(payload);
+    if (mounted) context.pop(payload);
   }
 }
 
