@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
@@ -81,20 +82,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       duration: const Duration(milliseconds: 500),
     );
 
-    _fadeAnim = CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeOut,
-    );
+    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
 
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.08),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _slideController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
+        .animate(
+          CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+        );
 
     _fadeController.forward();
     _slideController.forward();
@@ -163,9 +156,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 500),
         child: _showIntentSelection
-            ? _GettingStartedView(
-                onIntentSelected: _selectIntent,
-              )
+            ? _GettingStartedView(onIntentSelected: _selectIntent)
             : _OnboardingView(
                 slides: _slides,
                 currentPage: _currentPage,
@@ -230,14 +221,15 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 11500),
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          widget.onFinished();
-        }
-      });
+    _controller =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 11500),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            widget.onFinished();
+          }
+        });
 
     _logoOpacity = CurvedAnimation(
       parent: _controller,
@@ -253,32 +245,29 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
       parent: _controller,
       curve: const Interval(0.1, 0.22, curve: Curves.easeOutCubic),
     );
-    _copySlide = Tween<Offset>(
-      begin: const Offset(0, 0.18),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.1, 0.24, curve: Curves.easeOutCubic),
-      ),
-    );
+    _copySlide = Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(0.1, 0.24, curve: Curves.easeOutCubic),
+          ),
+        );
     _lineWidth = CurvedAnimation(
       parent: _controller,
       curve: const Interval(0.2, 1, curve: Curves.easeInOut),
     );
     _messageStartTimer = Timer(const Duration(milliseconds: 2400), () {
-      _messageTimer = Timer.periodic(
-        const Duration(milliseconds: 3000),
-        (timer) {
-          if (!mounted || _messageIndex == _headlines.length - 1) {
-            timer.cancel();
-            return;
-          }
-          setState(() {
-            _messageIndex++;
-          });
-        },
-      );
+      _messageTimer = Timer.periodic(const Duration(milliseconds: 3000), (
+        timer,
+      ) {
+        if (!mounted || _messageIndex == _headlines.length - 1) {
+          timer.cancel();
+          return;
+        }
+        setState(() {
+          _messageIndex++;
+        });
+      });
     });
     _controller.forward();
   }
@@ -300,11 +289,7 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
           gradient: RadialGradient(
             center: Alignment(0, -0.16),
             radius: 0.9,
-            colors: [
-              Color(0xff17144b),
-              Color(0xff0d1025),
-              Color(0xff070916),
-            ],
+            colors: [Color(0xff17144b), Color(0xff0d1025), Color(0xff070916)],
             stops: [0, 0.58, 1],
           ),
         ),
@@ -324,12 +309,15 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
                           opacity: _logoOpacity,
                           child: ScaleTransition(
                             scale: _logoScale,
-                            child: Image.asset(
-                              'web/favicon.png',
-                              width: size,
-                              height: size,
-                              fit: BoxFit.contain,
-                              semanticLabel: 'inprop',
+                            child: Semantics(
+                              label: 'inprop',
+                              child: SvgPicture.asset(
+                                'web/favicon.svg',
+                                width: size,
+                                height: size,
+                                fit: BoxFit.cover,
+                                alignment: Alignment.centerLeft,
+                              ),
                             ),
                           ),
                         ),
@@ -471,9 +459,7 @@ class _OnboardingView extends StatelessWidget {
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
-              placeholder: (_, __) => Container(
-                color: AppTheme.bgCard,
-              ),
+              placeholder: (_, __) => Container(color: AppTheme.bgCard),
               errorWidget: (_, __, ___) => Container(
                 color: AppTheme.bgCard,
                 child: Icon(
@@ -492,12 +478,7 @@ class _OnboardingView extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: const [
-                0.0,
-                0.35,
-                0.65,
-                1.0,
-              ],
+              stops: const [0.0, 0.35, 0.65, 1.0],
               colors: [
                 Colors.black.withAlpha(102),
                 Colors.transparent,
@@ -521,16 +502,11 @@ class _OnboardingView extends StatelessWidget {
           child: GestureDetector(
             onTap: onSkip,
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.black.withAlpha(77),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.white.withAlpha(51),
-                ),
+                border: Border.all(color: Colors.white.withAlpha(51)),
               ),
               child: Text(
                 'Skip',
@@ -587,27 +563,22 @@ class _OnboardingView extends StatelessWidget {
                       children: [
                         // Page dots
                         Row(
-                          children: List.generate(
-                            slides.length,
-                            (i) {
-                              final isActive = i == currentPage;
+                          children: List.generate(slides.length, (i) {
+                            final isActive = i == currentPage;
 
-                              return AnimatedContainer(
-                                duration: const Duration(
-                                  milliseconds: 300,
-                                ),
-                                margin: const EdgeInsets.only(right: 6),
-                                width: isActive ? 24 : 7,
-                                height: 7,
-                                decoration: BoxDecoration(
-                                  color: isActive
-                                      ? AppTheme.accent
-                                      : AppTheme.textMuted,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              );
-                            },
-                          ),
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              margin: const EdgeInsets.only(right: 6),
+                              width: isActive ? 24 : 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: isActive
+                                    ? AppTheme.accent
+                                    : AppTheme.textMuted,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            );
+                          }),
                         ),
 
                         const Spacer(),
@@ -616,19 +587,14 @@ class _OnboardingView extends StatelessWidget {
                         GestureDetector(
                           onTap: onNext,
                           child: AnimatedContainer(
-                            duration: const Duration(
-                              milliseconds: 300,
-                            ),
+                            duration: const Duration(milliseconds: 300),
                             padding: EdgeInsets.symmetric(
                               horizontal: isLast ? 28 : 20,
                               vertical: 16,
                             ),
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
-                                colors: [
-                                  AppTheme.accent,
-                                  AppTheme.accentTeal,
-                                ],
+                                colors: [AppTheme.accent, AppTheme.accentTeal],
                                 begin: Alignment.centerLeft,
                                 end: Alignment.centerRight,
                               ),
@@ -687,33 +653,17 @@ class _OnboardingView extends StatelessWidget {
           letterSpacing: 0,
         ),
         children: [
-          if (parts.isNotEmpty)
-            TextSpan(
-              text: parts[0],
-            ),
+          if (parts.isNotEmpty) TextSpan(text: parts[0]),
           TextSpan(
             text: slide.accentWord,
             style: TextStyle(
               foreground: Paint()
                 ..shader = const LinearGradient(
-                  colors: [
-                    AppTheme.accent,
-                    AppTheme.accentTeal,
-                  ],
-                ).createShader(
-                  const Rect.fromLTWH(
-                    0,
-                    0,
-                    200,
-                    50,
-                  ),
-                ),
+                  colors: [AppTheme.accent, AppTheme.accentTeal],
+                ).createShader(const Rect.fromLTWH(0, 0, 200, 50)),
             ),
           ),
-          if (parts.length > 1)
-            TextSpan(
-              text: parts[1],
-            ),
+          if (parts.length > 1) TextSpan(text: parts[1]),
         ],
       ),
     );
@@ -723,9 +673,7 @@ class _OnboardingView extends StatelessWidget {
 class _GettingStartedView extends StatefulWidget {
   final ValueChanged<String> onIntentSelected;
 
-  const _GettingStartedView({
-    required this.onIntentSelected,
-  });
+  const _GettingStartedView({required this.onIntentSelected});
 
   @override
   State<_GettingStartedView> createState() => _GettingStartedViewState();
@@ -748,20 +696,12 @@ class _GettingStartedViewState extends State<_GettingStartedView>
       duration: const Duration(milliseconds: 600),
     );
 
-    _fadeAnim = CurvedAnimation(
-      parent: _animController,
-      curve: Curves.easeOut,
-    );
+    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
 
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.1),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero)
+        .animate(
+          CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+        );
 
     _animController.forward();
   }
@@ -782,9 +722,7 @@ class _GettingStartedViewState extends State<_GettingStartedView>
           child: SlideTransition(
             position: _slideAnim,
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -812,7 +750,8 @@ class _GettingStartedViewState extends State<_GettingStartedView>
                     const SizedBox(height: 20),
                     _IntentCard(
                       title: 'Find a place, stay, service or job',
-                      subtitle: 'Explore all the ways this marketplace can help.',
+                      subtitle:
+                          'Explore all the ways this marketplace can help.',
                       icon: CupertinoIcons.search,
                       isSelected: _selectedIntent == 'explore',
                       onTap: () {
@@ -830,7 +769,8 @@ class _GettingStartedViewState extends State<_GettingStartedView>
 
                     _IntentCard(
                       title: 'List a property, stay or venue',
-                      subtitle: 'Connect your listing with people looking for it.',
+                      subtitle:
+                          'Connect your listing with people looking for it.',
                       icon: CupertinoIcons.building_2_fill,
                       isSelected: _selectedIntent == 'list-property',
                       onTap: () {
@@ -848,7 +788,8 @@ class _GettingStartedViewState extends State<_GettingStartedView>
 
                     _IntentCard(
                       title: 'Offer a service or post a job',
-                      subtitle: 'Share what you offer or the opportunity you have.',
+                      subtitle:
+                          'Share what you offer or the opportunity you have.',
                       icon: CupertinoIcons.briefcase,
                       isSelected: _selectedIntent == 'offer-service',
                       onTap: () {
@@ -1013,11 +954,7 @@ class _SessionGateView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: const SafeArea(
-        child: Center(
-          child: InPropBrand(),
-        ),
-      ),
+      body: const SafeArea(child: Center(child: InPropBrand())),
     );
   }
 }

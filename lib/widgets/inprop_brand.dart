@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_theme.dart';
 
@@ -19,7 +20,11 @@ class InPropBrand extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final markSize = size ?? (compact ? 32.0 : 38.0);
-    final markRadius = compact ? 10.0 : markSize >= 64 ? 20.0 : 12.0;
+    final markRadius = compact
+        ? 10.0
+        : markSize >= 64
+        ? 20.0
+        : 12.0;
     final textColor = onImage ? Colors.white : AppTheme.textPrimary;
 
     return Semantics(
@@ -45,11 +50,12 @@ class InPropBrand extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(markRadius),
-              child: Image.asset(
-                'web/favicon.png',
+              child: SvgPicture.asset(
+                'web/favicon.svg',
                 width: markSize,
                 height: markSize,
                 fit: BoxFit.cover,
+                alignment: Alignment.centerLeft,
               ),
             ),
           ),

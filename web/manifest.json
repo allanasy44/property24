@@ -10,10 +10,10 @@
     "prefer_related_applications": false,
     "icons": [
         {
-            "src": "favicon.png",
+            "src": "favicon.svg",
             "sizes": "any",
-            "type": "image/png",
-            "purpose": "any maskable"
+            "type": "image/svg+xml",
+            "purpose": "any"
         }
     ]
 }
