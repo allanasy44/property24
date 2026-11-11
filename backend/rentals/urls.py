@@ -1,7 +1,6 @@
 from django.urls import path
 
 from . import views
-from . import phone_login
 
 
 urlpatterns = [
@@ -13,10 +12,6 @@ urlpatterns = [
     path("auth/register/verify/", views.auth_register_verify, name="auth_register_verify"),
     path("auth/register/resend/", views.auth_register_resend, name="auth_register_resend"),
     path("auth/login/", views.auth_login, name="auth_login"),
-    path("auth/phone/send/", phone_login.phone_login_send, name="phone_login_send"),
-    path("auth/phone/resend/", phone_login.phone_login_resend, name="phone_login_resend"),
-    path("auth/phone/cancel/", phone_login.phone_login_cancel, name="phone_login_cancel"),
-    path("auth/phone/check/", phone_login.phone_login_check, name="phone_login_check"),
     path("auth/google/config/", views.auth_google_config, name="auth_google_config"),
     path("auth/google/", views.auth_google, name="auth_google"),
     path("auth/refresh/", views.auth_refresh, name="auth_refresh"),

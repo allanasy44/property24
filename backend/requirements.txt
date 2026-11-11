@@ -7,7 +7,6 @@ pytesseract>=0.3.13,<0.4
 psycopg[binary]==3.3.2
 gunicorn==23.0.0
 redis>=5.0,<7
-phonenumbers>=9.0.0,<10
 channels==4.3.1
 channels-redis==4.3.0
 daphne==4.2.1

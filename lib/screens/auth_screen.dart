@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -45,12 +44,6 @@ class _AuthScreenState extends State<AuthScreen> {
   String? _error;
   Timer? _resendTimer;
   int _resendSeconds = 0;
-  bool _phoneLogin = false;
-  String _phoneCountry = 'ZW';
-  String? _phoneChallengeId;
-  String _maskedDestination = '';
-  final _phone = TextEditingController();
-  final _phoneCode = TextEditingController();
 
   @override
   void dispose() {
@@ -61,8 +54,6 @@ class _AuthScreenState extends State<AuthScreen> {
     _passwordFocusNode.dispose();
     _resendTimer?.cancel();
     _emailCode.dispose();
-    _phone.dispose();
-    _phoneCode.dispose();
     super.dispose();
   }
 
@@ -392,163 +383,42 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 10),
           ],
-          if (!_registering && widget.role != AccountRole.admin) ...[
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: _submitting
-                    ? null
-                    : () => setState(() {
-                        _phoneLogin = !_phoneLogin;
-                        _phoneChallengeId = null;
-                        _phoneCode.clear();
-                        _error = null;
-                      }),
-                child: Text(
-                  _phoneLogin ? 'Use email and password' : 'Sign in with phone',
+          _field(_email, 'Email address', CupertinoIcons.at, (value) {
+            final email = value?.trim() ?? '';
+            return email.contains('@') && email.contains('.')
+                ? null
+                : 'Enter a valid email address';
+          }, focusNode: _emailFocusNode),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _password,
+            focusNode: _passwordFocusNode,
+            onTap: () =>
+                FocusScope.of(context).requestFocus(_passwordFocusNode),
+            obscureText: _obscurePassword,
+            validator: (value) {
+              final password = value ?? '';
+              if (password.isEmpty) return 'Enter your password';
+              if (_registering && password.length < 15) {
+                return 'Password must be at least 15 characters';
+              }
+              return null;
+            },
+            decoration: InputDecoration(
+              hintText: 'Password',
+              prefixIcon: const Icon(CupertinoIcons.lock, size: 18),
+              suffixIcon: IconButton(
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+                icon: Icon(
+                  _obscurePassword
+                      ? CupertinoIcons.eye
+                      : CupertinoIcons.eye_slash,
+                  size: 18,
                 ),
               ),
             ),
-          ],
-          if (_phoneLogin && !_registering) ...[
-            if (_phoneChallengeId == null) ...[
-              Row(
-                children: [
-                  SizedBox(
-                    width: 150,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _phoneCountry,
-                      decoration: const InputDecoration(labelText: 'Country'),
-                      items: const [
-                        DropdownMenuItem(value: 'ZW', child: Text('🇿🇼 +263')),
-                        DropdownMenuItem(value: 'ZA', child: Text('🇿🇦 +27')),
-                        DropdownMenuItem(value: 'BW', child: Text('🇧🇼 +267')),
-                        DropdownMenuItem(value: 'MZ', child: Text('🇲🇿 +258')),
-                        DropdownMenuItem(value: 'ZM', child: Text('🇿🇲 +260')),
-                        DropdownMenuItem(value: 'MW', child: Text('🇲🇼 +265')),
-                        DropdownMenuItem(value: 'NA', child: Text('🇳🇦 +264')),
-                        DropdownMenuItem(value: 'SZ', child: Text('🇸🇿 +268')),
-                        DropdownMenuItem(value: 'LS', child: Text('🇱🇸 +266')),
-                        DropdownMenuItem(value: 'GB', child: Text('🇬🇧 +44')),
-                        DropdownMenuItem(value: 'US', child: Text('🇺🇸 +1')),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => _phoneCountry = value ?? 'ZW'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _phone,
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
-                        labelText: 'Phone number',
-                        hintText: '077 123 4567',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'By continuing, you agree to receive an SMS verification code for sign-in. Message and data rates may apply.',
-                style: TextStyle(fontSize: 11),
-              ),
-            ] else ...[
-              Text(
-                'Enter the code sent to $_maskedDestination',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _phoneCode,
-                keyboardType: TextInputType.number,
-                autofillHints: const [AutofillHints.oneTimeCode],
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(10),
-                ],
-                textAlign: TextAlign.center,
-                decoration: const InputDecoration(
-                  labelText: 'Verification code',
-                ),
-              ),
-              TextButton(
-                onPressed: _changePhoneNumber,
-                child: const Text('Change number'),
-              ),
-              TextButton(
-                onPressed: _resendSeconds > 0 || _submitting
-                    ? null
-                    : _resendPhoneCode,
-                child: Text(
-                  _resendSeconds > 0
-                      ? 'Resend code in ${_resendSeconds}s'
-                      : 'Resend code',
-                ),
-              ),
-            ],
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _submitting ? null : _submit,
-                child: Text(
-                  _phoneChallengeId == null
-                      ? 'Send verification code'
-                      : 'Verify and sign in',
-                ),
-              ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Semantics(
-                liveRegion: true,
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            ],
-          ],
-          if (!_phoneLogin || _registering) ...[
-            _field(_email, 'Email address', CupertinoIcons.at, (value) {
-              final email = value?.trim() ?? '';
-              return email.contains('@') && email.contains('.')
-                  ? null
-                  : 'Enter a valid email address';
-            }, focusNode: _emailFocusNode),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _password,
-              focusNode: _passwordFocusNode,
-              onTap: () =>
-                  FocusScope.of(context).requestFocus(_passwordFocusNode),
-              obscureText: _obscurePassword,
-              validator: (value) {
-                final password = value ?? '';
-                if (password.isEmpty) return 'Enter your password';
-                if (_registering && password.length < 15) {
-                  return 'Password must be at least 15 characters';
-                }
-                return null;
-              },
-              decoration: InputDecoration(
-                hintText: 'Password',
-                prefixIcon: const Icon(CupertinoIcons.lock, size: 18),
-                suffixIcon: IconButton(
-                  onPressed: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
-                  icon: Icon(
-                    _obscurePassword
-                        ? CupertinoIcons.eye
-                        : CupertinoIcons.eye_slash,
-                    size: 18,
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
           if (_error != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -704,40 +574,6 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _submit() async {
-    if (_phoneLogin && !_registering) {
-      setState(() {
-        _submitting = true;
-        _error = null;
-      });
-      try {
-        final state = context.read<Property24State>();
-        if (_phoneChallengeId == null) {
-          final response = await state.sendPhoneLoginCode(
-            phone: _phone.text.trim(),
-            country: _phoneCountry,
-          );
-          if (!mounted) return;
-          setState(() {
-            _phoneChallengeId = '${response['challenge_id']}';
-            _maskedDestination = '${response['destination']}';
-          });
-          _startResendCooldown(
-            (response['resend_after'] as num?)?.toInt() ?? 30,
-          );
-        } else {
-          await state.verifyPhoneLoginCode(
-            challengeId: _phoneChallengeId!,
-            code: _phoneCode.text.trim(),
-          );
-          if (mounted) context.go(AppRoutes.homeScreen);
-        }
-      } catch (exception) {
-        if (mounted) setState(() => _error = userFacingError(exception));
-      } finally {
-        if (mounted) setState(() => _submitting = false);
-      }
-      return;
-    }
     if (!_formKey.currentState!.validate()) return;
     if (widget.role == AccountRole.admin && _registering) {
       setState(
@@ -791,47 +627,6 @@ class _AuthScreenState extends State<AuthScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
-  }
-
-  Future<void> _resendPhoneCode() async {
-    final challengeId = _phoneChallengeId;
-    if (challengeId == null) return;
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-    try {
-      final response = await context
-          .read<Property24State>()
-          .resendPhoneLoginCode(challengeId);
-      if (!mounted) return;
-      _startResendCooldown((response['resend_after'] as num?)?.toInt() ?? 30);
-    } catch (exception) {
-      if (mounted) setState(() => _error = userFacingError(exception));
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  Future<void> _changePhoneNumber() async {
-    final challengeId = _phoneChallengeId;
-    if (challengeId != null) {
-      try {
-        await context.read<Property24State>().cancelPhoneLoginChallenge(
-          challengeId,
-        );
-      } catch (_) {
-        // The server also invalidates the challenge on the next send attempt.
-      }
-    }
-    if (!mounted) return;
-    _resendTimer?.cancel();
-    setState(() {
-      _phoneChallengeId = null;
-      _resendSeconds = 0;
-      _phoneCode.clear();
-      _error = null;
-    });
   }
 
   Future<void> _resendRegistrationEmail() async {
