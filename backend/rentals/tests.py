@@ -71,6 +71,8 @@ class ServiceAndJobMarketplaceTests(TestCase):
             email=f"{username}@example.test",
             password="test-password",
             role=role,
+            email_verified=True,
+            phone_verified=True,
         )
 
     def authorize(self, user):
@@ -118,6 +120,24 @@ class ServiceAndJobMarketplaceTests(TestCase):
         self.assertEqual(job_response.json()["owner_id"], self.owner.id)
         self.assertEqual(len(self.client.get("/api/services/").json()["results"]), 1)
         self.assertEqual(len(self.client.get("/api/jobs/").json()["results"]), 1)
+
+    def test_service_and_job_creation_require_verified_email_and_phone(self):
+        self.owner.email_verified = False
+        self.owner.phone_verified = False
+        self.owner.save(update_fields=["email_verified", "phone_verified"])
+        self.authorize(self.owner)
+
+        service_response = self.post_json("/api/services/", self.service_payload)
+        job_response = self.post_json("/api/jobs/", self.job_payload)
+        self.assertEqual(service_response.status_code, 403)
+        self.assertIn("Verify your email", service_response.json()["error"])
+        self.assertEqual(job_response.status_code, 403)
+
+        self.owner.email_verified = True
+        self.owner.save(update_fields=["email_verified"])
+        service_response = self.post_json("/api/services/", self.service_payload)
+        self.assertEqual(service_response.status_code, 403)
+        self.assertIn("Verify your phone", service_response.json()["error"])
 
     def test_listing_validation_rejects_missing_and_disallowed_choices(self):
         self.authorize(self.owner)
@@ -504,6 +524,7 @@ class GoogleSignInConfigTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         user.refresh_from_db()
         self.assertEqual(user.role, User.Roles.TENANT)
+        self.assertTrue(user.email_verified)
         self.assertEqual(response.json()["account"]["account_type"], User.Roles.TENANT)
 
     def test_public_config_returns_first_allowed_google_client_id(self):
@@ -540,6 +561,33 @@ class GoogleSignInConfigTests(TestCase):
         )
 
 
+class ContactVerificationOtpTests(TestCase):
+    def test_phone_verification_uses_sms_provider_independent_of_email_channel(self):
+        user = User.objects.create_user(
+            username="phone-otp-user",
+            email="phone-otp-user@example.test",
+            role=User.Roles.TENANT,
+        )
+        self.client.defaults["HTTP_AUTHORIZATION"] = (
+            f"Bearer {issue_token_pair(user)['access']}"
+        )
+
+        with override_settings(OTP_DELIVERY_CHANNEL="email"), patch(
+            "rentals.views.send_phone_otp",
+            return_value=True,
+        ) as send_otp:
+            response = self.client.post(
+                "/api/verifications/phone-otp/",
+                data=json.dumps({"phone": "+263771234567"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["delivery_channel"], "sms")
+        self.assertEqual(response.json()["expires_in_seconds"], 300)
+        send_otp.assert_called_once()
+
+
 class MarketplaceCapabilityTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -548,6 +596,8 @@ class MarketplaceCapabilityTests(TestCase):
             password="A-strong-password-123!",
             role=User.Roles.TENANT,
             marketplace_capabilities=["list_properties"],
+            email_verified=True,
+            phone_verified=True,
         )
         self.authorization = "Bearer " + issue_token_pair(self.user)["access"]
         self.client.defaults["HTTP_AUTHORIZATION"] = self.authorization
@@ -638,6 +688,20 @@ class MarketplaceCapabilityTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertIn("Enable property listings", response.json()["error"])
+
+    def test_property_listing_requires_verified_email_and_phone(self):
+        self.user.email_verified = False
+        self.user.phone_verified = False
+        self.user.save(update_fields=["email_verified", "phone_verified"])
+
+        response = self.client.post(
+            "/api/properties/",
+            data=json.dumps(self.listing_payload),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Verify your email", response.json()["error"])
 
     def test_landlord_can_save_searches_and_compare_listings(self):
         owner = User.objects.create_user(
@@ -1222,6 +1286,8 @@ class StayVenueListingTests(TestCase):
             username="stay-venue-landlord",
             role=User.Roles.LANDLORD,
             is_verified=True,
+            email_verified=True,
+            phone_verified=True,
         )
         self.authorization = f"Bearer {issue_token_pair(self.landlord)['access']}"
 

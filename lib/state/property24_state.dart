@@ -713,6 +713,23 @@ class Property24State extends ChangeNotifier {
     return _api.requestPhoneVerification(token: activeToken, phone: phone);
   }
 
+  Future<String> requestEmailVerification({required String email}) async {
+    final activeToken = _requireToken();
+    return _api.requestEmailVerification(token: activeToken, email: email);
+  }
+
+  Future<void> verifyEmail(String challengeId, String code) async {
+    final activeToken = _requireToken();
+    final session = await _api.verifyEmail(
+      token: activeToken,
+      challengeId: challengeId,
+      code: code,
+    );
+    user = session.user;
+    account = session.account;
+    notifyListeners();
+  }
+
   Future<void> verifyPhone(String challengeId, String code) async {
     final activeToken = _requireToken();
     final session = await _api.verifyPhone(

@@ -385,6 +385,38 @@ class Property24Api {
     return '${body['challenge_id']}';
   }
 
+  Future<String> requestEmailVerification({
+    required String token,
+    required String email,
+  }) async {
+    final body = await _post(
+      'verifications/email-otp/',
+      token: token,
+      body: {'email': email},
+    );
+    return '${body['challenge_id']}';
+  }
+
+  Future<AuthSession> verifyEmail({
+    required String token,
+    required String challengeId,
+    required String code,
+  }) async {
+    final body = await _post(
+      'verifications/email-otp/verify/',
+      token: token,
+      body: {'challenge_id': challengeId, 'code': code},
+    );
+    return AuthSession(
+      token: token,
+      user: AccountUser.fromJson(
+        body['user'] as Map<String, dynamic>,
+        body['account'] as Map<String, dynamic>?,
+      ),
+      account: AccountContext.fromJson(body['account'] as Map<String, dynamic>),
+    );
+  }
+
   Future<AuthSession> verifyPhone({
     required String token,
     required String challengeId,

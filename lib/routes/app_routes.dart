@@ -9,6 +9,7 @@ import '../screens/admin_users_screen.dart';
 import '../screens/activity_screen.dart';
 import '../screens/auth_screen.dart';
 import '../screens/calls_screen.dart';
+import '../screens/contact_verification_screen.dart';
 import '../screens/discover_screen.dart';
 import '../screens/inbox_screen.dart';
 import '../screens/home_screen.dart';
@@ -85,7 +86,9 @@ final GoRouter appRouter = GoRouter(
     ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>
-          AppScaffold(navigationShell: navigationShell),
+          _ContactVerificationGate(
+            child: AppScaffold(navigationShell: navigationShell),
+          ),
       branches: [
         StatefulShellBranch(
           routes: [
@@ -155,11 +158,13 @@ final GoRouter appRouter = GoRouter(
       name: AppRoutes.listingsName,
       pageBuilder: (context, state) => _fadePage(
         state,
-        ListingsScreen(
-          initialCategories: [
-            state.uri.queryParameters['category'] ?? 'homes',
-          ],
-          openComposerOnOpen: state.uri.queryParameters['create'] != null,
+        _ContactVerificationGate(
+          child: ListingsScreen(
+            initialCategories: [
+              state.uri.queryParameters['category'] ?? 'homes',
+            ],
+            openComposerOnOpen: state.uri.queryParameters['create'] != null,
+          ),
         ),
       ),
     ),
@@ -168,8 +173,10 @@ final GoRouter appRouter = GoRouter(
       name: AppRoutes.marketplaceComposerName,
       pageBuilder: (context, state) => _fadePage(
         state,
-        MarketplaceComposerPage(
-          market: state.pathParameters['market'] ?? 'services',
+        _ContactVerificationGate(
+          child: MarketplaceComposerPage(
+            market: state.pathParameters['market'] ?? 'services',
+          ),
         ),
       ),
     ),
@@ -213,6 +220,22 @@ final GoRouter appRouter = GoRouter(
     ),
   ],
 );
+
+class _ContactVerificationGate extends StatelessWidget {
+  const _ContactVerificationGate({required this.child});
+
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<Property24State>().user;
+    if (user != null &&
+        user.role != AccountRole.admin &&
+        (!user.emailVerified || !user.phoneVerified)) {
+      return const ContactVerificationScreen();
+    }
+    return child;
+  }
+}
 
 CustomTransitionPage<void> _fadePage(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(

@@ -1030,6 +1030,9 @@ def properties_collection(request):
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
+    contact_error = require_verified_contact(acting_user)
+    if contact_error:
+        return contact_error
     if not can_list_properties(acting_user):
         return json_error("Enable property listings in your account before creating a listing", status=403)
 
@@ -1146,6 +1149,16 @@ def marketplace_authenticated_user(request):
     if error:
         return None, json_error(error, status=401)
     return user, None
+
+
+def require_verified_contact(user):
+    if is_admin(user):
+        return None
+    if not user.email_verified:
+        return json_error("Verify your email before creating marketplace content", status=403)
+    if not user.phone_verified:
+        return json_error("Verify your phone number before creating marketplace content", status=403)
+    return None
 
 
 def marketplace_payload(request):
@@ -1293,6 +1306,9 @@ def services_collection(request):
     acting_user, auth_response = marketplace_authenticated_user(request)
     if auth_response:
         return auth_response
+    contact_error = require_verified_contact(acting_user)
+    if contact_error:
+        return contact_error
     data, error = marketplace_payload(request)
     if error:
         return error
@@ -1420,6 +1436,9 @@ def jobs_collection(request):
     acting_user, auth_response = marketplace_authenticated_user(request)
     if auth_response:
         return auth_response
+    contact_error = require_verified_contact(acting_user)
+    if contact_error:
+        return contact_error
     data, error = marketplace_payload(request)
     if error:
         return error
@@ -2683,7 +2702,7 @@ def verification_email_otp(request):
         email=email,
         code_hash=hash_otp(otp_code),
         sent_to=email,
-        expires_at=timezone.now() + timedelta(seconds=30),
+        expires_at=timezone.now() + timedelta(minutes=5),
     )
     delivered = send_verification_otp_email(email, otp_code)
     if not delivered:
@@ -2696,7 +2715,7 @@ def verification_email_otp(request):
             "challenge_id": str(challenge.id),
             "email": mask_email(email),
             "delivery_channel": "email",
-            "expires_in_seconds": 30,
+            "expires_in_seconds": 300,
             "message": "OTP sent to your email",
         },
         status=201,
@@ -2777,16 +2796,11 @@ def verification_phone_otp(request):
         phone=phone,
         code_hash=hash_otp(otp_code),
         sent_to=phone,
-        expires_at=timezone.now() + timedelta(seconds=30),
+        expires_at=timezone.now() + timedelta(minutes=5),
     )
-    delivery_channel = "configured_provider_required"
-    message = ""
-    delivered = False
-    if settings.OTP_DELIVERY_CHANNEL in {"sms", "phone", "twilio"}:
-        delivered = send_phone_otp(phone, otp_code)
-        if delivered:
-            delivery_channel = "sms"
-            message = "OTP sent to your phone"
+    delivery_channel = "sms"
+    message = "OTP sent to your phone"
+    delivered = send_phone_otp(phone, otp_code)
     if not delivered:
         challenge.status = PhoneVerificationOTP.Status.EXPIRED
         challenge.save(update_fields=["status", "updated_at"])
@@ -2797,7 +2811,7 @@ def verification_phone_otp(request):
             "challenge_id": str(challenge.id),
             "phone": phone,
             "delivery_channel": delivery_channel,
-            "expires_in_seconds": 30,
+            "expires_in_seconds": 300,
             "message": message,
         },
         status=201,
@@ -4305,7 +4319,7 @@ def send_twilio_phone_otp(phone, code):
 
     payload = {
         "To": phone,
-        "Body": f"Your Property24 verification code is {code}. It expires in 30 seconds.",
+        "Body": f"Your Property24 verification code is {code}. It expires in 5 minutes.",
     }
     if messaging_service_sid:
         payload["MessagingServiceSid"] = messaging_service_sid
@@ -4845,6 +4859,8 @@ def create_google_account(claims, data):
         "google_subject": subject,
         "google_email_verified": email_verified,
     }
+    if email_verified:
+        updates["email_verified"] = True
     if email and not user.email:
         updates["email"] = email
     if name and not user.full_name:
