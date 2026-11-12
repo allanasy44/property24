@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:google_sign_in_web/web_only.dart' as google_web;
 
 import '../services/property24_api.dart';
@@ -17,9 +16,9 @@ class GoogleWebSignInButton extends StatefulWidget {
 }
 
 class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
-  GoogleSignIn? _signIn;
-  StreamSubscription<GoogleSignInUserData?>? _subscription;
+  StreamSubscription<GoogleSignInAuthenticationEvent>? _subscription;
   String? _error;
+  bool _initialized = false;
 
   @override
   void initState() {
@@ -29,17 +28,23 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
 
   Future<void> _initialize() async {
     try {
-      final clientId = await Property24Api().googleWebClientId();
-      _signIn = GoogleSignIn(clientId: clientId);
-      _subscription = GoogleSignInPlatform.instance.userDataEvents?.listen((
-        data,
-      ) {
-        final idToken = data?.idToken;
-        if (idToken != null && idToken.isNotEmpty) {
-          widget.onCredential(idToken);
-        }
-      });
-      if (mounted) setState(() {});
+      await Property24Api().initializeGoogleSignIn();
+      _subscription = GoogleSignIn.instance.authenticationEvents.listen(
+        (event) {
+          if (event case GoogleSignInAuthenticationEventSignIn(:final user)) {
+            final idToken = user.authentication.idToken;
+            if (idToken != null && idToken.isNotEmpty) {
+              widget.onCredential(idToken);
+            }
+          }
+        },
+        onError: (Object exception) {
+          if (mounted) {
+            setState(() => _error = userFacingError(exception));
+          }
+        },
+      );
+      if (mounted) setState(() => _initialized = true);
     } catch (exception) {
       if (mounted) setState(() => _error = userFacingError(exception));
     }
@@ -56,7 +61,7 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
     if (_error != null) {
       return Text(_error!);
     }
-    if (!mounted || !_isInitialized) {
+    if (!_initialized) {
       return const SizedBox(
         height: 48,
         child: Center(child: CircularProgressIndicator()),
@@ -68,6 +73,4 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
       child: google_web.renderButton(),
     );
   }
-
-  bool get _isInitialized => _signIn != null && _subscription != null;
 }

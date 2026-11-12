@@ -171,15 +171,44 @@ class PropertyDraft {
 class Property24Api {
   Property24Api({http.Client? client}) : _client = client ?? http.Client();
 
+  static Future<void>? _googleSignInInitialization;
+
   final http.Client _client;
 
-  Future<String> googleSignIn() async {
-    final clientId = kIsWeb ? await googleWebClientId() : null;
-    final account = await GoogleSignIn(clientId: clientId).signIn();
-    if (account == null) {
-      throw const ApiException('Google sign-in was cancelled');
+  Future<void> initializeGoogleSignIn() async {
+    final pending = _googleSignInInitialization;
+    if (pending != null) {
+      await pending;
+      return;
     }
-    final authentication = await account.authentication;
+
+    final initialization = _initializeGoogleSignIn();
+    _googleSignInInitialization = initialization;
+    try {
+      await initialization;
+    } catch (_) {
+      if (identical(_googleSignInInitialization, initialization)) {
+        _googleSignInInitialization = null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _initializeGoogleSignIn() async {
+    final clientId = kIsWeb ? await googleWebClientId() : null;
+    await GoogleSignIn.instance.initialize(clientId: clientId);
+  }
+
+  Future<String> googleSignIn() async {
+    await initializeGoogleSignIn();
+    final googleSignIn = GoogleSignIn.instance;
+    if (!googleSignIn.supportsAuthenticate()) {
+      throw const ApiException(
+        'Use the Google sign-in button to continue on this platform.',
+      );
+    }
+    final account = await googleSignIn.authenticate();
+    final authentication = account.authentication;
     final idToken = authentication.idToken;
     if (idToken == null || idToken.isEmpty) {
       throw const ApiException('Google did not return an ID token');
