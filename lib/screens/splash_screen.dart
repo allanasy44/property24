@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
@@ -303,7 +302,12 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
                   flex: 8,
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      final size = constraints.biggest.shortestSide;
+                      const logoAspectRatio = 1600 / 420;
+                      final logoHeight =
+                          constraints.maxHeight <
+                              constraints.maxWidth / logoAspectRatio
+                          ? constraints.maxHeight
+                          : constraints.maxWidth / logoAspectRatio;
                       return Center(
                         child: FadeTransition(
                           opacity: _logoOpacity,
@@ -311,12 +315,8 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
                             scale: _logoScale,
                             child: Semantics(
                               label: 'inprop',
-                              child: SvgPicture.asset(
-                                'web/favicon.svg',
-                                width: size,
-                                height: size,
-                                fit: BoxFit.cover,
-                                alignment: Alignment.centerLeft,
+                              child: InPropBrand(
+                                size: logoHeight.clamp(0, 180),
                               ),
                             ),
                           ),
@@ -492,7 +492,7 @@ class _OnboardingView extends StatelessWidget {
         Positioned(
           top: MediaQuery.of(context).padding.top + 16,
           left: 20,
-          child: const InPropBrand(onImage: true),
+          child: const InPropBrand(),
         ),
 
         // Skip button

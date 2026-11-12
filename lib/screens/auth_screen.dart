@@ -109,7 +109,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const InPropBrand(showWordmark: false, size: 80),
+                              const InPropBrand(size: 56),
                               const SizedBox(height: 26),
                               if (_showForm)
                                 _formContent()
