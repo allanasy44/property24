@@ -295,11 +295,9 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
+            child: Stack(
               children: [
-                const Spacer(flex: 2),
-                Expanded(
-                  flex: 8,
+                Center(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       const logoAspectRatio = 1600 / 420;
@@ -308,16 +306,15 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
                               constraints.maxWidth / logoAspectRatio
                           ? constraints.maxHeight
                           : constraints.maxWidth / logoAspectRatio;
-                      return Center(
-                        child: FadeTransition(
-                          opacity: _logoOpacity,
-                          child: ScaleTransition(
-                            scale: _logoScale,
-                            child: Semantics(
-                              label: 'inprop',
-                              child: InPropBrand(
-                                size: logoHeight.clamp(0, 180),
-                              ),
+                      return FadeTransition(
+                        opacity: _logoOpacity,
+                        child: ScaleTransition(
+                          scale: _logoScale,
+                          child: Semantics(
+                            label: 'inprop',
+                            child: InPropBrand(
+                              size: logoHeight.clamp(0, 180),
+                              onImage: true,
                             ),
                           ),
                         ),
@@ -325,93 +322,102 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
                     },
                   ),
                 ),
-                FadeTransition(
-                  opacity: _copyOpacity,
-                  child: SlideTransition(
-                    position: _copySlide,
-                    child: SizedBox(
-                      height: 100,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 800),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeInCubic,
-                        transitionBuilder: (child, animation) {
-                          final isLeaving =
-                              animation.status == AnimationStatus.reverse;
-                          return FadeTransition(
-                            opacity: animation,
-                            child: SlideTransition(
-                              position: animation.drive(
-                                Tween<Offset>(
-                                  begin: isLeaving
-                                      ? const Offset(0, -0.45)
-                                      : const Offset(0, 0.45),
-                                  end: Offset.zero,
-                                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 20,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FadeTransition(
+                        opacity: _copyOpacity,
+                        child: SlideTransition(
+                          position: _copySlide,
+                          child: SizedBox(
+                            height: 100,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 800),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              transitionBuilder: (child, animation) {
+                                final isLeaving =
+                                    animation.status == AnimationStatus.reverse;
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: SlideTransition(
+                                    position: animation.drive(
+                                      Tween<Offset>(
+                                        begin: isLeaving
+                                            ? const Offset(0, -0.45)
+                                            : const Offset(0, 0.45),
+                                        end: Offset.zero,
+                                      ),
+                                    ),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: Column(
+                                key: ValueKey(_messageIndex),
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    _headlines[_messageIndex],
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.1,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _descriptions[_messageIndex],
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white.withAlpha(179),
+                                      fontSize: 12,
+                                      height: 1.5,
+                                      fontWeight: FontWeight.w400,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              child: child,
                             ),
-                          );
-                        },
-                        child: Column(
-                          key: ValueKey(_messageIndex),
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              _headlines[_messageIndex],
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.1,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _descriptions[_messageIndex],
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.poppins(
-                                color: Colors.white.withAlpha(179),
-                                fontSize: 12,
-                                height: 1.5,
-                                fontWeight: FontWeight.w400,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  width: 104,
-                  child: AnimatedBuilder(
-                    animation: _lineWidth,
-                    builder: (context, child) {
-                      return Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          width: 104 * _lineWidth.value,
-                          height: 2,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                AppTheme.accentTeal,
-                                AppTheme.accent,
-                                AppTheme.accentGold,
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+                      const SizedBox(height: 28),
+                      SizedBox(
+                        width: 104,
+                        child: AnimatedBuilder(
+                          animation: _lineWidth,
+                          builder: (context, child) {
+                            return Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                width: 104 * _lineWidth.value,
+                                height: 2,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      AppTheme.accentTeal,
+                                      AppTheme.accent,
+                                      AppTheme.accentGold,
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(flex: 2),
               ],
             ),
           ),
@@ -492,7 +498,7 @@ class _OnboardingView extends StatelessWidget {
         Positioned(
           top: MediaQuery.of(context).padding.top + 16,
           left: 20,
-          child: const InPropBrand(),
+          child: const InPropBrand(onImage: true),
         ),
 
         // Skip button

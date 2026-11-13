@@ -10,7 +10,7 @@
     "prefer_related_applications": false,
     "icons": [
         {
-            "src": "favicon.svg",
+            "src": "inprop-logo.svg",
             "sizes": "any",
             "type": "image/svg+xml",
             "purpose": "any"
