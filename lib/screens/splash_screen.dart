@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -196,26 +194,9 @@ class _BrandLaunchScreen extends StatefulWidget {
 
 class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
     with SingleTickerProviderStateMixin {
-  static const _headlines = [
-    'One marketplace for your next step.',
-    'Find places, stays, services and work.',
-    'Share what you have to offer.',
-  ];
-  static const _descriptions = [
-    'Explore property, accommodation, events, local services, and jobs.',
-    'Search in one place and connect directly with people.',
-    'List a property, offer a service, or post a job when you are ready.',
-  ];
-
   late final AnimationController _controller;
   late final Animation<double> _logoOpacity;
   late final Animation<double> _logoScale;
-  late final Animation<double> _copyOpacity;
-  late final Animation<Offset> _copySlide;
-  late final Animation<double> _lineWidth;
-  Timer? _messageStartTimer;
-  Timer? _messageTimer;
-  int _messageIndex = 0;
 
   @override
   void initState() {
@@ -223,7 +204,7 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
     _controller =
         AnimationController(
           vsync: this,
-          duration: const Duration(milliseconds: 11500),
+          duration: const Duration(milliseconds: 1500),
         )..addStatusListener((status) {
           if (status == AnimationStatus.completed) {
             widget.onFinished();
@@ -240,41 +221,11 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
         curve: const Interval(0, 0.2, curve: Curves.easeOutCubic),
       ),
     );
-    _copyOpacity = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.1, 0.22, curve: Curves.easeOutCubic),
-    );
-    _copySlide = Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero)
-        .animate(
-          CurvedAnimation(
-            parent: _controller,
-            curve: const Interval(0.1, 0.24, curve: Curves.easeOutCubic),
-          ),
-        );
-    _lineWidth = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.2, 1, curve: Curves.easeInOut),
-    );
-    _messageStartTimer = Timer(const Duration(milliseconds: 2400), () {
-      _messageTimer = Timer.periodic(const Duration(milliseconds: 3000), (
-        timer,
-      ) {
-        if (!mounted || _messageIndex == _headlines.length - 1) {
-          timer.cancel();
-          return;
-        }
-        setState(() {
-          _messageIndex++;
-        });
-      });
-    });
     _controller.forward();
   }
 
   @override
   void dispose() {
-    _messageStartTimer?.cancel();
-    _messageTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -285,136 +236,46 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
       backgroundColor: Colors.white,
       body: ColoredBox(
         color: Colors.white,
-        child: SafeArea(
+        child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Stack(
-              children: [
-                Center(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      const logoAspectRatio = 1600 / 420;
-                      final logoHeight =
-                          constraints.maxHeight <
-                              constraints.maxWidth / logoAspectRatio
-                          ? constraints.maxHeight
-                          : constraints.maxWidth / logoAspectRatio;
-                      return FadeTransition(
-                        opacity: _logoOpacity,
-                        child: ScaleTransition(
-                          scale: _logoScale,
-                          child: Semantics(
-                            label: 'inprop',
-                            child: InPropBrand(
-                              size: logoHeight.clamp(0, 180),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 20,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FadeTransition(
-                        opacity: _copyOpacity,
-                        child: SlideTransition(
-                          position: _copySlide,
-                          child: SizedBox(
-                            height: 100,
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 800),
-                              switchInCurve: Curves.easeOutCubic,
-                              switchOutCurve: Curves.easeInCubic,
-                              transitionBuilder: (child, animation) {
-                                final isLeaving =
-                                    animation.status == AnimationStatus.reverse;
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: SlideTransition(
-                                    position: animation.drive(
-                                      Tween<Offset>(
-                                        begin: isLeaving
-                                            ? const Offset(0, -0.45)
-                                            : const Offset(0, 0.45),
-                                        end: Offset.zero,
-                                      ),
-                                    ),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: Column(
-                                key: ValueKey(_messageIndex),
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    _headlines[_messageIndex],
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.poppins(
-                                      color: const Color(0xff1f1e18),
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.1,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    _descriptions[_messageIndex],
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.poppins(
-                                      color: const Color(0xff5f5f59),
-                                      fontSize: 12,
-                                      height: 1.5,
-                                      fontWeight: FontWeight.w400,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      SizedBox(
-                        width: 104,
-                        child: AnimatedBuilder(
-                          animation: _lineWidth,
-                          builder: (context, child) {
-                            return Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                width: 104 * _lineWidth.value,
-                                height: 2,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      AppTheme.accentTeal,
-                                      AppTheme.accent,
-                                      AppTheme.accentGold,
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            child: _CenteredLaunchLogo(
+              opacity: _logoOpacity,
+              scale: _logoScale,
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CenteredLaunchLogo extends StatelessWidget {
+  const _CenteredLaunchLogo({required this.opacity, required this.scale});
+
+  final Animation<double> opacity;
+  final Animation<double> scale;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const logoAspectRatio = 1360 / 420;
+        final widthLimitedHeight = constraints.maxWidth / logoAspectRatio;
+        final heightLimitedSize = constraints.maxHeight;
+        final logoHeight =
+            (heightLimitedSize < widthLimitedHeight
+                    ? heightLimitedSize
+                    : widthLimitedHeight)
+                .clamp(0.0, 180.0);
+        return FadeTransition(
+          opacity: opacity,
+          child: ScaleTransition(
+            scale: scale,
+            child: InPropBrand(size: logoHeight),
+          ),
+        );
+      },
     );
   }
 }

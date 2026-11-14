@@ -90,7 +90,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 28,
-                            vertical: 30,
+                            vertical: 22,
                           ),
                           decoration: BoxDecoration(
                             color: AppTheme.bgCard.withAlpha(242),
@@ -109,8 +109,19 @@ class _AuthScreenState extends State<AuthScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const InPropBrand(size: 56),
-                              const SizedBox(height: 26),
+                              LayoutBuilder(
+                                builder: (context, logoConstraints) {
+                                  const aspectRatio = 1360 / 420;
+                                  const maxLogoSize = 112.0;
+                                  final logoSize =
+                                      logoConstraints.maxWidth <
+                                          maxLogoSize * aspectRatio
+                                      ? logoConstraints.maxWidth / aspectRatio
+                                      : maxLogoSize;
+                                  return InPropBrand(size: logoSize);
+                                },
+                              ),
+                              const SizedBox(height: 18),
                               if (_showForm)
                                 _formContent()
                               else

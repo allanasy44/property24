@@ -28,6 +28,8 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
 
   Future<void> _initialize() async {
     try {
+      await _subscription?.cancel();
+      _subscription = null;
       await Property24Api().initializeGoogleSignIn();
       _subscription = GoogleSignIn.instance.authenticationEvents.listen(
         (event) {
@@ -50,6 +52,14 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
     }
   }
 
+  void _retryInitialization() {
+    setState(() {
+      _error = null;
+      _initialized = false;
+    });
+    _initialize();
+  }
+
   @override
   void dispose() {
     _subscription?.cancel();
@@ -59,12 +69,46 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
-      return Text(_error!);
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(_error!, textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: _retryInitialization,
+              icon: const Text(
+                'G',
+                style: TextStyle(
+                  color: Color(0xff4285f4),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              label: const Text('Sign in with Google'),
+            ),
+          ),
+        ],
+      );
     }
     if (!_initialized) {
-      return const SizedBox(
+      return SizedBox(
         height: 48,
-        child: Center(child: CircularProgressIndicator()),
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: null,
+          icon: Text(
+            'G',
+            style: TextStyle(
+              color: Color(0xff4285f4),
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          label: Text('Sign in with Google'),
+        ),
       );
     }
     return SizedBox(

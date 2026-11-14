@@ -77,7 +77,18 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Center(child: InPropBrand(size: 56)),
+                  Center(
+                    child: LayoutBuilder(
+                      builder: (context, logoConstraints) {
+                        const aspectRatio = 1360 / 420;
+                        final logoSize =
+                            logoConstraints.maxWidth < 56 * aspectRatio
+                            ? logoConstraints.maxWidth / aspectRatio
+                            : 56.0;
+                        return InPropBrand(size: logoSize);
+                      },
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   const Icon(
                     Icons.verified_user_outlined,
