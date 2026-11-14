@@ -45,16 +45,20 @@ Use Flutter stable with Dart 3.10 or newer.
 
 ```bash
 flutter pub get
-flutter run -d chrome --web-port 8093 \
+flutter run -d web-server --web-hostname 0.0.0.0 --web-port 8080 \
   --dart-define=API_BASE_URL=http://127.0.0.1:8010/api
 ```
 
 For Google sign-in on web, create a Web OAuth client in Google Cloud Console
-and add `http://localhost:8093` as an authorized JavaScript origin (also add
-`http://127.0.0.1:8093` if you open the app using that host). The web app reads
-the public client ID from `GOOGLE_CLIENT_IDS` through the backend's
-`/api/auth/google/config/` endpoint when Google sign-in starts. Set
-`GOOGLE_SIGN_IN_ENABLED=true` and include the Web OAuth client ID in
+and add `http://localhost` and `http://localhost:8080` as authorized JavaScript
+origins. If you open the app as `http://127.0.0.1:8080`, add
+`http://127.0.0.1` and `http://127.0.0.1:8080` too. For this command, bind the
+server to all interfaces but open the page at `http://localhost:8080`. Do not
+open the page using `http://0.0.0.0:8080` or a plain-HTTP LAN IP; use
+localhost for local testing, or HTTPS for access from another device. The web
+app reads the public client ID from `GOOGLE_CLIENT_IDS` through the backend's
+`/api/auth/google/config/` endpoint. The first ID in that list must be the Web
+OAuth client ID. Set `GOOGLE_SIGN_IN_ENABLED=true` and include that client ID in
 `GOOGLE_CLIENT_IDS` in `backend/.env`. Client IDs are public identifiers; never
 put an OAuth client secret in the Flutter app.
 

@@ -19,6 +19,20 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="inprop property discovery and rental platform.">
+  <script>
+    if (location.hostname === '0.0.0.0') {
+      const localUrl = new URL(location.href);
+      localUrl.hostname = 'localhost';
+      location.replace(localUrl.toString());
+    }
+    const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+    const referrerPolicy = document.createElement('meta');
+    referrerPolicy.name = 'referrer';
+    referrerPolicy.content = isLocalhost
+      ? 'no-referrer-when-downgrade'
+      : 'strict-origin-when-cross-origin';
+    document.head.appendChild(referrerPolicy);
+  </script>
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">

@@ -7,9 +7,14 @@ import 'package:google_sign_in_web/web_only.dart' as google_web;
 import '../services/property24_api.dart';
 
 class GoogleWebSignInButton extends StatefulWidget {
-  const GoogleWebSignInButton({required this.onCredential, super.key});
+  const GoogleWebSignInButton({
+    required this.onCredential,
+    this.isRegistration = false,
+    super.key,
+  });
 
   final ValueChanged<String> onCredential;
+  final bool isRegistration;
 
   @override
   State<GoogleWebSignInButton> createState() => _GoogleWebSignInButtonState();
@@ -52,14 +57,6 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
     }
   }
 
-  void _retryInitialization() {
-    setState(() {
-      _error = null;
-      _initialized = false;
-    });
-    _initialize();
-  }
-
   @override
   void dispose() {
     _subscription?.cancel();
@@ -69,52 +66,39 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(_error!, textAlign: TextAlign.center),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: _retryInitialization,
-              icon: const Text(
-                'G',
-                style: TextStyle(
-                  color: Color(0xff4285f4),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              label: const Text('Sign in with Google'),
-            ),
-          ),
-        ],
-      );
+      return Text(_error!, textAlign: TextAlign.center);
     }
     if (!_initialized) {
-      return SizedBox(
+      return const SizedBox(
         height: 48,
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          onPressed: null,
-          icon: Text(
-            'G',
-            style: TextStyle(
-              color: Color(0xff4285f4),
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          label: Text('Sign in with Google'),
-        ),
+        child: Center(child: CircularProgressIndicator()),
       );
     }
-    return SizedBox(
-      height: 48,
-      width: double.infinity,
-      child: google_web.renderButton(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 320.0;
+        final buttonWidth = availableWidth / 2;
+        return Center(
+          child: SizedBox(
+            height: 48,
+            width: buttonWidth,
+            child: google_web.renderButton(
+              configuration: google_web.GSIButtonConfiguration(
+                theme: google_web.GSIButtonTheme.outline,
+                size: google_web.GSIButtonSize.large,
+                shape: google_web.GSIButtonShape.rectangular,
+                logoAlignment: google_web.GSIButtonLogoAlignment.left,
+                text: widget.isRegistration
+                    ? google_web.GSIButtonText.signupWith
+                    : google_web.GSIButtonText.continueWith,
+                minimumWidth: buttonWidth,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

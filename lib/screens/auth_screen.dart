@@ -188,7 +188,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 18),
           Center(
             child: Text(
-              'OR CONTINUE WITH',
+              'OR',
               style: TextStyle(
                 color: AppTheme.textMuted,
                 fontSize: 10,
@@ -284,7 +284,10 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Widget _socialButtons() {
     if (kIsWeb) {
-      return GoogleWebSignInButton(onCredential: _googleAuthWithToken);
+      return GoogleWebSignInButton(
+        onCredential: _googleAuthWithToken,
+        isRegistration: _registering,
+      );
     }
     return SizedBox(
       width: double.infinity,
@@ -472,7 +475,10 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 14),
           if (widget.role != AccountRole.admin) ...[
             if (kIsWeb)
-              GoogleWebSignInButton(onCredential: _googleAuthWithToken)
+              GoogleWebSignInButton(
+                onCredential: _googleAuthWithToken,
+                isRegistration: _registering,
+              )
             else
               SizedBox(
                 width: double.infinity,
