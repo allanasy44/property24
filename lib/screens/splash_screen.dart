@@ -282,16 +282,9 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xff070916),
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.16),
-            radius: 0.9,
-            colors: [Color(0xff17144b), Color(0xff0d1025), Color(0xff070916)],
-            stops: [0, 0.58, 1],
-          ),
-        ),
+      backgroundColor: Colors.white,
+      body: ColoredBox(
+        color: Colors.white,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -314,7 +307,6 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
                             label: 'inprop',
                             child: InPropBrand(
                               size: logoHeight.clamp(0, 180),
-                              onImage: true,
                             ),
                           ),
                         ),
@@ -365,7 +357,7 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
                                     _headlines[_messageIndex],
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.poppins(
-                                      color: Colors.white,
+                                      color: const Color(0xff1f1e18),
                                       fontSize: 20,
                                       fontWeight: FontWeight.w600,
                                       letterSpacing: 0.1,
@@ -376,7 +368,7 @@ class _BrandLaunchScreenState extends State<_BrandLaunchScreen>
                                     _descriptions[_messageIndex],
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.poppins(
-                                      color: Colors.white.withAlpha(179),
+                                      color: const Color(0xff5f5f59),
                                       fontSize: 12,
                                       height: 1.5,
                                       fontWeight: FontWeight.w400,

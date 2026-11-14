@@ -6,6 +6,7 @@ import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/inprop_brand.dart';
 
 class ContactVerificationScreen extends StatefulWidget {
   const ContactVerificationScreen({super.key});
@@ -55,7 +56,7 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
     }
     if (user.emailVerified && user.phoneVerified) {
       return Scaffold(
-        backgroundColor: AppTheme.bg,
+        backgroundColor: Colors.white,
         body: Center(
           child: FilledButton(
             onPressed: () => context.go(AppRoutes.homeScreen),
@@ -66,7 +67,7 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppTheme.bg,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -76,6 +77,8 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const Center(child: InPropBrand(size: 56)),
+                  const SizedBox(height: 24),
                   const Icon(
                     Icons.verified_user_outlined,
                     color: AppTheme.accent,
