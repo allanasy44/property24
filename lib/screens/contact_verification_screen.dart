@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl_phone_number_input/intl_phone_number_input.dart';
 import 'package:provider/provider.dart';
 
 import '../routes/app_routes.dart';
@@ -31,6 +32,9 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
   final _phoneCode = TextEditingController();
   String? _emailChallengeId;
   String? _phoneChallengeId;
+  String _internationalPhone = '';
+  bool _phoneValid = false;
+  bool _initialPhoneResolved = false;
   String? _error;
   bool _busy = false;
 
@@ -41,8 +45,30 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
     if (user != null) {
       if (_email.text.isEmpty) _email.text = user.email;
       if (_phone.text.isEmpty) _phone.text = user.phone;
+      if (!_initialPhoneResolved) {
+        _initialPhoneResolved = true;
+        if (user.phone.trim().isNotEmpty) {
+          _resolveInitialPhone(user.phone.trim());
+        }
+      }
     }
   }
+
+  Future<void> _resolveInitialPhone(String phone) async {
+    try {
+      final parsed = await PhoneNumber.getRegionInfoFromPhoneNumber(phone);
+      if (!mounted) return;
+      setState(() {
+        _initialPhone = parsed;
+        _internationalPhone = parsed.phoneNumber ?? phone;
+        _phoneValid = true;
+      });
+    } catch (_) {
+      // Keep the field editable so the user can replace an unrecognized number.
+    }
+  }
+
+  PhoneNumber? _initialPhone;
 
   @override
   void dispose() {
@@ -285,23 +311,7 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
                                 },
                               ),
                             ),
-                            const SizedBox(height: 22),
-                            Center(
-                              child: Container(
-                                width: 52,
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.accent.withAlpha(18),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.phone_iphone_rounded,
-                                  color: AppTheme.accent,
-                                  size: 25,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 28),
                             Text(
                               'Verify your phone number',
                               textAlign: TextAlign.center,
@@ -335,21 +345,98 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
                               ),
                             ),
                             const SizedBox(height: 22),
-                            TextField(
-                              controller: _phone,
-                              enabled: !_busy && !codeRequested,
-                              keyboardType: TextInputType.phone,
-                              style: const TextStyle(
-                                color: _verificationTextColor,
-                              ),
-                              decoration: _verificationInputDecoration(
-                                hintText: 'Zimbabwe mobile number',
-                                prefixIcon: const Icon(
-                                  Icons.phone_outlined,
-                                  size: 19,
+                            if (codeRequested)
+                              Center(
+                                child: SizedBox(
+                                  width: 260,
+                                  child: InputDecorator(
+                                    decoration: _verificationInputDecoration(
+                                      labelText: 'Mobile number',
+                                      prefixIcon: const Icon(
+                                        Icons.phone_outlined,
+                                        size: 19,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _internationalPhone,
+                                      style: const TextStyle(
+                                        color: _verificationTextColor,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else
+                              Center(
+                                child: SizedBox(
+                                  width: 260,
+                                  child: Theme(
+                                    data: AppTheme.lightTheme,
+                                    child: InternationalPhoneNumberInput(
+                                      initialValue:
+                                          _initialPhone ??
+                                          PhoneNumber(isoCode: 'ZW'),
+                                      textFieldController: _phone,
+                                      selectorConfig: const SelectorConfig(
+                                        selectorType:
+                                            PhoneInputSelectorType.DIALOG,
+                                        showFlags: true,
+                                        useEmoji: true,
+                                        setSelectorButtonAsPrefixIcon: true,
+                                      ),
+                                      countries: null,
+                                      formatInput: true,
+                                      autoValidateMode:
+                                          AutovalidateMode.onUserInteraction,
+                                      onInputChanged: (number) {
+                                        setState(() {
+                                          _internationalPhone =
+                                              number.phoneNumber ?? '';
+                                          _phoneValid = false;
+                                        });
+                                      },
+                                      onInputValidated: (valid) {
+                                        if (mounted) {
+                                          setState(() => _phoneValid = valid);
+                                        }
+                                      },
+                                      textStyle: const TextStyle(
+                                        color: _verificationTextColor,
+                                        fontSize: 14,
+                                      ),
+                                      selectorTextStyle: const TextStyle(
+                                        color: _verificationTextColor,
+                                        fontSize: 14,
+                                      ),
+                                      errorMessage:
+                                          'Enter a valid phone number',
+                                      inputDecoration:
+                                          _verificationInputDecoration(
+                                            hintText: 'Mobile number',
+                                          ),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                            if (!codeRequested &&
+                                !_phoneValid &&
+                                _phone.text.trim().isEmpty)
+                              Center(
+                                child: SizedBox(
+                                  width: 260,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      'Select your country and enter your number',
+                                      textAlign: TextAlign.left,
+                                      style: TextStyle(
+                                        color: _verificationMutedTextColor,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             if (codeRequested) ...[
                               const SizedBox(height: 12),
                               TextField(
@@ -390,60 +477,89 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
                               ),
                             ],
                             const SizedBox(height: 18),
-                            SizedBox(
-                              height: 46,
-                              child: FilledButton(
-                                onPressed: _busy
-                                    ? null
-                                    : codeRequested
-                                    ? _verifyPhoneCode
-                                    : _requestPhoneCode,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppTheme.accent,
-                                  foregroundColor: Colors.white,
-                                ),
-                                child: _busy
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
+                            Center(
+                              child: SizedBox(
+                                width: 260,
+                                height: 44,
+                                child: FilledButton(
+                                  onPressed: _busy
+                                      ? null
+                                      : codeRequested
+                                      ? _verifyPhoneCode
+                                      : _phoneValid
+                                      ? _requestPhoneCode
+                                      : null,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppTheme.accent,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: _busy
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : Text(
+                                          codeRequested
+                                              ? 'Verify phone number'
+                                              : 'Send verification code',
                                         ),
-                                      )
-                                    : Text(
-                                        codeRequested
-                                            ? 'Verify phone number'
-                                            : 'Send verification code',
-                                      ),
+                                ),
                               ),
                             ),
                             if (codeRequested) ...[
                               const SizedBox(height: 4),
-                              TextButton(
-                                onPressed: _busy ? null : _requestPhoneCode,
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppTheme.accent,
+                              Center(
+                                child: SizedBox(
+                                  width: 260,
+                                  height: 44,
+                                  child: OutlinedButton(
+                                    onPressed: _busy ? null : _requestPhoneCode,
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: AppTheme.accent,
+                                      side: const BorderSide(
+                                        color: _verificationBorderColor,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    child: const Text('Resend code'),
+                                  ),
                                 ),
-                                child: const Text('Resend code'),
                               ),
                             ],
                             const SizedBox(height: 4),
-                            TextButton(
-                              onPressed: _busy
-                                  ? null
-                                  : () async {
-                                      await context
-                                          .read<Property24State>()
-                                          .signOut();
-                                      if (context.mounted) {
-                                        context.go(AppRoutes.initial);
-                                      }
-                                    },
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppTheme.accent,
+                            Center(
+                              child: SizedBox(
+                                width: 260,
+                                height: 44,
+                                child: TextButton(
+                                  onPressed: _busy
+                                      ? null
+                                      : () async {
+                                          await context
+                                              .read<Property24State>()
+                                              .signOut();
+                                          if (context.mounted) {
+                                            context.go(AppRoutes.initial);
+                                          }
+                                        },
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: AppTheme.accent,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: const Text('Use a different account'),
+                                ),
                               ),
-                              child: const Text('Use a different account'),
                             ),
                           ],
                         ),
@@ -463,7 +579,7 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
     String? hintText,
     String? labelText,
     String? counterText,
-    required Widget prefixIcon,
+    Widget? prefixIcon,
   }) {
     const border = OutlineInputBorder(
       borderRadius: BorderRadius.all(Radius.circular(8)),
@@ -597,9 +713,9 @@ class _ContactVerificationScreenState extends State<ContactVerificationScreen> {
   }
 
   Future<void> _requestPhoneCode() async {
-    final phone = _phone.text.trim();
-    if (phone.isEmpty) {
-      setState(() => _error = 'Enter your Zimbabwe phone number.');
+    final phone = _internationalPhone.trim();
+    if (!_phoneValid || phone.isEmpty) {
+      setState(() => _error = 'Enter a valid phone number for your country.');
       return;
     }
     await _run(() async {
