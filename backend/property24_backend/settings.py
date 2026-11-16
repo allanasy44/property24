@@ -177,6 +177,7 @@ TWILIO_ACCOUNT_SID = env_str("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = env_str("TWILIO_AUTH_TOKEN", "")
 TWILIO_FROM_NUMBER = env_str("TWILIO_FROM_NUMBER", "")
 TWILIO_MESSAGING_SERVICE_SID = env_str("TWILIO_MESSAGING_SERVICE_SID", "")
+TWILIO_VERIFY_SERVICE_SID = env_str("TWILIO_VERIFY_SERVICE_SID", "")
 
 EMAIL_BACKEND = env_str("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend" if DEBUG else "django.core.mail.backends.smtp.EmailBackend")
 EMAIL_HOST = env_str("EMAIL_HOST", "smtp.gmail.com")

@@ -333,18 +333,7 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       await authenticate();
-      if (mounted) {
-        final user = context.read<Property24State>().user;
-        final needsContactVerification =
-            user != null &&
-            user.role != AccountRole.admin &&
-            (!user.emailVerified || !user.phoneVerified);
-        context.go(
-          needsContactVerification
-              ? AppRoutes.contactVerificationScreen
-              : AppRoutes.homeScreen,
-        );
-      }
+      if (mounted) _continueAfterAuthentication();
     } catch (exception) {
       if (mounted) {
         final message = exception is ApiException
@@ -363,6 +352,19 @@ class _AuthScreenState extends State<AuthScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  void _continueAfterAuthentication() {
+    final user = context.read<Property24State>().user;
+    final needsContactVerification =
+        user != null &&
+        user.role != AccountRole.admin &&
+        (!user.emailVerified || !user.phoneVerified);
+    context.go(
+      needsContactVerification
+          ? AppRoutes.contactVerificationScreen
+          : AppRoutes.homeScreen,
+    );
   }
 
   Widget _formContent() {
@@ -622,7 +624,7 @@ class _AuthScreenState extends State<AuthScreen> {
             _emailCode.text.trim(),
           );
           if (!mounted) return;
-          context.go(AppRoutes.homeScreen);
+          _continueAfterAuthentication();
           return;
         }
         _registrationChallengeId = await state.register(
@@ -642,7 +644,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
       } else {
         await state.signIn(_email.text.trim(), _password.text);
-        if (mounted) context.go(AppRoutes.homeScreen);
+        if (mounted) _continueAfterAuthentication();
       }
     } catch (exception) {
       if (mounted) {

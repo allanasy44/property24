@@ -23,9 +23,8 @@ String userFacingError(Object error) {
     return switch (error.statusCode) {
       400 || 403 || 404 || 409 || 429 => error.message,
       401 => 'Your session has expired. Please sign in again.',
-      500 ||
-      502 ||
-      503 => 'The service is temporarily unavailable. Please try again later.',
+      503 => error.message,
+      500 || 502 => 'The service is temporarily unavailable. Please try again later.',
       _ => 'Something went wrong. Please try again.',
     };
   }

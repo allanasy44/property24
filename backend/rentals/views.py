@@ -2800,11 +2800,17 @@ def verification_phone_otp(request):
     )
     delivery_channel = "sms"
     message = "OTP sent to your phone"
-    delivered = send_phone_otp(phone, otp_code)
+    delivered, delivery_error = send_phone_otp(phone, otp_code)
     if not delivered:
         challenge.status = PhoneVerificationOTP.Status.EXPIRED
         challenge.save(update_fields=["status", "updated_at"])
-        return json_error("Phone OTP delivery is not configured", status=503)
+        return json_error(
+            "Could not send the verification SMS. "
+            f"{delivery_error or 'Check the SMS provider configuration.'} "
+            "Confirm the number includes its country code and, for a Twilio trial, "
+            "that the recipient is verified in Twilio Console.",
+            status=503,
+        )
     return JsonResponse(
         {
             "otp_required": True,
@@ -2841,7 +2847,15 @@ def verification_phone_otp_verify(request):
         challenge.status = PhoneVerificationOTP.Status.EXPIRED
         challenge.save(update_fields=["status"])
         return json_error("Too many OTP attempts")
-    if challenge.code_hash != hash_otp(code):
+    verify_service_sid = str(
+        getattr(settings, "TWILIO_VERIFY_SERVICE_SID", "") or ""
+    ).strip()
+    code_is_valid = (
+        verify_twilio_phone_otp(challenge.phone, code)
+        if verify_service_sid
+        else challenge.code_hash == hash_otp(code)
+    )
+    if not code_is_valid:
         challenge.attempts += 1
         challenge.save(update_fields=["attempts"])
         return json_error("Invalid OTP")
@@ -4291,10 +4305,13 @@ def send_verification_otp_email(email, code):
 
 def send_phone_otp(phone, code):
     if getattr(settings, "OTP_SMS_PROVIDER", "").lower() == "twilio":
-        return send_twilio_phone_otp(phone, code)
+        if str(getattr(settings, "TWILIO_VERIFY_SERVICE_SID", "") or "").strip():
+            return send_twilio_verify_otp(phone)
+        delivered = send_twilio_phone_otp(phone, code)
+        return delivered, None if delivered else "Twilio rejected or could not reach the SMS request."
     webhook_url = getattr(settings, "OTP_SMS_WEBHOOK_URL", "")
     if not webhook_url:
-        return False
+        return False, "No SMS provider is configured."
     payload = json.dumps({"to": phone, "message": f"Your Property24 verification code is {code}", "sender": getattr(settings, "OTP_SMS_SENDER", "Property24")}).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     api_key = getattr(settings, "OTP_SMS_API_KEY", "")
@@ -4303,8 +4320,80 @@ def send_phone_otp(phone, code):
     try:
         req = urlrequest.Request(webhook_url, data=payload, headers=headers, method="POST")
         with urlrequest.urlopen(req, timeout=8) as response:
-            return 200 <= response.status < 300
+            delivered = 200 <= response.status < 300
+            return delivered, None if delivered else "The SMS provider rejected the request."
     except (OSError, urlerror.URLError):
+        return False, "The SMS provider could not be reached."
+
+
+def send_twilio_verify_otp(phone):
+    account_sid = str(getattr(settings, "TWILIO_ACCOUNT_SID", "") or "").strip()
+    auth_token = str(getattr(settings, "TWILIO_AUTH_TOKEN", "") or "").strip()
+    service_sid = str(
+        getattr(settings, "TWILIO_VERIFY_SERVICE_SID", "") or ""
+    ).strip()
+    if not account_sid or not auth_token or not service_sid:
+        return False, "Twilio Verify credentials or service configuration are missing."
+
+    payload = urlencode({"To": phone, "Channel": "sms"}).encode("utf-8")
+    credentials = b64encode(f"{account_sid}:{auth_token}".encode("utf-8")).decode(
+        "ascii"
+    )
+    headers = {
+        "Authorization": f"Basic {credentials}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    url = f"https://verify.twilio.com/v2/Services/{service_sid}/Verifications"
+    try:
+        req = urlrequest.Request(url, data=payload, headers=headers, method="POST")
+        with urlrequest.urlopen(req, timeout=15) as response:
+            body = json.loads(response.read().decode("utf-8"))
+            delivered = 200 <= response.status < 300 and body.get("status") == "pending"
+            if delivered:
+                return True, None
+            return False, "Twilio did not accept the verification request."
+    except urlerror.HTTPError as exc:
+        try:
+            provider_body = json.loads(exc.read().decode("utf-8"))
+        except (OSError, ValueError):
+            provider_body = {}
+        error_code = provider_body.get("code")
+        logger.warning(
+            "Twilio Verify rejected phone OTP request (HTTP %s, code %s)",
+            exc.code,
+            error_code or "unknown",
+        )
+        detail = f"Twilio error code {error_code}." if error_code else "Twilio rejected the request."
+        return False, detail
+    except (OSError, urlerror.URLError, ValueError) as exc:
+        logger.warning("Twilio Verify phone OTP request failed (%s)", type(exc).__name__)
+        return False, "Twilio could not be reached or returned an invalid response."
+
+
+def verify_twilio_phone_otp(phone, code):
+    account_sid = str(getattr(settings, "TWILIO_ACCOUNT_SID", "") or "").strip()
+    auth_token = str(getattr(settings, "TWILIO_AUTH_TOKEN", "") or "").strip()
+    service_sid = str(
+        getattr(settings, "TWILIO_VERIFY_SERVICE_SID", "") or ""
+    ).strip()
+    if not account_sid or not auth_token or not service_sid:
+        return False
+
+    payload = urlencode({"To": phone, "Code": code}).encode("utf-8")
+    credentials = b64encode(f"{account_sid}:{auth_token}".encode("utf-8")).decode(
+        "ascii"
+    )
+    headers = {
+        "Authorization": f"Basic {credentials}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    url = f"https://verify.twilio.com/v2/Services/{service_sid}/VerificationCheck"
+    try:
+        req = urlrequest.Request(url, data=payload, headers=headers, method="POST")
+        with urlrequest.urlopen(req, timeout=15) as response:
+            body = json.loads(response.read().decode("utf-8"))
+            return 200 <= response.status < 300 and body.get("status") == "approved"
+    except (OSError, urlerror.URLError, ValueError):
         return False
 
 

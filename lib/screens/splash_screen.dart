@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../models/rental_models.dart';
 import '../routes/app_routes.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
@@ -120,8 +121,18 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _homeRedirectScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (context.read<Property24State>().signedIn) {
-        context.go(AppRoutes.homeScreen);
+      final state = context.read<Property24State>();
+      if (state.signedIn) {
+        final user = state.user;
+        final needsContactVerification =
+            user != null &&
+            user.role != AccountRole.admin &&
+            (!user.emailVerified || !user.phoneVerified);
+        context.go(
+          needsContactVerification
+              ? AppRoutes.contactVerificationScreen
+              : AppRoutes.homeScreen,
+        );
       } else {
         _homeRedirectScheduled = false;
       }
