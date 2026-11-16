@@ -333,7 +333,18 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       await authenticate();
-      if (mounted) context.go(AppRoutes.homeScreen);
+      if (mounted) {
+        final user = context.read<Property24State>().user;
+        final needsContactVerification =
+            user != null &&
+            user.role != AccountRole.admin &&
+            (!user.emailVerified || !user.phoneVerified);
+        context.go(
+          needsContactVerification
+              ? AppRoutes.contactVerificationScreen
+              : AppRoutes.homeScreen,
+        );
+      }
     } catch (exception) {
       if (mounted) {
         final message = exception is ApiException

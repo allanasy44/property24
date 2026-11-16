@@ -49,6 +49,7 @@ class AppRoutes {
   static const String propertyDetailScreen = '/property-detail';
   static const String authScreen = '/auth/:role';
   static const String supportLoginScreen = '/support/login';
+  static const String contactVerificationScreen = '/verify-contact';
 }
 
 final GoRouter appRouter = GoRouter(
@@ -83,6 +84,11 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.supportLoginScreen,
       pageBuilder: (context, state) =>
           _fadePage(state, const AuthScreen(role: AccountRole.admin)),
+    ),
+    GoRoute(
+      path: AppRoutes.contactVerificationScreen,
+      pageBuilder: (context, state) =>
+          _fadePage(state, const ContactVerificationScreen()),
     ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>
