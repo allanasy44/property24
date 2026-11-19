@@ -9,8 +9,8 @@ import '../screens/admin_users_screen.dart';
 import '../screens/activity_screen.dart';
 import '../screens/auth_screen.dart';
 import '../screens/calls_screen.dart';
-import '../screens/contact_verification_screen.dart';
 import '../screens/discover_screen.dart';
+import '../screens/email_verification_screen.dart';
 import '../screens/inbox_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/listings_screen.dart';
@@ -49,7 +49,7 @@ class AppRoutes {
   static const String propertyDetailScreen = '/property-detail';
   static const String authScreen = '/auth/:role';
   static const String supportLoginScreen = '/support/login';
-  static const String contactVerificationScreen = '/verify-contact';
+  static const String emailVerificationScreen = '/verify-email';
 }
 
 final GoRouter appRouter = GoRouter(
@@ -86,13 +86,13 @@ final GoRouter appRouter = GoRouter(
           _fadePage(state, const AuthScreen(role: AccountRole.admin)),
     ),
     GoRoute(
-      path: AppRoutes.contactVerificationScreen,
+      path: AppRoutes.emailVerificationScreen,
       pageBuilder: (context, state) =>
-          _fadePage(state, const ContactVerificationScreen()),
+          _fadePage(state, const EmailVerificationScreen()),
     ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>
-          _ContactVerificationGate(
+          _EmailVerificationGate(
             child: AppScaffold(navigationShell: navigationShell),
           ),
       branches: [
@@ -164,7 +164,7 @@ final GoRouter appRouter = GoRouter(
       name: AppRoutes.listingsName,
       pageBuilder: (context, state) => _fadePage(
         state,
-        _ContactVerificationGate(
+        _EmailVerificationGate(
           child: ListingsScreen(
             initialCategories: [
               state.uri.queryParameters['category'] ?? 'homes',
@@ -179,7 +179,7 @@ final GoRouter appRouter = GoRouter(
       name: AppRoutes.marketplaceComposerName,
       pageBuilder: (context, state) => _fadePage(
         state,
-        _ContactVerificationGate(
+        _EmailVerificationGate(
           child: MarketplaceComposerPage(
             market: state.pathParameters['market'] ?? 'services',
           ),
@@ -227,17 +227,18 @@ final GoRouter appRouter = GoRouter(
   ],
 );
 
-class _ContactVerificationGate extends StatelessWidget {
-  const _ContactVerificationGate({required this.child});
+class _EmailVerificationGate extends StatelessWidget {
+  const _EmailVerificationGate({required this.child});
 
   final Widget child;
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<Property24State>().user;
     if (user != null &&
         user.role != AccountRole.admin &&
-        (!user.emailVerified || !user.phoneVerified)) {
-      return const ContactVerificationScreen();
+        !user.emailVerified) {
+      return const EmailVerificationScreen();
     }
     return child;
   }

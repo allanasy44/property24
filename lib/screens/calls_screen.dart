@@ -33,8 +33,8 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
     final visible = filter == _SavedFilter.sale
         ? sale
         : filter == _SavedFilter.rent
-            ? rent
-            : properties;
+        ? rent
+        : properties;
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -132,9 +132,9 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
       await state.toggleSaved(property);
     } catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -190,10 +190,10 @@ class _PropertyCard extends StatelessWidget {
     final lifecycle = property.reserved
         ? 'Reserved'
         : property.availabilityStatus == 'sold'
-            ? 'Sold'
-            : property.availabilityStatus == 'rented'
-                ? 'Rented'
-                : 'Saved';
+        ? 'Sold'
+        : property.availabilityStatus == 'rented'
+        ? 'Rented'
+        : 'Saved';
 
     final textTheme = Theme.of(context).textTheme;
     return Card(
@@ -227,7 +227,7 @@ class _PropertyCard extends StatelessWidget {
                         width: 96,
                         height: 112,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        errorBuilder: (_, _, _) => Container(
                           width: 96,
                           height: 112,
                           color: AppTheme.bgSurface,

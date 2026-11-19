@@ -114,9 +114,8 @@ class _TileMap extends StatelessWidget {
                     ),
                     headers: OsmMapPreview.tileHeaders,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: AppTheme.bgSurface,
-                    ),
+                    errorBuilder: (_, _, _) =>
+                        Container(color: AppTheme.bgSurface),
                   ),
                 ),
             Positioned.fill(
@@ -212,32 +211,18 @@ class _MapPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        Positioned.fill(
-          child: CustomPaint(
-            painter: _MapPatternPainter(),
-          ),
-        ),
+        Positioned.fill(child: CustomPaint(painter: _MapPatternPainter())),
         Center(
-          child: _MapLabel(
-            label: label,
-            prefix: 'Area only',
-          ),
+          child: _MapLabel(label: label, prefix: 'Area only'),
         ),
-        const Positioned(
-          right: 10,
-          bottom: 10,
-          child: _Attribution(),
-        ),
+        const Positioned(right: 10, bottom: 10, child: _Attribution()),
       ],
     );
   }
 }
 
 class _MapLabel extends StatelessWidget {
-  const _MapLabel({
-    required this.label,
-    required this.prefix,
-  });
+  const _MapLabel({required this.label, required this.prefix});
 
   final String label;
   final String prefix;
@@ -253,11 +238,7 @@ class _MapLabel extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            CupertinoIcons.location,
-            color: AppTheme.accent,
-            size: 16,
-          ),
+          const Icon(CupertinoIcons.location, color: AppTheme.accent, size: 16),
           const SizedBox(width: 6),
           Flexible(
             child: Text(

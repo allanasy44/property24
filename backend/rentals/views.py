@@ -67,6 +67,7 @@ from .models import (
     ServiceRequest,
     SupplierFollow,
     Notification,
+    UserPresenceSession,
     VerificationRequest,
     Viewing,
 )
@@ -189,9 +190,9 @@ ROLE_VISIBLE_SECTIONS = {
 }
 
 ROLE_ONBOARDING_REQUIREMENTS = {
-    User.Roles.TENANT: ["phone_verification", "identity_verification"],
-    User.Roles.LANDLORD: ["phone_verification", "identity_verification"],
-    User.Roles.AGENT: ["phone_verification", "identity_verification"],
+    User.Roles.TENANT: ["email_verification"],
+    User.Roles.LANDLORD: ["email_verification"],
+    User.Roles.AGENT: ["email_verification"],
     User.Roles.ADMIN: [],
 }
 MARKETPLACE_CAPABILITIES = {"list_properties"}
@@ -346,6 +347,7 @@ def require_authenticated(request):
             ("admin_dashboard_summary", "GET"),
             ("users_collection", "GET"),
             ("user_detail", "DELETE"),
+            ("user_detail", "PATCH"),
             ("verifications_collection", "GET"),
             ("verification_review", "POST"),
             ("verification_document_preview", "GET"),
@@ -955,7 +957,7 @@ def users_collection(request):
     return JsonResponse({})
 
 @csrf_exempt
-@require_http_methods(["GET", "DELETE", "OPTIONS"])
+@require_http_methods(["GET", "PATCH", "DELETE", "OPTIONS"])
 def user_detail(request, user_id):
     acting_user, auth_response = require_roles(request, {User.Roles.ADMIN})
     if auth_response:
@@ -967,6 +969,15 @@ def user_detail(request, user_id):
         user.is_active = False
         user.save(update_fields=["is_active"])
         return JsonResponse({"deactivated": True, "user": serialize_user(user)})
+    if request.method == "PATCH":
+        data = request_json(request)
+        if data is None:
+            return json_error("Invalid JSON body")
+        if type(data.get("active")) is not bool:
+            return json_error("The active field must be true or false")
+        user.is_active = data["active"]
+        user.save(update_fields=["is_active"])
+        return JsonResponse(serialize_user(user))
 
     return JsonResponse({})
 
@@ -1035,6 +1046,8 @@ def properties_collection(request):
         return contact_error
     if not can_list_properties(acting_user):
         return json_error("Enable property listings in your account before creating a listing", status=403)
+    if not acting_user.identity_documents_submitted and not is_admin(acting_user):
+        return json_error("Upload both sides of your ID before creating a listing", status=403)
 
     if acting_user.role in {User.Roles.LANDLORD, User.Roles.TENANT}:
         owner = acting_user
@@ -1156,8 +1169,6 @@ def require_verified_contact(user):
         return None
     if not user.email_verified:
         return json_error("Verify your email before creating marketplace content", status=403)
-    if not user.phone_verified:
-        return json_error("Verify your phone number before creating marketplace content", status=403)
     return None
 
 
@@ -3033,14 +3044,17 @@ def verifications_collection(request):
         checks=default_checks_for_role(data.get("role", user.role)) + checks,
         status=verification_status,
     )
+    user.identity_documents_submitted = True
+    fields_to_update = ["identity_documents_submitted"]
     if verification.status == VerificationRequest.Status.VERIFIED:
         user.is_verified = True
-        user.save(update_fields=["is_verified"])
+        fields_to_update.append("is_verified")
         audit_identity_event("identity_verification_completed", user, verification=verification)
     elif verification.status == VerificationRequest.Status.REJECTED:
         audit_identity_event("identity_verification_failed", user, verification=verification, metadata={"reason": provider_result.failure_reason})
     else:
         audit_identity_event("identity_verification_manual_review", user, verification=verification, metadata={"provider": provider_result.provider})
+    user.save(update_fields=fields_to_update)
     notify_identity_status(user, verification)
     return JsonResponse(serialize_verification(verification, acting_user=acting_user), status=201)
 
@@ -3368,7 +3382,7 @@ def property_hold(request, property_id):
         "conversation": serialize_conversation(conversation, viewer=acting_user),
     }, status=201)
 @csrf_exempt
-@require_http_methods(["GET", "PATCH", "OPTIONS"])
+@require_http_methods(["GET", "PATCH", "DELETE", "OPTIONS"])
 def conversation_detail(request, conversation_id):
     conversation = get_object_or_404(Conversation.objects.prefetch_related("participants", "messages"), pk=conversation_id)
     acting_user, auth_response = require_authenticated(request)
@@ -3376,6 +3390,10 @@ def conversation_detail(request, conversation_id):
         return auth_response
     if not conversation.participants.filter(id=acting_user.id).exists():
         return forbidden()
+
+    if request.method == "DELETE":
+        conversation.hidden_by.add(acting_user)
+        return JsonResponse({"hidden": True, "conversation_id": str(conversation.id)})
 
     if request.method == "GET":
         return JsonResponse(serialize_conversation(conversation, viewer=acting_user))
@@ -4087,8 +4105,8 @@ def validate_verification_submission(request, data, role, user):
     full_name = str(data.get("name") or data.get("full_name") or "").strip()
     phone = normalize_phone(data.get("phone"))
     for error in (
-        validate_text_field(full_name, "Full name", NAME_MAX_LENGTH, required=True),
-        validate_phone_field(phone, required=True),
+        validate_text_field(full_name, "Full name", NAME_MAX_LENGTH, required=False),
+        validate_phone_field(phone, required=False),
     ):
         if error:
             errors.append(error)
@@ -4099,9 +4117,7 @@ def validate_verification_submission(request, data, role, user):
     has_id_back = bool(files.get("id_back_document") or data.get("id_back_document_url") or to_bool(data.get("id_back_uploaded")))
     if document_type not in ACCEPTED_ID_DOCUMENT_TYPES:
         errors.append("document_type must be identity_document")
-    if not national_id_number:
-        errors.append("document number is required")
-    elif not is_valid_generic_document_number(national_id_number):
+    if national_id_number and not is_valid_generic_document_number(national_id_number):
         errors.append("document number format is invalid")
     if not has_id_front:
         errors.append("id_front_document is required")
@@ -4113,9 +4129,6 @@ def validate_verification_submission(request, data, role, user):
         errors.append("identity document is already used by another account")
     if extracted_id_number and national_id_number and normalize_identity_number(extracted_id_number) != normalize_identity_number(national_id_number):
         errors.append("confirmed document number must match extracted document number")
-    if not to_bool(data.get("identity_confirmed")):
-        errors.append("identity_confirmed must be true after confirming the document information")
-
     return errors
 
 
@@ -4228,14 +4241,14 @@ def normalise_agent_permissions(value):
 
 
 def default_checks_for_role(role):
-    return ["Phone OTP verification", "ID front and back", "Document number and name match"]
+    return ["ID front and back images submitted"]
 
 
 def notify_identity_status(user, verification, actor=None):
     status = verification.status
     if status == VerificationRequest.Status.VERIFIED:
         title = "Identity verified"
-        message = "Your phone number and identity document have been verified."
+        message = "Your identity document has been verified."
     elif status == VerificationRequest.Status.REJECTED:
         title = "Identity check needs attention"
         message = "The ID information did not match. Check the number and images, then submit again."
@@ -5002,7 +5015,7 @@ def serialize_ai_analysis(analysis):
 def account_onboarding_complete(user):
     if not user or user.role not in VERIFICATION_REQUIRED_ROLES:
         return True
-    return bool(user.is_verified and user.phone_verified)
+    return bool(user.email_verified)
 
 
 def full_verification_required(user):
@@ -5029,6 +5042,7 @@ def serialize_user(user):
         "role": user.role,
         "account_type": user.role,
         "verified": user.is_verified,
+        "identity_documents_submitted": user.identity_documents_submitted,
         "email_verified": user.email_verified,
         "phone_verified": user.phone_verified,
         "active": user.is_active,
@@ -5042,10 +5056,10 @@ def serialize_user(user):
         "cover_photo": account_media_url(user, "cover_photo"),
         "bio": user.bio,
         "last_seen_at": last_seen_at.isoformat() if last_seen_at else None,
-        "online": bool(
-            last_seen_at
-            and (timezone.now() - last_seen_at).total_seconds() <= 45
-        ),
+        "online": UserPresenceSession.objects.filter(
+            user_id=user.id,
+            last_ping_at__gte=timezone.now() - timedelta(seconds=45),
+        ).exists(),
     }
 
 

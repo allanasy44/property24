@@ -60,23 +60,28 @@ class MinioStorage(Storage):
                 raise
 
     def url(self, name, parameters=None, expire=None, http_method=None):
-        public_base_url = settings.OBJECT_STORAGE_PUBLIC_BASE_URL.rstrip("/")
-        if public_base_url and not parameters:
-            return f"{public_base_url}/{quote(name, safe='/')}"
         if parameters and parameters.get("signed"):
             return self.presigned_url(name, expires=expire or settings.OBJECT_STORAGE_UPLOAD_EXPIRY_SECONDS, method=http_method or "GET")
+        if settings.OBJECT_STORAGE_QUERYSTRING_AUTH:
+            return self.presigned_url(name, expires=expire or settings.OBJECT_STORAGE_UPLOAD_EXPIRY_SECONDS, method=http_method or "GET")
+        public_base_url = settings.OBJECT_STORAGE_PUBLIC_BASE_URL.rstrip("/")
+        if public_base_url:
+            return f"{public_base_url}/{quote(name, safe='/')}"
         return f"{self.endpoint_url}/{self.bucket_name}/{quote(name, safe='/')}"
 
     def presigned_url(self, name, expires=900, method="GET"):
         if not self.endpoint_url or not self.bucket_name:
             raise RuntimeError("MinIO storage requires OBJECT_STORAGE_ENDPOINT_URL and OBJECT_STORAGE_BUCKET.")
-        parsed = urlparse(self.endpoint_url)
+        public_base_url = settings.OBJECT_STORAGE_PUBLIC_BASE_URL.rstrip("/")
+        parsed = urlparse(public_base_url or self.endpoint_url)
         now = datetime.now(timezone.utc)
         amz_date = now.strftime("%Y%m%dT%H%M%SZ")
         date_stamp = now.strftime("%Y%m%d")
         credential_scope = f"{date_stamp}/{self.region_name}/s3/aws4_request"
         encoded_name = quote(name, safe="/~")
-        canonical_uri = f"{parsed.path.rstrip('/')}/{self.bucket_name}/{encoded_name}"
+        base_path = parsed.path.rstrip("/")
+        object_path = f"{base_path}/{encoded_name}" if public_base_url else f"{base_path}/{self.bucket_name}/{encoded_name}"
+        canonical_uri = object_path if object_path.startswith("/") else f"/{object_path}"
         credential = f"{self.access_key}/{credential_scope}"
         query_params = {
             "X-Amz-Algorithm": "AWS4-HMAC-SHA256",

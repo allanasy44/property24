@@ -6,7 +6,6 @@ import com.notifications.demo.email.exception.EmailTemplateException;
 import com.notifications.demo.email.exception.InvalidEmailRequestException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -22,7 +21,9 @@ public class GlobalExceptionHandler {
         List<String> details = exception.getBindingResult()
                 .getFieldErrors()
                 .stream()
-                .map(FieldError::getDefaultMessage)
+                .map(fieldError -> fieldError.getDefaultMessage() != null
+                        ? fieldError.getDefaultMessage()
+                        : "Invalid value")
                 .toList();
         return response(HttpStatus.BAD_REQUEST, "Validation failed", details);
     }
@@ -39,7 +40,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(EmailTemplateException.class)
     public ResponseEntity<ApiErrorResponse> handleTemplate(EmailTemplateException exception) {
-        return response(HttpStatus.UNPROCESSABLE_ENTITY, exception.getMessage(), List.of());
+        return response(HttpStatus.UNPROCESSABLE_CONTENT, exception.getMessage(), List.of());
     }
 
     @ExceptionHandler(EmailDeliveryException.class)

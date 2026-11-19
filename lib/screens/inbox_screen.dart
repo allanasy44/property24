@@ -161,6 +161,10 @@ class _InboxScreenState extends State<InboxScreen> {
                     currentUserId: state.user?.id,
                     state: state,
                     property: _propertyFor(state, conversations[index]),
+                    onHide: () => _hideConversation(
+                      state,
+                      conversations[index],
+                    ),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => ConversationScreen(
@@ -181,6 +185,26 @@ class _InboxScreenState extends State<InboxScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _hideConversation(
+    Property24State state,
+    ConversationItem conversation,
+  ) async {
+    try {
+      await state.hideConversation(conversation.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chat hidden from your inbox')),
+        );
+      }
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+      }
+    }
   }
 
   PropertyListing? _propertyFor(
@@ -249,6 +273,7 @@ class _ConversationTile extends StatelessWidget {
     required this.currentUserId,
     required this.state,
     required this.property,
+    required this.onHide,
     required this.onTap,
   });
 
@@ -256,6 +281,7 @@ class _ConversationTile extends StatelessWidget {
   final String? currentUserId;
   final Property24State state;
   final PropertyListing? property;
+  final VoidCallback onHide;
   final VoidCallback onTap;
 
   @override
@@ -367,6 +393,23 @@ class _ConversationTile extends StatelessWidget {
                       ),
                     ],
                   ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Conversation actions',
+                onSelected: (value) {
+                  if (value == 'hide') onHide();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'hide',
+                    child: Text('Hide chat'),
+                  ),
+                ],
+                icon: Icon(
+                  CupertinoIcons.ellipsis,
+                  color: AppTheme.textMuted,
+                  size: 19,
                 ),
               ),
             ],
@@ -1409,7 +1452,7 @@ class _MessageBubble extends StatelessWidget {
                   width: 220,
                   height: 180,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _AttachmentTile(
+                  errorBuilder: (_, _, _) => _AttachmentTile(
                     icon: CupertinoIcons.photo,
                     label: item.attachmentName.isEmpty
                         ? 'Photo unavailable'

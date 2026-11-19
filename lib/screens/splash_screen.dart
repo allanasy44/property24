@@ -124,13 +124,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       final state = context.read<Property24State>();
       if (state.signedIn) {
         final user = state.user;
-        final needsContactVerification =
+        final needsEmailVerification =
             user != null &&
             user.role != AccountRole.admin &&
-            (!user.emailVerified || !user.phoneVerified);
+            !user.emailVerified;
         context.go(
-          needsContactVerification
-              ? AppRoutes.contactVerificationScreen
+          needsEmailVerification
+              ? AppRoutes.emailVerificationScreen
               : AppRoutes.homeScreen,
         );
       } else {
@@ -329,8 +329,8 @@ class _OnboardingView extends StatelessWidget {
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
-              placeholder: (_, __) => Container(color: AppTheme.bgCard),
-              errorWidget: (_, __, ___) => Container(
+              placeholder: (_, _) => Container(color: AppTheme.bgCard),
+              errorWidget: (_, _, _) => Container(
                 color: AppTheme.bgCard,
                 child: Icon(
                   CupertinoIcons.house,
@@ -593,115 +593,124 @@ class _GettingStartedViewState extends State<_GettingStartedView>
             position: _slideAnim,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'What would you like to do first?',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(
-                        color: AppTheme.textPrimary,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
+              child: LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Choose a starting point. You can still explore every marketplace after creating your account.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(
-                        color: AppTheme.textSecondary,
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    _IntentCard(
-                      title: 'Find a place, stay, service or job',
-                      subtitle:
-                          'Explore all the ways this marketplace can help.',
-                      icon: CupertinoIcons.search,
-                      isSelected: _selectedIntent == 'explore',
-                      onTap: () {
-                        setState(() {
-                          _selectedIntent = 'explore';
-                        });
-                      },
-                      gradientColors: const [
-                        AppTheme.accent,
-                        AppTheme.accentTeal,
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _IntentCard(
-                      title: 'List a property, stay or venue',
-                      subtitle:
-                          'Connect your listing with people looking for it.',
-                      icon: CupertinoIcons.building_2_fill,
-                      isSelected: _selectedIntent == 'list-property',
-                      onTap: () {
-                        setState(() {
-                          _selectedIntent = 'list-property';
-                        });
-                      },
-                      gradientColors: const [
-                        AppTheme.accentTeal,
-                        AppTheme.accentTeal,
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    _IntentCard(
-                      title: 'Offer a service or post a job',
-                      subtitle:
-                          'Share what you offer or the opportunity you have.',
-                      icon: CupertinoIcons.briefcase,
-                      isSelected: _selectedIntent == 'offer-service',
-                      onTap: () {
-                        setState(() {
-                          _selectedIntent = 'offer-service';
-                        });
-                      },
-                      gradientColors: const [
-                        AppTheme.accent,
-                        AppTheme.accentTeal,
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    AnimatedOpacity(
-                      opacity: _selectedIntent != null ? 1.0 : 0.4,
-                      duration: const Duration(milliseconds: 300),
-                      child: SizedBox(
-                        height: 56,
-                        child: FilledButton(
-                          onPressed: _selectedIntent == null
-                              ? null
-                              : () => widget.onIntentSelected(_selectedIntent!),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppTheme.accent,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'What would you like to do first?',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            color: AppTheme.textPrimary,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
                           ),
-                          child: Text(
-                            'Continue',
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Choose a starting point. You can still explore every marketplace after creating your account.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            color: AppTheme.textSecondary,
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _IntentCard(
+                          title: 'Find a place, stay, service or job',
+                          subtitle:
+                              'Explore all the ways this marketplace can help.',
+                          icon: CupertinoIcons.search,
+                          isSelected: _selectedIntent == 'explore',
+                          onTap: () {
+                            setState(() {
+                              _selectedIntent = 'explore';
+                            });
+                          },
+                          gradientColors: const [
+                            AppTheme.accent,
+                            AppTheme.accentTeal,
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        _IntentCard(
+                          title: 'List a property, stay or venue',
+                          subtitle:
+                              'Connect your listing with people looking for it.',
+                          icon: CupertinoIcons.building_2_fill,
+                          isSelected: _selectedIntent == 'list-property',
+                          onTap: () {
+                            setState(() {
+                              _selectedIntent = 'list-property';
+                            });
+                          },
+                          gradientColors: const [
+                            AppTheme.accentTeal,
+                            AppTheme.accentTeal,
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        _IntentCard(
+                          title: 'Offer a service or post a job',
+                          subtitle:
+                              'Share what you offer or the opportunity you have.',
+                          icon: CupertinoIcons.briefcase,
+                          isSelected: _selectedIntent == 'offer-service',
+                          onTap: () {
+                            setState(() {
+                              _selectedIntent = 'offer-service';
+                            });
+                          },
+                          gradientColors: const [
+                            AppTheme.accent,
+                            AppTheme.accentTeal,
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        AnimatedOpacity(
+                          opacity: _selectedIntent != null ? 1.0 : 0.4,
+                          duration: const Duration(milliseconds: 300),
+                          child: SizedBox(
+                            height: 56,
+                            child: FilledButton(
+                              onPressed: _selectedIntent == null
+                                  ? null
+                                  : () => widget.onIntentSelected(
+                                      _selectedIntent!,
+                                    ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppTheme.accent,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: Text(
+                                'Continue',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

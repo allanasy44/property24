@@ -46,7 +46,7 @@ class Command(BaseCommand):
             role=User.Roles.LANDLORD,
             national_id_number="63-000000A63",
             phone_verified=True,
-            checks=["Phone OTP verification", "ID front capture", "ID back capture", "Extracted ID confirmation", "Liveness check"],
+            checks=["ID front and back images submitted"],
             status=VerificationRequest.Status.APPROVED,
             reviewed_at=timezone.now(),
         )

@@ -69,8 +69,7 @@ class _SavedSearchesContent extends StatelessWidget {
                   )
                 : ListView.separated(
                     itemCount: searches.length,
-                    separatorBuilder: (_, __) =>
-                        Divider(color: AppTheme.border),
+                    separatorBuilder: (_, _) => Divider(color: AppTheme.border),
                     itemBuilder: (context, index) {
                       final search = searches[index];
                       return ListTile(
@@ -138,9 +137,9 @@ class _SavedSearchesContent extends StatelessWidget {
       );
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -155,9 +154,9 @@ class _SavedSearchesContent extends StatelessWidget {
       await state.setSavedSearchActive(search.id, isActive: active);
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -171,9 +170,9 @@ class _SavedSearchesContent extends StatelessWidget {
       await state.deleteSavedSearch(search.id);
     } catch (exception) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -259,8 +258,9 @@ class _SavedSearchDialogState extends State<_SavedSearchDialog> {
                         labelText: 'Min rent',
                         prefixText: r'$ ',
                       ),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       validator: _amountValidator,
                     ),
                   ),
@@ -272,8 +272,9 @@ class _SavedSearchDialogState extends State<_SavedSearchDialog> {
                         labelText: 'Max rent',
                         prefixText: r'$ ',
                       ),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       validator: _amountValidator,
                     ),
                   ),
@@ -307,10 +308,7 @@ class _SavedSearchDialogState extends State<_SavedSearchDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: _save,
-          child: const Text('Save alert'),
-        ),
+        FilledButton(onPressed: _save, child: const Text('Save alert')),
       ],
     );
   }

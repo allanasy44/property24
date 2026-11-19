@@ -4,7 +4,7 @@ from channels.testing import WebsocketCommunicator
 from django.test import TransactionTestCase, override_settings
 
 from .auth import issue_token_pair
-from .models import Conversation, MessageReceipt, User
+from .models import Conversation, MessageReceipt, User, UserPresenceSession
 from .routing import websocket_urlpatterns
 from .ws_auth import JwtAuthMiddlewareStack
 
@@ -16,6 +16,53 @@ from .ws_auth import JwtAuthMiddlewareStack
 )
 class ChatRealtimeTests(TransactionTestCase):
     reset_sequences = True
+
+    async def test_presence_tracks_each_live_connection_until_its_disconnects(self):
+        token = await database_sync_to_async(self._create_user_token)()
+        application = JwtAuthMiddlewareStack(URLRouter(websocket_urlpatterns))
+        sockets = [
+            WebsocketCommunicator(
+                application,
+                f"/ws/live/?token={token}",
+            )
+            for _ in range(2)
+        ]
+
+        connected_sockets = []
+        try:
+            for socket in sockets:
+                connected, _ = await socket.connect()
+                self.assertTrue(connected)
+                connected_sockets.append(socket)
+                await socket.receive_json_from()
+
+            active_sessions = await database_sync_to_async(
+                UserPresenceSession.objects.filter(
+                    user__username="live-presence",
+                ).count
+            )()
+            self.assertEqual(active_sessions, 2)
+
+            await sockets[0].disconnect()
+            connected_sockets.remove(sockets[0])
+            active_sessions = await database_sync_to_async(
+                UserPresenceSession.objects.filter(
+                    user__username="live-presence",
+                ).count
+            )()
+            self.assertEqual(active_sessions, 1)
+
+            await sockets[1].disconnect()
+            connected_sockets.remove(sockets[1])
+            active_sessions = await database_sync_to_async(
+                UserPresenceSession.objects.filter(
+                    user__username="live-presence",
+                ).count
+            )()
+            self.assertEqual(active_sessions, 0)
+        finally:
+            for socket in connected_sockets:
+                await socket.disconnect()
 
     async def test_new_conversation_join_receives_message_and_receipts(self):
         first_token, second_token = await database_sync_to_async(
@@ -107,6 +154,15 @@ class ChatRealtimeTests(TransactionTestCase):
             role=User.Roles.TENANT,
         )
         return issue_token_pair(first)["access"], issue_token_pair(second)["access"]
+
+    def _create_user_token(self):
+        user = User.objects.create_user(
+            username="live-presence",
+            email="live-presence@example.test",
+            password="test-password",
+            role=User.Roles.TENANT,
+        )
+        return issue_token_pair(user)["access"]
 
     def _create_conversation(self):
         conversation = Conversation.objects.create(title="Realtime test")

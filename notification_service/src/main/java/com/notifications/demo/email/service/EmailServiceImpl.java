@@ -19,9 +19,9 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
-import org.thymeleaf.exceptions.TemplateInputException;
 import org.thymeleaf.exceptions.TemplateProcessingException;
 
+import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -68,12 +68,12 @@ public class EmailServiceImpl implements EmailService {
                     OffsetDateTime.now(),
                     "Email request processed successfully"
             );
-        } catch (MailException | MessagingException ex) {
+        } catch (MailException | MessagingException | UnsupportedEncodingException ex) {
             rollbackCorrelationId(correlationId);
             logger.warn("Email delivery failed. messageId={}, correlationId={}, templateType={}, reason={}",
                     messageId, safe(correlationId), request.getTemplateType(), ex.getClass().getSimpleName());
             throw new EmailDeliveryException("Failed to deliver email", ex);
-        } catch (TemplateInputException | TemplateProcessingException ex) {
+        } catch (TemplateProcessingException ex) {
             rollbackCorrelationId(correlationId);
             logger.warn("Email template rendering failed. messageId={}, correlationId={}, templateType={}, reason={}",
                     messageId, safe(correlationId), request.getTemplateType(), ex.getClass().getSimpleName());
@@ -81,7 +81,7 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
-    private MimeMessage buildMessage(EmailRequest request) throws MessagingException {
+    private MimeMessage buildMessage(EmailRequest request) throws MessagingException, UnsupportedEncodingException {
         Map<String, Object> templateVariables = new HashMap<>(request.getVariables());
         templateVariables.put("platformName", mailProperties.getPlatformName());
         templateVariables.put("primaryColor", mailProperties.getPrimaryColor());

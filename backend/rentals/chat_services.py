@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import timedelta
 import logging
 from ipaddress import ip_address
 
@@ -11,7 +12,7 @@ from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import CallSession, ChatBlock, ChatReport, Conversation, Message, MessageReceipt, Notification, PushDevice, SecurityAuditEvent
+from .models import CallSession, ChatBlock, ChatReport, Conversation, Message, MessageReceipt, Notification, PushDevice, SecurityAuditEvent, UserPresenceSession
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ MAX_TYPING_LENGTH = 120
 CHAT_GROUP_PREFIX = "conversation"
 PUBLIC_GROUP_PREFIX = "public"
 USER_GROUP_PREFIX = "user"
+PRESENCE_SESSION_TIMEOUT_SECONDS = 45
 
 User = get_user_model()
 
@@ -50,7 +52,7 @@ def user_conversations(user):
         return queryset.none()
     if is_admin(user):
         return queryset
-    return queryset.filter(participants=user)
+    return queryset.filter(participants=user).exclude(hidden_by=user)
 
 
 def list_conversations_for_user(user):
@@ -178,6 +180,9 @@ def create_chat_message(conversation, sender, body="", *, attachment=None, attac
             attachment_name=clean_attachment_name or getattr(attachment, "name", "")[:180],
         )
         create_message_receipts(message)
+        conversation.hidden_by.remove(
+            *conversation.hidden_by.exclude(pk=sender.pk)
+        )
         conversation.save(update_fields=["updated_at"])
     return message
 
@@ -315,6 +320,49 @@ def touch_user_presence(user):
     user.last_seen_at = timezone.now()
     user.save(update_fields=["last_seen_at"])
     return user.last_seen_at
+
+
+def create_presence_session(user, session_id):
+    now = timezone.now()
+    cutoff = now - timedelta(seconds=PRESENCE_SESSION_TIMEOUT_SECONDS)
+    UserPresenceSession.objects.filter(last_ping_at__lt=cutoff).delete()
+    UserPresenceSession.objects.create(
+        session_id=session_id,
+        user=user,
+        connected_at=now,
+        last_ping_at=now,
+    )
+    user.last_seen_at = now
+    user.save(update_fields=["last_seen_at"])
+    return now
+
+
+def touch_presence_session(user, session_id):
+    now = timezone.now()
+    UserPresenceSession.objects.filter(
+        session_id=session_id,
+        user=user,
+    ).update(last_ping_at=now)
+    user.last_seen_at = now
+    user.save(update_fields=["last_seen_at"])
+    return now
+
+
+def end_presence_session(user, session_id):
+    UserPresenceSession.objects.filter(
+        session_id=session_id,
+        user=user,
+    ).delete()
+    return touch_user_presence(user)
+
+
+def user_is_online(user, now=None):
+    now = now or timezone.now()
+    cutoff = now - timedelta(seconds=PRESENCE_SESSION_TIMEOUT_SECONDS)
+    return UserPresenceSession.objects.filter(
+        user=user,
+        last_ping_at__gte=cutoff,
+    ).exists()
 
 
 def _dispatch_realtime(callback):

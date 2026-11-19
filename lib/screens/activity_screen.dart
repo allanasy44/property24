@@ -496,7 +496,7 @@ void _openLandlordNotifications(BuildContext context, Property24State state) {
             height: double.infinity,
             child: ListenableBuilder(
               listenable: state,
-              builder: (_, __) => _LandlordNotificationPanel(state: state),
+              builder: (_, _) => _LandlordNotificationPanel(state: state),
             ),
           ),
         ),
@@ -585,7 +585,7 @@ class _LandlordNotificationPanel extends StatelessWidget {
                     )
                   : ListView.separated(
                       itemCount: state.allNotifications.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           Divider(color: theme.colorScheme.outlineVariant),
                       itemBuilder: (context, index) {
                         final notification = state.allNotifications[index];
@@ -734,7 +734,7 @@ class _PortfolioRow extends StatelessWidget {
               : Image.network(
                   property.photos.first,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => DecoratedBox(
+                  errorBuilder: (_, _, _) => DecoratedBox(
                     decoration: BoxDecoration(
                       color: AppTheme.bgSurface,
                       borderRadius: BorderRadius.circular(14),

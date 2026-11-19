@@ -48,7 +48,7 @@ class AppTheme {
     const mutedText = _darkTextSecondary;
     const darkBorder = _darkBorder;
     final base = ThemeData.dark(useMaterial3: true);
-    final textTheme = GoogleFonts.poppinsTextTheme(base.textTheme).apply(
+    final textTheme = GoogleFonts.poppinsTextTheme().apply(
       bodyColor: darkText,
       displayColor: darkText,
     );
@@ -214,7 +214,7 @@ class AppTheme {
 
   static ThemeData get lightTheme {
     final base = ThemeData.light(useMaterial3: true);
-    final textTheme = GoogleFonts.poppinsTextTheme(base.textTheme).apply(
+    final textTheme = GoogleFonts.poppinsTextTheme().apply(
       bodyColor: _lightTextPrimary,
       displayColor: _lightTextPrimary,
     );

@@ -460,13 +460,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String _verificationSummary(AccountUser? user) {
     if (user == null) return 'Sign in to verify your account';
-    final phoneStatus = user.phoneVerified
-        ? 'Phone verified'
-        : 'Phone verification required';
-    final identityStatus = user.verified
-        ? 'Identity verified'
-        : 'Identity verification required';
-    return '$phoneStatus • $identityStatus';
+    if (user.verified) return 'Identity verified';
+    if (user.identityDocumentsSubmitted) return 'ID images submitted';
+    return 'Upload both sides of your ID to create listings';
   }
 
   Future<void> _signOut(BuildContext context) async {
@@ -1484,42 +1480,6 @@ class _ProfileEditRow extends StatelessWidget {
   }
 }
 
-class _ThemedField extends StatelessWidget {
-  const _ThemedField({
-    required this.controller,
-    required this.label,
-    this.hint,
-    this.maxLines = 1,
-    this.keyboardType,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final String? hint;
-  final int maxLines;
-  final TextInputType? keyboardType;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      maxLines: maxLines,
-      keyboardType: keyboardType,
-      style: TextStyle(color: AppTheme.textPrimary),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        filled: true,
-        fillColor: AppTheme.bgSurface,
-        border: InputBorder.none,
-        enabledBorder: InputBorder.none,
-        focusedBorder: InputBorder.none,
-        disabledBorder: InputBorder.none,
-      ),
-    );
-  }
-}
-
 class _BookingsPanel extends StatelessWidget {
   const _BookingsPanel({required this.bookingsBuilder});
   final List<ViewingItem> Function(Property24State state) bookingsBuilder;
@@ -1564,7 +1524,7 @@ class _BookingsPanel extends StatelessWidget {
                     : ListView.separated(
                         physics: const AlwaysScrollableScrollPhysics(),
                         itemCount: bookings.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final item = bookings[index];
                           return Container(
@@ -1719,8 +1679,6 @@ class _VerificationSheet extends StatefulWidget {
 }
 
 class _VerificationSheetState extends State<_VerificationSheet> {
-  late final TextEditingController _phone;
-  final _nationalId = TextEditingController();
   final _picker = ImagePicker();
   XFile? _frontDocument;
   XFile? _backDocument;
@@ -1731,15 +1689,7 @@ class _VerificationSheetState extends State<_VerificationSheet> {
   bool _busy = false;
 
   @override
-  void initState() {
-    super.initState();
-    _phone = TextEditingController(text: widget.user?.phone ?? '');
-  }
-
-  @override
   void dispose() {
-    _phone.dispose();
-    _nationalId.dispose();
     super.dispose();
   }
 
@@ -1763,15 +1713,6 @@ class _VerificationSheetState extends State<_VerificationSheet> {
       '_',
       ' ',
     );
-    final verificationUnderReview = {
-      'pending',
-      'processing',
-      'ocr complete',
-      'validation',
-      'manual review',
-      'submitted',
-      'reviewing',
-    }.contains(latestStatus);
     return SafeArea(
       child: ColoredBox(
         color: AppTheme.bg,
@@ -1836,7 +1777,7 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  'Confirm your phone number and identity to unlock all account features.',
+                  'Upload clear images of both sides of your ID to create listings. Review can continue after your images are submitted.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: AppTheme.textMuted,
@@ -1853,46 +1794,13 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Column(
                     children: [
-                      if (user.phone.trim().isNotEmpty)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            CupertinoIcons.phone,
-                            color: AppTheme.textMuted,
-                          ),
-                          title: Text(
-                            'Phone number',
-                            style: TextStyle(color: AppTheme.textPrimary),
-                          ),
-                          subtitle: Text(
-                            user.phone,
-                            style: TextStyle(color: AppTheme.textMuted),
-                          ),
-                          trailing: Icon(
-                            CupertinoIcons.lock_fill,
-                            size: 16,
-                            color: AppTheme.textMuted,
-                          ),
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: _ThemedField(
-                            controller: _phone,
-                            label: 'Zimbabwe phone number',
-                            hint: '077 123 4567 or +263 77 123 4567',
-                            keyboardType: TextInputType.phone,
-                          ),
-                        ),
                       _VerificationRow(
                         label: 'Identity',
                         value: user.verified
-                            ? 'National ID verified'
-                            : verificationUnderReview
-                            ? 'Submitted for review'
-                            : latestStatus == 'rejected'
-                            ? 'ID details need correction'
-                            : 'National ID required',
+                            ? 'ID verified'
+                            : user.identityDocumentsSubmitted
+                            ? 'ID images submitted'
+                            : 'ID images required',
                         verified: user.verified,
                       ),
                     ],
@@ -1909,10 +1817,10 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                     ),
                   ),
                 ],
-                if (verificationUnderReview && !user.verified) ...[
+                if (user.identityDocumentsSubmitted && !user.verified) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Your documents are being checked. We will notify you when the review is complete.',
+                    'Your ID images were received. You can create listings while identity review continues.',
                     style: TextStyle(
                       color: AppTheme.textMuted,
                       fontSize: 13,
@@ -1923,7 +1831,7 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                 if (latestStatus == 'rejected' && !user.verified) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'The number read from the ID did not match. Check your entry and upload clear images of both sides.',
+                    'Some ID details could not be read. You can upload clearer images if needed.',
                     style: TextStyle(
                       color: AppTheme.textMuted,
                       fontSize: 13,
@@ -1931,14 +1839,8 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                     ),
                   ),
                 ],
-                if (!user.verified) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Used as contact information.',
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
-                  ),
-                ],
-                if (!user.verified && !verificationUnderReview) ...[
+                if (!user.identityDocumentsSubmitted ||
+                    (latestStatus == 'rejected' && !user.verified)) ...[
                   const SizedBox(height: 24),
                   Container(
                     decoration: BoxDecoration(
@@ -1948,12 +1850,6 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                     padding: const EdgeInsets.all(14),
                     child: Column(
                       children: [
-                        _ThemedField(
-                          controller: _nationalId,
-                          label: 'National ID number',
-                          hint: '63-123456-A-12',
-                        ),
-                        const SizedBox(height: 12),
                         _DocumentPickerTile(
                           label: 'ID front image',
                           fileName: _frontDocument?.name,
@@ -1972,7 +1868,7 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'Upload clear JPEG, PNG, or WEBP images of both sides. Automated checks compare the printed ID number with your entry; unreadable images need manual review. This does not check a government ID registry.',
+                    'Upload clear JPEG, PNG, or WEBP images of both sides of your ID. Both images must be submitted before you can create listings.',
                     style: TextStyle(
                       color: AppTheme.textMuted,
                       fontSize: 12,
@@ -1989,7 +1885,7 @@ class _VerificationSheetState extends State<_VerificationSheet> {
                       ),
                       onPressed: _busy ? null : _submitIdentity,
                       icon: const Icon(CupertinoIcons.checkmark_shield),
-                      label: const Text('Submit identity verification'),
+                      label: const Text('Submit ID images'),
                     ),
                   ),
                 ],
@@ -2029,16 +1925,6 @@ class _VerificationSheetState extends State<_VerificationSheet> {
   }
 
   Future<void> _submitIdentity() async {
-    final phone = _phone.text.trim();
-    final idNumber = _nationalId.text.trim();
-    if (phone.isEmpty) {
-      setState(() => _error = 'Enter your Zimbabwe phone number');
-      return;
-    }
-    if (idNumber.isEmpty) {
-      setState(() => _error = 'Enter your national ID number');
-      return;
-    }
     if (_frontBytes == null || _frontDocument == null) {
       setState(() => _error = 'Upload the front of your ID');
       return;
@@ -2054,8 +1940,6 @@ class _VerificationSheetState extends State<_VerificationSheet> {
     try {
       final state = context.read<Property24State>();
       final result = await state.submitIdentityVerification(
-        phone: phone,
-        nationalIdNumber: idNumber,
         idFrontBytes: _frontBytes!,
         idFrontName: _frontDocument!.name,
         idFrontMimeType: _frontDocument!.mimeType ?? '',
@@ -2075,7 +1959,6 @@ class _VerificationSheetState extends State<_VerificationSheet> {
           _backDocument = null;
           _frontBytes = null;
           _backBytes = null;
-          _nationalId.clear();
         });
       }
     } catch (exception) {

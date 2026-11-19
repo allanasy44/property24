@@ -52,7 +52,7 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 property24minio property24miniosecret;
       mc mb --ignore-existing local/property24-media;
-      mc anonymous set download local/property24-media;
+      mc anonymous set none local/property24-media;
       "
 
   backend:

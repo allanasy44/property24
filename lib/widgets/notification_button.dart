@@ -69,7 +69,7 @@ void _openNotificationPanel(BuildContext context, Property24State state) {
               height: double.infinity,
               child: ListenableBuilder(
                 listenable: state,
-                builder: (_, __) => _NotificationPanel(state: state),
+                builder: (_, _) => _NotificationPanel(state: state),
               ),
             ),
           ),
@@ -162,7 +162,7 @@ class _NotificationPanel extends StatelessWidget {
                     )
                   : ListView.separated(
                       itemCount: state.allNotifications.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           Divider(color: AppTheme.border),
                       itemBuilder: (context, index) {
                         final notification = state.allNotifications[index];

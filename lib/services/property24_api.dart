@@ -24,7 +24,8 @@ String userFacingError(Object error) {
       400 || 403 || 404 || 409 || 429 => error.message,
       401 => 'Your session has expired. Please sign in again.',
       503 => error.message,
-      500 || 502 => 'The service is temporarily unavailable. Please try again later.',
+      500 ||
+      502 => 'The service is temporarily unavailable. Please try again later.',
       _ => 'Something went wrong. Please try again.',
     };
   }
@@ -314,11 +315,11 @@ class Property24Api {
       'auth/profile/',
       token: token,
       body: {
-        if (username != null) 'username': username,
-        if (name != null) 'name': name,
-        if (bio != null) 'bio': bio,
-        if (profilePictureUrl != null) 'profile_picture_url': profilePictureUrl,
-        if (phone != null) 'phone': phone,
+        'username': ?username,
+        'name': ?name,
+        'bio': ?bio,
+        'profile_picture_url': ?profilePictureUrl,
+        'phone': ?phone,
       },
     );
     return AuthSession(
@@ -401,18 +402,6 @@ class Property24Api {
     );
   }
 
-  Future<String> requestPhoneVerification({
-    required String token,
-    required String phone,
-  }) async {
-    final body = await _post(
-      'verifications/phone-otp/',
-      token: token,
-      body: {'phone': phone},
-    );
-    return '${body['challenge_id']}';
-  }
-
   Future<String> requestEmailVerification({
     required String token,
     required String email,
@@ -445,32 +434,10 @@ class Property24Api {
     );
   }
 
-  Future<AuthSession> verifyPhone({
-    required String token,
-    required String challengeId,
-    required String code,
-  }) async {
-    final body = await _post(
-      'verifications/phone-otp/verify/',
-      token: token,
-      body: {'challenge_id': challengeId, 'code': code},
-    );
-    return AuthSession(
-      token: token,
-      user: AccountUser.fromJson(
-        body['user'] as Map<String, dynamic>,
-        body['account'] as Map<String, dynamic>?,
-      ),
-      account: AccountContext.fromJson(body['account'] as Map<String, dynamic>),
-    );
-  }
-
   Future<VerificationItem> submitIdentityVerification({
     required String token,
     required String role,
     required String name,
-    required String phone,
-    required String nationalIdNumber,
     required Uint8List idFrontBytes,
     required String idFrontName,
     required String idFrontMimeType,
@@ -492,10 +459,7 @@ class Property24Api {
     request.fields.addAll({
       'role': role,
       'name': name,
-      'phone': phone,
       'document_type': 'identity_document',
-      'national_id_number': nationalIdNumber,
-      'identity_confirmed': 'true',
       'privacy_notice_accepted': 'true',
       'declaration_accepted': 'true',
       if (estateAgencyRegistration?.trim().isNotEmpty == true)
@@ -648,6 +612,18 @@ class Property24Api {
     required String userId,
   }) => _delete('users/$userId/', token: token);
 
+  Future<void> setAdminUserActive({
+    required String token,
+    required String userId,
+    required bool active,
+  }) async {
+    await _patch(
+      'users/$userId/',
+      token: token,
+      body: {'active': active},
+    );
+  }
+
   Future<List<VerificationItem>> adminFailedLandlordVerifications(
     String token,
   ) async => _results(
@@ -718,11 +694,7 @@ class Property24Api {
     final body = await _post(
       'tenant/saved-searches/',
       token: token,
-      body: {
-        'query': query,
-        if (name != null) 'name': name,
-        if (criteria != null) 'criteria': criteria,
-      },
+      body: {'query': query, 'name': ?name, 'criteria': ?criteria},
     );
     return SavedSearchItem.fromJson(body);
   }
@@ -1045,7 +1017,7 @@ class Property24Api {
     final response = await _post(
       'properties/$propertyId/comments/',
       token: token,
-      body: {'body': body, if (parentId != null) 'parent_id': parentId},
+      body: {'body': body, 'parent_id': ?parentId},
     );
     return PropertyCommentItem.fromJson(response);
   }
@@ -1303,6 +1275,10 @@ class Property24Api {
       'conversations/$conversationId/messages/$messageId/',
       token: token,
     );
+  }
+
+  Future<void> hideConversation(String token, String conversationId) async {
+    await _delete('conversations/$conversationId/', token: token);
   }
 
   Future<void> editConversationMessage(

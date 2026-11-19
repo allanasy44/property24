@@ -140,6 +140,7 @@ class AccountUser {
     required this.phone,
     required this.role,
     required this.verified,
+    required this.identityDocumentsSubmitted,
     required this.emailVerified,
     required this.phoneVerified,
     required this.accountOnboardingComplete,
@@ -164,6 +165,8 @@ class AccountUser {
       phone: textValue(json, 'phone'),
       role: accountRoleFromJson(account?['account_type'] ?? json['role']),
       verified: json['verified'] == true || account?['is_verified'] == true,
+      identityDocumentsSubmitted:
+          json['identity_documents_submitted'] == true,
       emailVerified:
           json['email_verified'] == true || account?['email_verified'] == true,
       phoneVerified:
@@ -186,6 +189,7 @@ class AccountUser {
   final String phone;
   final AccountRole role;
   final bool verified;
+  final bool identityDocumentsSubmitted;
   final bool emailVerified;
   final bool phoneVerified;
   final bool accountOnboardingComplete;

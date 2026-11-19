@@ -862,7 +862,7 @@ class _HeroGallery extends StatelessWidget {
               return Image.network(
                 photo,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                errorBuilder: (_, _, _) => Container(
                   color: AppTheme.bgSurface,
                   child: Icon(
                     CupertinoIcons.house,
@@ -1411,7 +1411,7 @@ class _SimilarPropertiesSection extends StatelessWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: suggestions.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            separatorBuilder: (_, _) => const SizedBox(width: 10),
             itemBuilder: (context, index) {
               final suggestion = suggestions[index];
               final property = suggestion.property;

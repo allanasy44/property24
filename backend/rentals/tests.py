@@ -2,12 +2,14 @@ import json
 import tempfile
 from datetime import timedelta
 from decimal import Decimal
+from io import BytesIO
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from PIL import Image
 
 from .auth import issue_token_pair
 from .ai import parse_search_intent
@@ -27,9 +29,11 @@ from .models import (
     ServiceListing,
     ServiceRequest,
     User,
+    UserPresenceSession,
     Viewing,
     VerificationRequest,
 )
+from .identity_verification.providers.base import IdentityVerificationResult
 from .property_search import normalize_search_requirements
 from .views import (
     _notify_property_lifecycle_events,
@@ -121,7 +125,7 @@ class ServiceAndJobMarketplaceTests(TestCase):
         self.assertEqual(len(self.client.get("/api/services/").json()["results"]), 1)
         self.assertEqual(len(self.client.get("/api/jobs/").json()["results"]), 1)
 
-    def test_service_and_job_creation_require_verified_email_and_phone(self):
+    def test_service_and_job_creation_require_verified_email_not_phone(self):
         self.owner.email_verified = False
         self.owner.phone_verified = False
         self.owner.save(update_fields=["email_verified", "phone_verified"])
@@ -136,8 +140,9 @@ class ServiceAndJobMarketplaceTests(TestCase):
         self.owner.email_verified = True
         self.owner.save(update_fields=["email_verified"])
         service_response = self.post_json("/api/services/", self.service_payload)
-        self.assertEqual(service_response.status_code, 403)
-        self.assertIn("Verify your phone", service_response.json()["error"])
+        job_response = self.post_json("/api/jobs/", self.job_payload)
+        self.assertEqual(service_response.status_code, 201, service_response.content)
+        self.assertEqual(job_response.status_code, 201, job_response.content)
 
     def test_listing_validation_rejects_missing_and_disallowed_choices(self):
         self.authorize(self.owner)
@@ -574,7 +579,7 @@ class ContactVerificationOtpTests(TestCase):
 
         with override_settings(OTP_DELIVERY_CHANNEL="email"), patch(
             "rentals.views.send_phone_otp",
-            return_value=True,
+            return_value=(True, None),
         ) as send_otp:
             response = self.client.post(
                 "/api/verifications/phone-otp/",
@@ -598,6 +603,7 @@ class MarketplaceCapabilityTests(TestCase):
             marketplace_capabilities=["list_properties"],
             email_verified=True,
             phone_verified=True,
+            identity_documents_submitted=True,
         )
         self.authorization = "Bearer " + issue_token_pair(self.user)["access"]
         self.client.defaults["HTTP_AUTHORIZATION"] = self.authorization
@@ -689,10 +695,10 @@ class MarketplaceCapabilityTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("Enable property listings", response.json()["error"])
 
-    def test_property_listing_requires_verified_email_and_phone(self):
-        self.user.email_verified = False
+    def test_property_listing_requires_submitted_id_images(self):
+        self.user.identity_documents_submitted = False
         self.user.phone_verified = False
-        self.user.save(update_fields=["email_verified", "phone_verified"])
+        self.user.save(update_fields=["identity_documents_submitted", "phone_verified"])
 
         response = self.client.post(
             "/api/properties/",
@@ -701,7 +707,27 @@ class MarketplaceCapabilityTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
-        self.assertIn("Verify your email", response.json()["error"])
+        self.assertIn("Upload both sides of your ID", response.json()["error"])
+
+    def test_property_listing_allows_submitted_id_images_without_review_or_phone(self):
+        self.user.identity_documents_submitted = True
+        self.user.is_verified = False
+        self.user.phone_verified = False
+        self.user.save(
+            update_fields=[
+                "identity_documents_submitted",
+                "is_verified",
+                "phone_verified",
+            ]
+        )
+
+        response = self.client.post(
+            "/api/properties/",
+            data=json.dumps(self.listing_payload),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
 
     def test_landlord_can_save_searches_and_compare_listings(self):
         owner = User.objects.create_user(
@@ -757,6 +783,174 @@ class MarketplaceCapabilityTests(TestCase):
             self.client.get("/api/tenant/comparisons/").json()["results"][0]["id"],
             prop.id,
         )
+
+
+class IdentityDocumentSubmissionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="id-documents-user",
+            email="id-documents-user@example.test",
+            email_verified=True,
+        )
+        self.client.defaults["HTTP_AUTHORIZATION"] = (
+            "Bearer " + issue_token_pair(self.user)["access"]
+        )
+
+    def _image_upload(self, name):
+        image_buffer = BytesIO()
+        Image.new("RGB", (640, 640), color=(128, 128, 128)).save(
+            image_buffer,
+            format="PNG",
+        )
+        return SimpleUploadedFile(
+            name,
+            image_buffer.getvalue(),
+            content_type="image/png",
+        )
+
+    def test_two_id_images_alone_unlock_listings_without_identity_approval(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(
+                MEDIA_ROOT=media_root,
+                STORAGES={
+                    "default": {
+                        "BACKEND": "django.core.files.storage.FileSystemStorage"
+                    },
+                    "staticfiles": {
+                        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+                    },
+                },
+            ), patch(
+                "rentals.views.run_identity_verification_provider",
+                return_value=IdentityVerificationResult(
+                    status="manual_review",
+                    provider="manual_capture",
+                ),
+            ):
+                response = self.client.post(
+                    "/api/verifications/",
+                    data={
+                        "id_front_document": self._image_upload("id-front.png"),
+                        "id_back_document": self._image_upload("id-back.png"),
+                    },
+                )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.identity_documents_submitted)
+        self.assertFalse(self.user.is_verified)
+        profile = self.client.get("/api/auth/me/")
+        self.assertTrue(profile.json()["user"]["identity_documents_submitted"])
+
+
+class ConversationInboxTests(TestCase):
+    def setUp(self):
+        self.first = User.objects.create_user(
+            username="chat-first",
+            email="chat-first@example.test",
+            role=User.Roles.TENANT,
+            email_verified=True,
+        )
+        self.second = User.objects.create_user(
+            username="chat-second",
+            email="chat-second@example.test",
+            role=User.Roles.LANDLORD,
+            email_verified=True,
+        )
+        self.outsider = User.objects.create_user(
+            username="chat-outsider",
+            email="chat-outsider@example.test",
+            role=User.Roles.TENANT,
+            email_verified=True,
+        )
+        self.conversation = Conversation.objects.create(title="Rental enquiry")
+        self.conversation.participants.add(self.first, self.second)
+        self.first_token = issue_token_pair(self.first)["access"]
+        self.second_token = issue_token_pair(self.second)["access"]
+        self.outsider_token = issue_token_pair(self.outsider)["access"]
+
+    def _authorize(self, token):
+        self.client.defaults["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+
+    def test_hiding_conversation_only_removes_it_from_that_users_inbox(self):
+        path = f"/api/conversations/{self.conversation.id}/"
+        self._authorize(self.first_token)
+
+        hidden = self.client.delete(path)
+        self.assertEqual(hidden.status_code, 200, hidden.content)
+        self.assertTrue(hidden.json()["hidden"])
+        self.assertEqual(self.client.get("/api/conversations/").json()["results"], [])
+
+        self._authorize(self.second_token)
+        visible_to_other = self.client.get("/api/conversations/")
+        self.assertEqual(visible_to_other.status_code, 200)
+        self.assertEqual(
+            [item["id"] for item in visible_to_other.json()["results"]],
+            [self.conversation.id],
+        )
+
+        self._authorize(self.outsider_token)
+        self.assertEqual(self.client.delete(path).status_code, 403)
+
+    def test_new_message_restores_hidden_conversation_in_recipient_inbox(self):
+        self.conversation.hidden_by.add(self.first, self.second)
+        self._authorize(self.second_token)
+
+        response = self.client.post(
+            f"/api/conversations/{self.conversation.id}/messages/",
+            data=json.dumps({"body": "Are you still interested?"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+
+        self._authorize(self.first_token)
+        restored = self.client.get("/api/conversations/")
+        self.assertEqual(restored.status_code, 200)
+        self.assertEqual(
+            [item["id"] for item in restored.json()["results"]],
+            [self.conversation.id],
+        )
+
+        self._authorize(self.second_token)
+        still_hidden_for_sender = self.client.get("/api/conversations/")
+        self.assertEqual(still_hidden_for_sender.status_code, 200)
+        self.assertEqual(still_hidden_for_sender.json()["results"], [])
+
+    def test_message_edit_and_delete_are_limited_to_sender(self):
+        self._authorize(self.first_token)
+        created = self.client.post(
+            f"/api/conversations/{self.conversation.id}/messages/",
+            data=json.dumps({"body": "Original message"}),
+            content_type="application/json",
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        message_id = created.json()["id"]
+        message_path = (
+            f"/api/conversations/{self.conversation.id}/messages/{message_id}/"
+        )
+
+        self._authorize(self.second_token)
+        denied_edit = self.client.patch(
+            message_path,
+            data=json.dumps({"body": "Changed by another user"}),
+            content_type="application/json",
+        )
+        self.assertEqual(denied_edit.status_code, 403)
+        self.assertEqual(self.client.delete(message_path).status_code, 403)
+
+        self._authorize(self.first_token)
+        edited = self.client.patch(
+            message_path,
+            data=json.dumps({"body": "Updated message"}),
+            content_type="application/json",
+        )
+        self.assertEqual(edited.status_code, 200, edited.content)
+        self.assertEqual(edited.json()["body"], "Updated message")
+
+        deleted = self.client.delete(message_path)
+        self.assertEqual(deleted.status_code, 200, deleted.content)
+        self.assertTrue(deleted.json()["deleted"])
+        self.assertEqual(deleted.json()["body"], "This message was deleted")
 
 
 class SupportAdminTests(TestCase):
@@ -833,6 +1027,43 @@ class SupportAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.tenant.refresh_from_db()
         self.assertFalse(self.tenant.is_active)
+
+        response = self.client.patch(
+            f"/api/users/{self.tenant.id}/",
+            data=json.dumps({"active": True}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.tenant.refresh_from_db()
+        self.assertTrue(self.tenant.is_active)
+
+    def test_admin_user_list_reports_live_session_and_last_seen_separately(self):
+        self.tenant.last_seen_at = timezone.now()
+        self.tenant.save(update_fields=["last_seen_at"])
+        self.client.defaults["HTTP_AUTHORIZATION"] = self.admin_authorization
+
+        response = self.client.get("/api/users/")
+
+        self.assertEqual(response.status_code, 200)
+        user = response.json()["results"][0]
+        self.assertFalse(user["online"])
+        self.assertIsNotNone(user["last_seen_at"])
+
+        UserPresenceSession.objects.create(
+            session_id="current-live-session",
+            user=self.tenant,
+            last_ping_at=timezone.now(),
+        )
+        response = self.client.get("/api/users/")
+        self.assertTrue(response.json()["results"][0]["online"])
+
+        self.tenant.last_seen_at = timezone.now() - timedelta(minutes=5)
+        self.tenant.save(update_fields=["last_seen_at"])
+        UserPresenceSession.objects.filter(user=self.tenant).update(
+            last_ping_at=timezone.now() - timedelta(minutes=5),
+        )
+        response = self.client.get("/api/users/")
+        self.assertFalse(response.json()["results"][0]["online"])
 
     def test_verification_queue_is_limited_to_unreviewed_failed_landlord_checks(self):
         landlord = User.objects.create_user(
@@ -1288,6 +1519,7 @@ class StayVenueListingTests(TestCase):
             is_verified=True,
             email_verified=True,
             phone_verified=True,
+            identity_documents_submitted=True,
         )
         self.authorization = f"Bearer {issue_token_pair(self.landlord)['access']}"
 

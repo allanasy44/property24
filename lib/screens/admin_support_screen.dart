@@ -44,7 +44,9 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(approved ? 'Approve verification?' : 'Reject verification?'),
+        title: Text(
+          approved ? 'Approve verification?' : 'Reject verification?',
+        ),
         content: Text(
           approved
               ? 'This will mark ${verification.name} as verified.'
@@ -113,7 +115,7 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
               return Image.memory(
                 snapshot.data!,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Text(
+                errorBuilder: (_, _, _) => const Text(
                   'The verification document could not be displayed.',
                 ),
               );
@@ -131,16 +133,16 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
   }
 
   String _documentLabel(String type) => switch (type) {
-        'id-front' => 'ID front',
-        'id-back' => 'ID back',
-        _ => 'Document',
-      };
+    'id-front' => 'ID front',
+    'id-back' => 'ID back',
+    _ => 'Document',
+  };
 
   void _showError(Object exception) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(userFacingError(exception))),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
   }
 
   @override
@@ -179,9 +181,14 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
               );
             }
             final verifications = snapshot.data!
-                .where((item) =>
-                    item.role.toLowerCase() == 'landlord' &&
-                    {'failed', 'rejected'}.contains(item.status.toLowerCase()),)
+                .where(
+                  (item) =>
+                      item.role.toLowerCase() == 'landlord' &&
+                      {
+                        'failed',
+                        'rejected',
+                      }.contains(item.status.toLowerCase()),
+                )
                 .toList(growable: false);
             if (verifications.isEmpty) {
               return ListView(
@@ -197,7 +204,7 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               itemCount: verifications.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) =>
                   _verificationCard(verifications[index]),
             );
@@ -265,9 +272,9 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
                   padding: const EdgeInsets.only(top: 3),
                   child: Text(
                     '• $check',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.textMuted,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted),
                   ),
                 ),
             ],
@@ -278,15 +285,13 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
               children: [
                 if (verification.frontDocumentUploaded)
                   OutlinedButton.icon(
-                    onPressed: () =>
-                        _previewDocument(verification, 'id-front'),
+                    onPressed: () => _previewDocument(verification, 'id-front'),
                     icon: const Icon(CupertinoIcons.doc_text_search),
                     label: const Text('View ID front'),
                   ),
                 if (verification.backDocumentUploaded)
                   OutlinedButton.icon(
-                    onPressed: () =>
-                        _previewDocument(verification, 'id-back'),
+                    onPressed: () => _previewDocument(verification, 'id-back'),
                     icon: const Icon(CupertinoIcons.doc_text_search),
                     label: const Text('View ID back'),
                   ),

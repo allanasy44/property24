@@ -8,10 +8,7 @@ import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 
 class SupplierProfileScreen extends StatefulWidget {
-  const SupplierProfileScreen({
-    required this.supplier,
-    super.key,
-  });
+  const SupplierProfileScreen({required this.supplier, super.key});
 
   final AccountUser supplier;
 
@@ -58,9 +55,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
     setState(() => _loadingFollow = true);
     try {
       final result = await context.read<Property24State>().toggleSupplierFollow(
-            supplier.id,
-            following: !_following,
-          );
+        supplier.id,
+        following: !_following,
+      );
       if (mounted) {
         setState(() {
           _following = result['following'] == true;
@@ -72,9 +69,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
     } catch (exception) {
       if (mounted) {
         setState(() => _loadingFollow = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(exception))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
       }
     }
   }
@@ -190,10 +187,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         label: 'Verified',
                       ),
                       const _StatDivider(),
-                      _Stat(
-                        value: '$_followersCount',
-                        label: 'Followers',
-                      ),
+                      _Stat(value: '$_followersCount', label: 'Followers'),
                     ],
                   ),
                   const SizedBox(height: 26),
@@ -233,8 +227,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : Text(_following ? 'Unfollow' : 'Follow'),
                         ),
@@ -298,15 +293,15 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                     itemCount: photos.isEmpty ? listings.length : photos.length,
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      mainAxisSpacing: 4,
-                      crossAxisSpacing: 4,
-                    ),
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 4,
+                          crossAxisSpacing: 4,
+                        ),
                     itemBuilder: (context, index) {
                       final image = photos.isEmpty
                           ? (listings[index].photos.isEmpty
-                              ? ''
-                              : listings[index].photos.first)
+                                ? ''
+                                : listings[index].photos.first)
                           : photos[index];
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(3),
@@ -321,7 +316,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                             : Image.network(
                                 image,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
+                                errorBuilder: (_, _, _) => Container(
                                   color: AppTheme.bgSurface,
                                   child: Icon(
                                     CupertinoIcons.house,
@@ -372,10 +367,7 @@ class _Stat extends StatelessWidget {
           ),
           Text(
             label,
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
         ],
       ),
@@ -388,11 +380,7 @@ class _StatDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 26,
-      color: AppTheme.border,
-    );
+    return Container(width: 1, height: 26, color: AppTheme.border);
   }
 }
 

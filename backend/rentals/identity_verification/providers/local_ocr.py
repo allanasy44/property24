@@ -45,7 +45,7 @@ class LocalOCRIdentityVerificationProvider(IdentityVerificationProvider):
 
     def verify_document(self, *, files, data, document_type, confirmed_document_number):
         reference = f"local-{uuid.uuid4()}"
-        if not is_valid_generic_document_number(confirmed_document_number):
+        if confirmed_document_number and not is_valid_generic_document_number(confirmed_document_number):
             return IdentityVerificationResult(
                 status="rejected",
                 provider=self.provider_name,
@@ -57,7 +57,7 @@ class LocalOCRIdentityVerificationProvider(IdentityVerificationProvider):
         extracted_fields, checks, warnings = self._inspect_documents(files)
         extracted_number = normalize_identity_number(extracted_fields.get("front_document_number", ""))
         confirmed_number = normalize_identity_number(confirmed_document_number)
-        if extracted_number:
+        if extracted_number and confirmed_number:
             matches = extracted_number == confirmed_number
             checks.append({
                 "type": "document_number_match",
@@ -76,7 +76,7 @@ class LocalOCRIdentityVerificationProvider(IdentityVerificationProvider):
                     extracted_fields=extracted_fields,
                     checks=checks,
                 )
-        else:
+        elif confirmed_number:
             checks.append({"type": "document_number_match", "result": "review", "details": "Document number requires manual confirmation"})
         checks_passed = all(check.get("result") == "pass" for check in checks)
         if (

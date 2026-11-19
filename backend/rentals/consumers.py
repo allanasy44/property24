@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
@@ -11,12 +12,15 @@ from .chat_services import (
     broadcast_presence,
     conversation_group_name,
     create_call,
+    create_presence_session,
     create_text_message,
+    end_presence_session,
     end_call,
     get_authorized_conversation,
     mark_conversation_delivered,
     mark_conversation_read,
-    touch_user_presence,
+    touch_presence_session,
+    user_is_online,
     user_conversation_ids,
     public_group_name,
     broadcast_to_user,
@@ -39,6 +43,7 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         self.user_agent = header_value(self.scope, b"user-agent")
         self.event_times = []
         self.conversation_ids = []
+        self.presence_session_id = uuid.uuid4().hex
 
         if not self.user.is_authenticated:
             await self.audit("websocket_denied", category=SecurityAuditEvent.Category.AUTHENTICATION, severity=SecurityAuditEvent.Severity.MEDIUM, metadata={"reason": self.scope.get("auth_error")})
@@ -51,7 +56,10 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         await self.channel_layer.group_add(user_group_name(self.user.id), self.channel_name)
         await self.channel_layer.group_add(public_group_name(), self.channel_name)
 
-        last_seen_at = await database_sync_to_async(touch_user_presence)(self.user)
+        last_seen_at = await database_sync_to_async(create_presence_session)(
+            self.user,
+            self.presence_session_id,
+        )
         await self.accept()
         await self.audit("websocket_connected", category=SecurityAuditEvent.Category.PRESENCE, metadata={"conversation_count": len(self.conversation_ids)})
         await database_sync_to_async(broadcast_presence)(self.user, True, self.conversation_ids)
@@ -67,8 +75,16 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
     async def disconnect(self, close_code):
         if not getattr(self, "user", None) or not self.user.is_authenticated:
             return
-        await database_sync_to_async(touch_user_presence)(self.user)
-        await database_sync_to_async(broadcast_presence)(self.user, False, self.conversation_ids)
+        await database_sync_to_async(end_presence_session)(
+            self.user,
+            self.presence_session_id,
+        )
+        online = await database_sync_to_async(user_is_online)(self.user)
+        await database_sync_to_async(broadcast_presence)(
+            self.user,
+            online,
+            self.conversation_ids,
+        )
         await self.audit("websocket_disconnected", category=SecurityAuditEvent.Category.PRESENCE, metadata={"close_code": close_code})
         for conversation_id in self.conversation_ids:
             await self.channel_layer.group_discard(conversation_group_name(conversation_id), self.channel_name)
@@ -89,7 +105,10 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             return
 
         if event_type == "presence.ping":
-            await database_sync_to_async(touch_user_presence)(self.user)
+            await database_sync_to_async(touch_presence_session)(
+                self.user,
+                self.presence_session_id,
+            )
             await self.send_json({"type": "presence.pong", "payload": {"server_time": int(time.time())}})
             return
 

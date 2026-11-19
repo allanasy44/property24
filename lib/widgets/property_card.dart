@@ -65,7 +65,7 @@ class PropertyCard extends StatelessWidget {
                       : Image.network(
                           property.photos.first,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => DecoratedBox(
+                          errorBuilder: (_, _, _) => DecoratedBox(
                             decoration: BoxDecoration(
                               color: colorScheme.primaryContainer,
                             ),
@@ -131,13 +131,14 @@ class PropertyCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           property.title,
-                          style: textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                          style: textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (trailing != null) trailing!,
+                      ?trailing,
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -148,8 +149,9 @@ class PropertyCard extends StatelessWidget {
                           property.location.isEmpty
                               ? property.address
                               : property.location,
-                          style: textTheme.bodyMedium
-                              ?.copyWith(color: colorScheme.onSurfaceVariant),
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -164,8 +166,9 @@ class PropertyCard extends StatelessWidget {
                         const SizedBox(width: 3),
                         Text(
                           distanceLabel!,
-                          style: textTheme.bodySmall
-                              ?.copyWith(color: colorScheme.onSurfaceVariant),
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ],
@@ -188,17 +191,16 @@ class PropertyCard extends StatelessWidget {
                           label: property.isLand
                               ? property.standSummary
                               : property.isStayOrVenue
-                                  ? property.maxGuests > 0
-                                      ? 'Sleeps ${property.maxGuests} guests'
-                                      : property.isVenue &&
-                                              property.weddingCapacity > 0
-                                          ? 'Up to ${property.weddingCapacity} guests'
-                                          : property.isVenue &&
-                                                  property.conferenceCapacity >
-                                                      0
-                                              ? 'Conference up to ${property.conferenceCapacity}'
-                                              : 'Stays & events'
-                                  : '${property.moveInTotalLabel} rent + deposit',
+                              ? property.maxGuests > 0
+                                    ? 'Sleeps ${property.maxGuests} guests'
+                                    : property.isVenue &&
+                                          property.weddingCapacity > 0
+                                    ? 'Up to ${property.weddingCapacity} guests'
+                                    : property.isVenue &&
+                                          property.conferenceCapacity > 0
+                                    ? 'Conference up to ${property.conferenceCapacity}'
+                                    : 'Stays & events'
+                              : '${property.moveInTotalLabel} rent + deposit',
                         ),
                       ),
                     ],
@@ -240,8 +242,9 @@ class PropertyCard extends StatelessWidget {
                       ] else if (!isCommercialProperty &&
                           (!property.isVenue ||
                               property.isStay ||
-                              property.listingCategories
-                                  .contains('homes'))) ...[
+                              property.listingCategories.contains(
+                                'homes',
+                              ))) ...[
                         _Pill(
                           icon: CupertinoIcons.bed_double,
                           label: '${property.bedrooms} beds',
@@ -332,8 +335,9 @@ class _RoundIconButton extends StatelessWidget {
           backgroundColor: selected
               ? colorScheme.primary
               : colorScheme.surface.withValues(alpha: 0.9),
-          foregroundColor:
-              selected ? colorScheme.onPrimary : colorScheme.secondary,
+          foregroundColor: selected
+              ? colorScheme.onPrimary
+              : colorScheme.secondary,
           fixedSize: const Size.square(40),
           minimumSize: const Size.square(40),
         ),
@@ -357,8 +361,7 @@ class AvailabilityIndicator extends StatelessWidget {
     final color = switch (state) {
       'available_from' ||
       'needs_confirmation' ||
-      'reserved' =>
-        Colors.amber.shade700,
+      'reserved' => Colors.amber.shade700,
       'rented' || 'sold' || 'temporarily_hidden' => Colors.red.shade700,
       _ => Colors.green.shade700,
     };
@@ -376,9 +379,9 @@ class AvailabilityIndicator extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w800,
-                ),
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -444,11 +447,9 @@ class _ImageBadge extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: emphasized
-                      ? colorScheme.onPrimary
-                      : colorScheme.onSurface,
-                  fontWeight: FontWeight.w800,
-                ),
+              color: emphasized ? colorScheme.onPrimary : colorScheme.onSurface,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),

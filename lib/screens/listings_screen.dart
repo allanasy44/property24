@@ -16,7 +16,9 @@ import '../services/device_location.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_value_view.dart';
+import '../widgets/market_navigation.dart';
 import '../widgets/property_card.dart';
+import 'marketplace_screen.dart';
 import 'property_detail_screen.dart';
 
 class ListingsScreen extends StatefulWidget {
@@ -35,6 +37,7 @@ class ListingsScreen extends StatefulWidget {
 
 class _ListingsScreenState extends State<ListingsScreen> {
   String _query = '';
+  String _market = 'properties';
   final TextEditingController _searchController = TextEditingController();
   bool _returnToOriginOnCancel = false;
 
@@ -70,12 +73,27 @@ class _ListingsScreenState extends State<ListingsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
+    if (_market == 'services' || _market == 'jobs') {
+      return MarketplaceScreen(
+        key: ValueKey(_market),
+        market: _market,
+        initialView: 'mine',
+        onSelectMarket: (market) => setState(() => _market = market),
+      );
+    }
+
+    final hasSubmittedId = state.user?.identityDocumentsSubmitted ?? false;
     final accountListings = state.snapshot.properties.where(
       (property) =>
           property.owner?.id == state.user?.id ||
           property.agent?.id == state.user?.id,
     );
-    final listings = accountListings.where((property) {
+    final visibleListings = _market == 'properties'
+        ? accountListings
+        : accountListings.where(
+            (property) => property.listingCategories.contains(_market),
+          );
+    final listings = visibleListings.where((property) {
       final haystack = [
         property.title,
         property.description,
@@ -153,9 +171,13 @@ class _ListingsScreenState extends State<ListingsScreen> {
                           ),
                           const SizedBox(width: 12),
                           FilledButton.icon(
-                            onPressed: () => _openEditor(context),
+                            onPressed: hasSubmittedId
+                                ? () => _openEditor(context)
+                                : () => context.go(AppRoutes.profileScreen),
                             icon: const Icon(CupertinoIcons.add, size: 18),
-                            label: const Text('Add listing'),
+                            label: Text(
+                              hasSubmittedId ? 'Add listing' : 'Upload ID',
+                            ),
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 14,
@@ -169,11 +191,20 @@ class _ListingsScreenState extends State<ListingsScreen> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+                      MarketNavigation(
+                        selected: _market,
+                        onSelected: (market) => setState(() {
+                          _market = market;
+                          _query = '';
+                          _searchController.clear();
+                        }),
+                      ),
                       const SizedBox(height: 18),
                       Row(
                         children: [
                           Text(
-                            '${accountListings.length} ${accountListings.length == 1 ? 'listing' : 'listings'}',
+                            '${visibleListings.length} ${visibleListings.length == 1 ? 'listing' : 'listings'}',
                             style: TextStyle(
                               fontSize: 13,
                               color: _textDark,
@@ -246,7 +277,43 @@ class _ListingsScreenState extends State<ListingsScreen> {
                 ),
               ),
               const SliverToBoxAdapter(child: ErrorBanner()),
-              if (listings.isEmpty && accountListings.isEmpty)
+              if (!hasSubmittedId)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.badge_outlined, size: 52),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Upload your ID to create property listings',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Submit clear images of the front and back of your ID. You can create property listings as soon as both images are submitted.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: _textMuted),
+                            ),
+                            const SizedBox(height: 20),
+                            FilledButton(
+                              onPressed: () =>
+                                  context.go(AppRoutes.profileScreen),
+                              child: const Text('Go to profile verification'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else if (listings.isEmpty && visibleListings.isEmpty)
                 const SliverFillRemaining(
                   child: EmptyState(
                     icon: CupertinoIcons.house,
@@ -297,6 +364,18 @@ class _ListingsScreenState extends State<ListingsScreen> {
     BuildContext context, [
     PropertyListing? property,
   ]) async {
+    if (!(context.read<Property24State>().user?.identityDocumentsSubmitted ??
+        false)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Upload both sides of your ID before creating a property listing.',
+          ),
+        ),
+      );
+      context.go(AppRoutes.profileScreen);
+      return;
+    }
     final result = await Navigator.of(context).push<bool>(
       PageRouteBuilder<bool>(
         transitionDuration: const Duration(milliseconds: 300),
@@ -567,7 +646,7 @@ class _LandlordListingTile extends StatelessWidget {
                       : Image.network(
                           property.photos.first,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => DecoratedBox(
+                          errorBuilder: (_, _, _) => DecoratedBox(
                             decoration: BoxDecoration(
                               color: AppTheme.bgSurface,
                             ),
@@ -1907,7 +1986,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: widget.property!.photos.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
                         itemBuilder: (_, index) => ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: Image.network(
@@ -1915,7 +1994,7 @@ class _PropertyEditorState extends State<PropertyEditor> {
                             width: 112,
                             height: 86,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                            errorBuilder: (_, _, _) => Container(
                               width: 112,
                               height: 86,
                               color: AppTheme.bgSurface,

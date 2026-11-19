@@ -82,22 +82,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Text(
                   'Account overview',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                      ),
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Manage account access and review failed landlord document checks.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: AppTheme.textMuted),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: AppTheme.textMuted),
                 ),
                 const SizedBox(height: 16),
                 GridView.count(
-                  crossAxisCount:
-                      MediaQuery.sizeOf(context).width > 700 ? 4 : 2,
+                  crossAxisCount: MediaQuery.sizeOf(context).width > 700
+                      ? 4
+                      : 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisSpacing: 10,
@@ -134,7 +134,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ),
                   ),
                   icon: const Icon(CupertinoIcons.person_2),
-                  label: const Text('View and disable accounts'),
+                  label: const Text('Manage user accounts'),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
@@ -160,10 +160,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       children: [
                         Text(
                           'User accounts',
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 8),
                         for (final entry in const [
@@ -178,8 +176,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 Expanded(
                                   child: Text(
                                     entry.$1,
-                                    style:
-                                        TextStyle(color: AppTheme.textMuted),
+                                    style: TextStyle(color: AppTheme.textMuted),
                                   ),
                                 ),
                                 Text(

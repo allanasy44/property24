@@ -356,13 +356,13 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _continueAfterAuthentication() {
     final user = context.read<Property24State>().user;
-    final needsContactVerification =
+    final needsEmailVerification =
         user != null &&
         user.role != AccountRole.admin &&
-        (!user.emailVerified || !user.phoneVerified);
+        !user.emailVerified;
     context.go(
-      needsContactVerification
-          ? AppRoutes.contactVerificationScreen
+      needsEmailVerification
+          ? AppRoutes.emailVerificationScreen
           : AppRoutes.homeScreen,
     );
   }

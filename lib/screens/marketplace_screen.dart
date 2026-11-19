@@ -657,7 +657,7 @@ class _ViewTabs extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: tabs.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final (label, value) = tabs[index];
           final isSelected = selected == value;
@@ -1002,18 +1002,19 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
                         ),
                         LayoutBuilder(
                           builder: (context, constraints) {
-                            final fields = [
-                              Expanded(child: _input(_category, 'Category')),
-                              Expanded(child: _input(_location, 'Location')),
-                            ];
                             if (constraints.maxWidth < 430) {
-                              return Column(children: [fields[0], fields[1]]);
+                              return Column(
+                                children: [
+                                  _input(_category, 'Category'),
+                                  _input(_location, 'Location'),
+                                ],
+                              );
                             }
                             return Row(
                               children: [
-                                fields[0],
+                                Expanded(child: _input(_category, 'Category')),
                                 const SizedBox(width: 12),
-                                fields[1],
+                                Expanded(child: _input(_location, 'Location')),
                               ],
                             );
                           },

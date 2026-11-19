@@ -23,6 +23,7 @@ class User(AbstractUser):
     role = models.CharField(max_length=16, choices=Roles.choices, default=Roles.TENANT)
     marketplace_capabilities = models.JSONField(default=list, blank=True)
     is_verified = models.BooleanField(default=False)
+    identity_documents_submitted = models.BooleanField(default=False)
     auth_provider = models.CharField(max_length=24, default="password")
     google_subject = models.CharField(max_length=255, blank=True, unique=True, null=True)
     google_email_verified = models.BooleanField(default=False)
@@ -55,6 +56,25 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.full_name or self.username
+
+
+class UserPresenceSession(models.Model):
+    session_id = models.CharField(max_length=32, primary_key=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="presence_sessions",
+    )
+    connected_at = models.DateTimeField(default=timezone.now)
+    last_ping_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["user", "last_ping_at"],
+                name="presence_user_last_ping_idx",
+            )
+        ]
 
 
 class Notification(models.Model):
@@ -786,6 +806,11 @@ class Viewing(models.Model):
 class Conversation(models.Model):
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
     participants = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="conversations")
+    hidden_by = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="hidden_conversations",
+        blank=True,
+    )
     title = models.CharField(max_length=180, blank=True)
     phone_numbers_revealed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -133,7 +133,7 @@ def property_insights(property_obj):
     photos_present = property_obj.photos.exists()
     positive = [
         ("Identity verification", 20, bool(owner.is_verified), "Owner identity review"),
-        ("Phone verified", 10, bool(owner.phone_verified), "Owner phone confirmation"),
+        ("ID images submitted", 10, bool(owner.identity_documents_submitted), "Owner submitted both ID images"),
         ("Email verified", 5, bool(owner.email_verified), "Owner email confirmation"),
         ("Property verification", 25, property_obj.is_verified, "Listing review status"),
         ("Location confirmed", 15, location_verified, "Coordinates or address review"),

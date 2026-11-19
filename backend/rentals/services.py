@@ -136,4 +136,4 @@ def create_report(cleaned_data):
 
 
 def default_checks_for_role(role):
-    return ["Phone OTP verification", "ID front and back", "Document number and name match"]
+    return ["ID front and back images submitted"]

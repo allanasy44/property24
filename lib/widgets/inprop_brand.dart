@@ -15,9 +15,9 @@ class InPropBrand extends StatelessWidget {
   Widget build(BuildContext context) {
     const wordmarkStyle = TextStyle(
       fontFamily: 'Montserrat, Poppins, Arial, sans-serif',
-      fontSize: 238,
+      fontSize: 220,
       fontWeight: FontWeight.w800,
-      letterSpacing: -11,
+      letterSpacing: -10,
     );
     final wordmarkPainter = TextPainter(
       text: const TextSpan(text: 'inprop', style: wordmarkStyle),
@@ -89,10 +89,7 @@ class InPropBrand extends StatelessWidget {
       ),
     );
 
-    return Semantics(
-      label: 'inprop. Rent, buy, jobs.',
-      child: brand,
-    );
+    return Semantics(label: 'inprop. Rent, buy, jobs.', child: brand);
   }
 
   Widget _taglineDot() => Container(

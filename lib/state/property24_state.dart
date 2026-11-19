@@ -708,11 +708,6 @@ class Property24State extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String> requestPhoneVerification({required String phone}) async {
-    final activeToken = _requireToken();
-    return _api.requestPhoneVerification(token: activeToken, phone: phone);
-  }
-
   Future<String> requestEmailVerification({required String email}) async {
     final activeToken = _requireToken();
     return _api.requestEmailVerification(token: activeToken, email: email);
@@ -730,22 +725,7 @@ class Property24State extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> verifyPhone(String challengeId, String code) async {
-    final activeToken = _requireToken();
-    final session = await _api.verifyPhone(
-      token: activeToken,
-      challengeId: challengeId,
-      code: code,
-    );
-    user = session.user;
-
-    account = session.account;
-    notifyListeners();
-  }
-
   Future<VerificationItem> submitIdentityVerification({
-    required String phone,
-    required String nationalIdNumber,
     required Uint8List idFrontBytes,
     required String idFrontName,
     required String idFrontMimeType,
@@ -768,8 +748,6 @@ class Property24State extends ChangeNotifier {
       token: activeToken,
       role: activeUser.role.apiValue,
       name: activeUser.name,
-      phone: phone,
-      nationalIdNumber: nationalIdNumber,
       idFrontBytes: idFrontBytes,
       idFrontName: idFrontName,
       idFrontMimeType: idFrontMimeType,
@@ -1190,6 +1168,12 @@ class Property24State extends ChangeNotifier {
       conversationId,
       messageId,
     );
+    await refresh();
+  }
+
+  Future<void> hideConversation(String conversationId) async {
+    final activeToken = _requireToken();
+    await _api.hideConversation(activeToken, conversationId);
     await refresh();
   }
 

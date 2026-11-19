@@ -1,13 +1,11 @@
 # Property24 Zimbabwe
 
-Property platform for Zimbabwean property discovery, applications, messaging, and verification. The Flutter mobile app and standalone Next.js website in [`inprop/`](./inprop/) share the Django API.
+Property platform for Zimbabwean property discovery, applications, messaging, and verification. The Flutter mobile and web app share the Django API.
 
 ## Stack
 
 - Flutter
 - Dart
-- Next.js and TypeScript web frontend (`inprop/`)
-- Tailwind CSS, shadcn/ui-style components, and Motion
 - Provider state management
 - Shared preferences for local auth-token persistence
 - HTTP client connected to the Django API
@@ -28,18 +26,7 @@ Property platform for Zimbabwean property discovery, applications, messaging, an
 
 ## Run locally
 
-Web:
-
-```bash
-cd inprop
-npm install
-cp .env.example .env.local
-npm run dev
-```
-
-Open `http://localhost:3000`. The web frontend reads the same Django API as the mobile app; set `INPROP_API_BASE_URL` in `inprop/.env.local` if the backend uses a different address.
-
-Frontend:
+Flutter web and mobile:
 
 Use Flutter stable with Dart 3.10 or newer.
 
@@ -164,7 +151,8 @@ python3 manage.py makemigrations --check --dry-run
 
 ## Notes
 
-- When `OBJECT_STORAGE_PROVIDER=minio`, Django file fields use the MinIO bucket configured in `backend/.env`.
+- When `OBJECT_STORAGE_PROVIDER=minio`, Django file fields use a private MinIO bucket and return time-limited signed read URLs. Set `OBJECT_STORAGE_PUBLIC_BASE_URL` in `backend/.env` to the browser-reachable bucket URL (for the default local ports: `http://localhost:9010/property24-media`); never enable anonymous bucket downloads.
+- Keep `EMAIL_HOST_PASSWORD` only in the ignored `backend/.env` or a deployment secret store. Revoke and rotate any SMTP credential that has been exposed.
 - The backend still exposes `POST /api/auth/google/` for Google ID-token sign-in when `GOOGLE_SIGN_IN_ENABLED=true`; the Flutter frontend currently ships password registration/sign-in and can add a Google identity-provider package against that endpoint later.
 - `GET /api/health/` reports database, object storage, AI provider, and map provider status.
 - The Flutter data layer hydrates from the Django API and does not inject demo listings or conversations.
