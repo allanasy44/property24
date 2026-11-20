@@ -1285,6 +1285,15 @@ def submit_service_request(service, requester, message):
     try:
         with transaction.atomic():
             result = ServiceRequest.objects.create(service=service, requester=requester, message=message)
+            result.status_history = [marketplace_status_event(result.status, requester)]
+            result.save(update_fields=["status_history"])
+            notify_marketplace_status(
+                service.owner,
+                "service_request_status",
+                result.status,
+                result.id,
+                service.title,
+            )
     except IntegrityError:
         return None, json_error("You have already requested this service", status=409)
     return result, None
@@ -1299,10 +1308,60 @@ def submit_job_application(job, applicant, cover_message):
         return None, json_error("You have already applied to this job", status=409)
     try:
         with transaction.atomic():
-            result = JobApplication.objects.create(job=job, applicant=applicant, cover_message=cover_message)
+            job = JobPosting.objects.select_for_update().get(pk=job.pk)
+            if not job.is_active:
+                return None, json_error("This job is closed", status=409)
+            result = JobApplication.objects.create(
+                job=job,
+                applicant=applicant,
+                cover_message=cover_message,
+            )
+            result.status_history = [marketplace_status_event(result.status, applicant)]
+            result.save(update_fields=["status_history"])
+            notify_marketplace_status(
+                job.owner,
+                "job_application_status",
+                result.status,
+                result.id,
+                job.title,
+            )
     except IntegrityError:
         return None, json_error("You have already applied to this job", status=409)
     return result, None
+
+
+def marketplace_status_event(status, actor):
+    return {
+        "status": status,
+        "changed_by_id": actor.id,
+        "created_at": timezone.now().isoformat(),
+    }
+
+
+def record_marketplace_status(instance, status, actor):
+    history = list(instance.status_history or [])
+    if not history:
+        history.append(
+            {
+                "status": instance.status,
+                "changed_by_id": None,
+                "created_at": instance.created_at.isoformat(),
+            }
+        )
+    instance.status = status
+    history.append(marketplace_status_event(status, actor))
+    instance.status_history = history
+    instance.save(update_fields=["status", "status_history"])
+
+
+def notify_marketplace_status(user, kind, status, item_id, title):
+    status_label = status.replace("_", " ")
+    Notification.objects.create(
+        user=user,
+        kind=kind,
+        message=f"{title}: {status_label}",
+        payload={"status": status, "item_id": str(item_id)},
+    )
 
 
 @csrf_exempt
@@ -1405,15 +1464,44 @@ def service_request_detail(request, request_id):
     if not isinstance(status, str) or status not in ServiceRequest.Status.values:
         return json_error("status must be one of: " + ", ".join(ServiceRequest.Status.values))
     if service_request.service.owner_id == acting_user.id:
-        allowed_statuses = {ServiceRequest.Status.ACCEPTED, ServiceRequest.Status.DECLINED}
+        transitions = {
+            ServiceRequest.Status.PENDING: {
+                ServiceRequest.Status.ACCEPTED,
+                ServiceRequest.Status.DECLINED,
+            },
+            ServiceRequest.Status.ACCEPTED: {ServiceRequest.Status.IN_PROGRESS},
+            ServiceRequest.Status.IN_PROGRESS: {ServiceRequest.Status.COMPLETED},
+        }
+        recipient = service_request.requester
+        allowed_statuses = {
+            status for statuses in transitions.values() for status in statuses
+        }
     elif service_request.requester_id == acting_user.id:
+        transitions = {
+            ServiceRequest.Status.PENDING: {ServiceRequest.Status.CANCELLED},
+        }
+        recipient = service_request.service.owner
         allowed_statuses = {ServiceRequest.Status.CANCELLED}
     else:
         return forbidden()
     if status not in allowed_statuses:
         return forbidden()
-    service_request.status = status
-    service_request.save(update_fields=["status"])
+    if status not in transitions.get(service_request.status, set()):
+        return json_error("This status transition is not allowed", status=409)
+    with transaction.atomic():
+        service_request = ServiceRequest.objects.select_for_update().select_related(
+            "service", "service__owner", "requester"
+        ).get(pk=request_id)
+        if status not in transitions.get(service_request.status, set()):
+            return json_error("This status transition is not allowed", status=409)
+        record_marketplace_status(service_request, status, acting_user)
+        notify_marketplace_status(
+            recipient,
+            "service_request_status",
+            status,
+            service_request.id,
+            service_request.service.title,
+        )
     return JsonResponse(serialize_service_request(service_request))
 
 
@@ -1519,15 +1607,89 @@ def job_application_detail(request, application_id):
     if not isinstance(status, str) or status not in JobApplication.Status.values:
         return json_error("status must be one of: " + ", ".join(JobApplication.Status.values))
     if application.job.owner_id == acting_user.id:
-        allowed_statuses = {JobApplication.Status.ACCEPTED, JobApplication.Status.DECLINED}
+        transitions = {
+            JobApplication.Status.PENDING: {
+                JobApplication.Status.REVIEWING,
+                JobApplication.Status.DECLINED,
+            },
+            JobApplication.Status.REVIEWING: {
+                JobApplication.Status.SHORTLISTED,
+                JobApplication.Status.DECLINED,
+            },
+            JobApplication.Status.SHORTLISTED: {
+                JobApplication.Status.INTERVIEW,
+                JobApplication.Status.DECLINED,
+            },
+            JobApplication.Status.INTERVIEW: {
+                JobApplication.Status.OFFER,
+                JobApplication.Status.DECLINED,
+            },
+            JobApplication.Status.OFFER: {
+                JobApplication.Status.HIRED,
+                JobApplication.Status.DECLINED,
+            },
+        }
+        recipient = application.applicant
+        allowed_statuses = {
+            status for statuses in transitions.values() for status in statuses
+        }
     elif application.applicant_id == acting_user.id:
+        transitions = {
+            JobApplication.Status.PENDING: {JobApplication.Status.WITHDRAWN},
+        }
+        recipient = application.job.owner
         allowed_statuses = {JobApplication.Status.WITHDRAWN}
     else:
         return forbidden()
     if status not in allowed_statuses:
         return forbidden()
-    application.status = status
-    application.save(update_fields=["status"])
+    if status not in transitions.get(application.status, set()):
+        return json_error("This status transition is not allowed", status=409)
+    with transaction.atomic():
+        application = JobApplication.objects.select_for_update().select_related(
+            "job", "job__owner", "applicant"
+        ).get(pk=application_id)
+        job = JobPosting.objects.select_for_update().get(pk=application.job_id)
+        if status not in transitions.get(application.status, set()):
+            return json_error("This status transition is not allowed", status=409)
+        if status == JobApplication.Status.HIRED and JobApplication.objects.filter(
+            job=job,
+            status=JobApplication.Status.HIRED,
+        ).exclude(pk=application.id).exists():
+            return json_error("This job has already been filled", status=409)
+        record_marketplace_status(application, status, acting_user)
+        if status == JobApplication.Status.HIRED:
+            job.is_active = False
+            job.save(update_fields=["is_active", "updated_at"])
+            other_applications = JobApplication.objects.select_for_update().select_related(
+                "applicant"
+            ).filter(job=job).exclude(pk=application.id).exclude(
+                status__in=[
+                    JobApplication.Status.DECLINED,
+                    JobApplication.Status.WITHDRAWN,
+                    JobApplication.Status.JOB_TAKEN,
+                ]
+            )
+            for other_application in other_applications:
+                record_marketplace_status(
+                    other_application,
+                    JobApplication.Status.JOB_TAKEN,
+                    acting_user,
+                )
+                notify_marketplace_status(
+                    other_application.applicant,
+                    "job_application_status",
+                    JobApplication.Status.JOB_TAKEN,
+                    other_application.id,
+                    job.title,
+                )
+        notify_marketplace_status(
+            recipient,
+            "job_application_status",
+            status,
+            application.id,
+            job.title,
+        )
     return JsonResponse(serialize_job_application(application))
 
 
@@ -5092,6 +5254,7 @@ def serialize_service_request(service_request):
         "requester": serialize_user(service_request.requester),
         "message": service_request.message,
         "status": service_request.status,
+        "status_history": serialize_marketplace_status_history(service_request),
         "created_at": service_request.created_at.isoformat(),
     }
 
@@ -5125,8 +5288,22 @@ def serialize_job_application(application):
         "applicant": serialize_user(application.applicant),
         "cover_message": application.cover_message,
         "status": application.status,
+        "status_history": serialize_marketplace_status_history(application),
         "created_at": application.created_at.isoformat(),
     }
+
+
+def serialize_marketplace_status_history(instance):
+    history = instance.status_history or []
+    if history:
+        return history
+    return [
+        {
+            "status": instance.status,
+            "changed_by_id": None,
+            "created_at": instance.created_at.isoformat(),
+        }
+    ]
 
 
 def serialize_notification(notification):

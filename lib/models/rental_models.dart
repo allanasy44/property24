@@ -308,14 +308,36 @@ class ServiceListing {
   final String createdAt;
 }
 
+class MarketplaceStatusEvent {
+  const MarketplaceStatusEvent({
+    required this.status,
+    required this.changedById,
+    required this.createdAt,
+  });
+
+  factory MarketplaceStatusEvent.fromJson(Map<String, dynamic> json) {
+    return MarketplaceStatusEvent(
+      status: textValue(json, 'status'),
+      changedById: textValue(json, 'changed_by_id'),
+      createdAt: textValue(json, 'created_at'),
+    );
+  }
+
+  final String status;
+  final String changedById;
+  final String createdAt;
+}
+
 class ServiceRequestItem {
   const ServiceRequestItem({
     required this.id,
     required this.serviceId,
+    required this.serviceTitle,
     required this.ownerId,
     required this.requesterId,
     required this.message,
     required this.status,
+    required this.statusHistory,
     required this.requester,
     required this.createdAt,
   });
@@ -327,10 +349,12 @@ class ServiceRequestItem {
     return ServiceRequestItem(
       id: textValue(json, 'id'),
       serviceId: textValue(json, 'service_id'),
+      serviceTitle: textValue(json, 'service_title', 'Service request'),
       ownerId: textValue(json, 'owner_id'),
       requesterId: textValue(json, 'requester_id'),
       message: textValue(json, 'message'),
       status: textValue(json, 'status', 'pending'),
+      statusHistory: _marketplaceStatusHistory(json),
       requester: AccountUser.fromJson(requesterJson),
       createdAt: textValue(json, 'created_at'),
     );
@@ -338,10 +362,12 @@ class ServiceRequestItem {
 
   final String id;
   final String serviceId;
+  final String serviceTitle;
   final String ownerId;
   final String requesterId;
   final String message;
   final String status;
+  final List<MarketplaceStatusEvent> statusHistory;
   final AccountUser requester;
   final String createdAt;
 }
@@ -394,10 +420,12 @@ class JobApplicationItem {
   const JobApplicationItem({
     required this.id,
     required this.jobId,
+    required this.jobTitle,
     required this.ownerId,
     required this.applicantId,
     required this.coverMessage,
     required this.status,
+    required this.statusHistory,
     required this.applicant,
     required this.createdAt,
   });
@@ -409,10 +437,12 @@ class JobApplicationItem {
     return JobApplicationItem(
       id: textValue(json, 'id'),
       jobId: textValue(json, 'job_id'),
+      jobTitle: textValue(json, 'job_title', 'Job application'),
       ownerId: textValue(json, 'owner_id'),
       applicantId: textValue(json, 'applicant_id'),
       coverMessage: textValue(json, 'cover_message'),
       status: textValue(json, 'status', 'pending'),
+      statusHistory: _marketplaceStatusHistory(json),
       applicant: AccountUser.fromJson(applicantJson),
       createdAt: textValue(json, 'created_at'),
     );
@@ -420,12 +450,25 @@ class JobApplicationItem {
 
   final String id;
   final String jobId;
+  final String jobTitle;
   final String ownerId;
   final String applicantId;
   final String coverMessage;
   final String status;
+  final List<MarketplaceStatusEvent> statusHistory;
   final AccountUser applicant;
   final String createdAt;
+}
+
+List<MarketplaceStatusEvent> _marketplaceStatusHistory(
+  Map<String, dynamic> json,
+) {
+  final history = json['status_history'];
+  if (history is! List) return const [];
+  return history
+      .whereType<Map<String, dynamic>>()
+      .map(MarketplaceStatusEvent.fromJson)
+      .toList(growable: false);
 }
 
 class PropertyListing {

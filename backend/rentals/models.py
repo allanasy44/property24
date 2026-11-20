@@ -437,6 +437,8 @@ class ServiceRequest(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         ACCEPTED = "accepted", "Accepted"
+        IN_PROGRESS = "in_progress", "In progress"
+        COMPLETED = "completed", "Completed"
         DECLINED = "declined", "Declined"
         CANCELLED = "cancelled", "Cancelled"
 
@@ -452,6 +454,7 @@ class ServiceRequest(models.Model):
     )
     message = models.CharField(max_length=2000)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    status_history = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -501,9 +504,14 @@ class JobPosting(models.Model):
 class JobApplication(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
-        ACCEPTED = "accepted", "Accepted"
+        REVIEWING = "reviewing", "Reviewing"
+        SHORTLISTED = "shortlisted", "Shortlisted"
+        INTERVIEW = "interview", "Interview"
+        OFFER = "offer", "Offer"
+        HIRED = "hired", "Hired"
         DECLINED = "declined", "Declined"
         WITHDRAWN = "withdrawn", "Withdrawn"
+        JOB_TAKEN = "job_taken", "Job taken"
 
     job = models.ForeignKey(
         JobPosting,
@@ -517,6 +525,7 @@ class JobApplication(models.Model):
     )
     cover_message = models.CharField(max_length=2000)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    status_history = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

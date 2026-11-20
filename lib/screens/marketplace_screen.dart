@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
@@ -167,7 +168,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         .toList(growable: false);
     final jobs = state.snapshot.jobs
         .where((job) {
-          if (job.status != 'active') return false;
+          if (job.status != 'active' &&
+              !(_view == 'mine' && job.owner.id == userId)) {
+            return false;
+          }
           if (_view == 'mine' && job.owner.id != userId) return false;
           if (_jobType.isNotEmpty && job.employmentType != _jobType) {
             return false;
@@ -1601,6 +1605,11 @@ class _JobCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (job.status != 'active')
+                  const Chip(
+                    label: Text('Position filled'),
+                    visualDensity: VisualDensity.compact,
+                  ),
                 if (isOwner) ...[
                   IconButton(
                     tooltip: 'Edit job post',
@@ -1688,18 +1697,28 @@ class _ServiceRequests extends StatelessWidget {
       children: [
         for (final request in requests)
           _RequestRow(
-            title: _serviceTitleFor(services, request.serviceId),
-            subtitle: '${request.status} · ${request.requester.name}',
+            title: request.serviceTitle.isNotEmpty
+                ? request.serviceTitle
+                : _serviceTitleFor(services, request.serviceId),
+            subtitle:
+                '${_marketplaceStatusLabel(request.status)} · ${request.requester.name}',
             message: request.message,
+            statusHistory: request.statusHistory,
             actions: _requestActions(
-              request.status,
               canManage: request.ownerId == userId,
               onStatusChange: (status) => onStatusChange(request, status),
-              ownerActions: const [
-                ('Accept', 'accepted'),
-                ('Decline', 'declined'),
-              ],
-              participantActions: const [('Cancel request', 'cancelled')],
+              ownerActions: switch (request.status) {
+                'pending' => const [
+                  ('Accept', 'accepted'),
+                  ('Decline', 'declined'),
+                ],
+                'accepted' => const [('Mark in progress', 'in_progress')],
+                'in_progress' => const [('Mark completed', 'completed')],
+                _ => const [],
+              },
+              participantActions: request.status == 'pending'
+                  ? const [('Cancel request', 'cancelled')]
+                  : const [],
             ),
           ),
       ],
@@ -1733,18 +1752,39 @@ class _JobApplications extends StatelessWidget {
       children: [
         for (final application in applications)
           _RequestRow(
-            title: _jobTitleFor(jobs, application.jobId),
-            subtitle: '${application.status} · ${application.applicant.name}',
+            title: application.jobTitle.isNotEmpty
+                ? application.jobTitle
+                : _jobTitleFor(jobs, application.jobId),
+            subtitle:
+                '${_marketplaceStatusLabel(application.status)} · ${application.applicant.name}',
             message: application.coverMessage,
+            statusHistory: application.statusHistory,
             actions: _requestActions(
-              application.status,
               canManage: application.ownerId == userId,
               onStatusChange: (status) => onStatusChange(application, status),
-              ownerActions: const [
-                ('Accept', 'accepted'),
-                ('Decline', 'declined'),
-              ],
-              participantActions: const [('Withdraw', 'withdrawn')],
+              ownerActions: switch (application.status) {
+                'pending' => const [
+                  ('Move to reviewing', 'reviewing'),
+                  ('Decline', 'declined'),
+                ],
+                'reviewing' => const [
+                  ('Shortlist', 'shortlisted'),
+                  ('Decline', 'declined'),
+                ],
+                'shortlisted' => const [
+                  ('Schedule interview', 'interview'),
+                  ('Decline', 'declined'),
+                ],
+                'interview' => const [
+                  ('Make offer', 'offer'),
+                  ('Decline', 'declined'),
+                ],
+                'offer' => const [('Hire', 'hired'), ('Decline', 'declined')],
+                _ => const [],
+              },
+              participantActions: application.status == 'pending'
+                  ? const [('Withdraw', 'withdrawn')]
+                  : const [],
             ),
           ),
       ],
@@ -1766,15 +1806,14 @@ String _jobTitleFor(List<JobPosting> jobs, String jobId) {
   return 'Job application';
 }
 
-Widget? _requestActions(
-  String status, {
+Widget? _requestActions({
   required bool canManage,
   required ValueChanged<String> onStatusChange,
   required List<(String, String)> ownerActions,
   required List<(String, String)> participantActions,
 }) {
-  if (status != 'pending') return null;
   final actions = canManage ? ownerActions : participantActions;
+  if (actions.isEmpty) return null;
   return Wrap(
     spacing: 8,
     children: [
@@ -1784,17 +1823,36 @@ Widget? _requestActions(
   );
 }
 
+String _marketplaceStatusLabel(String status) => switch (status) {
+  'pending' => 'Applied',
+  'reviewing' => 'Reviewing',
+  'shortlisted' => 'Shortlisted',
+  'interview' => 'Interview',
+  'offer' => 'Offer made',
+  'hired' => 'Hired',
+  'in_progress' => 'In progress',
+  'completed' => 'Completed',
+  'accepted' => 'Accepted',
+  'declined' => 'Declined',
+  'withdrawn' => 'Withdrawn',
+  'cancelled' => 'Cancelled',
+  'job_taken' => 'Job taken — another applicant was selected',
+  _ => status,
+};
+
 class _RequestRow extends StatelessWidget {
   const _RequestRow({
     required this.title,
     required this.subtitle,
     required this.message,
+    required this.statusHistory,
     this.actions,
   });
 
   final String title;
   final String subtitle;
   final String message;
+  final List<MarketplaceStatusEvent> statusHistory;
   final Widget? actions;
 
   @override
@@ -1810,12 +1868,29 @@ class _RequestRow extends StatelessWidget {
             Text(subtitle),
             const SizedBox(height: 4),
             Text(message),
+            if (statusHistory.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final event in statusHistory)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text(
+                    '${_marketplaceStatusLabel(event.status)} · ${_formatStatusDate(event.createdAt)}',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                  ),
+                ),
+            ],
             if (actions != null) ...[const SizedBox(height: 4), actions!],
           ],
         ),
       ),
     );
   }
+}
+
+String _formatStatusDate(String value) {
+  final date = DateTime.tryParse(value);
+  if (date == null) return '';
+  return DateFormat('d MMM yyyy · h:mm a').format(date.toLocal());
 }
 
 class _MarketplaceEmpty extends StatelessWidget {

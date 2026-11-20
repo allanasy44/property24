@@ -1996,12 +1996,21 @@ class _BottomActions extends StatelessWidget {
   Future<void> _contactHost(BuildContext context) async {
     try {
       final state = context.read<Property24State>();
+      final ConversationItem conversation;
       if (property.isStayOrVenue) {
-        await state.messageAboutProperty(property);
+        conversation = await state.messageAboutProperty(property);
       } else {
-        await state.holdProperty(property);
+        conversation = await state.holdProperty(property);
       }
-      if (context.mounted) context.go(AppRoutes.chatScreen);
+      if (!context.mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ConversationScreen(
+            conversation: conversation,
+            property: property,
+          ),
+        ),
+      );
     } catch (exception) {
       if (context.mounted) {
         ScaffoldMessenger.of(

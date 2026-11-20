@@ -434,7 +434,7 @@ class ServiceAndJobMarketplaceTests(TestCase):
                 data=json.dumps({"status": "accepted"}),
                 content_type="application/json",
             ).status_code,
-            403,
+            400,
         )
 
         owner_path = f"/api/job-applications/{application_for_owner.id}/"
@@ -476,6 +476,101 @@ class ServiceAndJobMarketplaceTests(TestCase):
             ).status_code,
             403,
         )
+
+    def test_job_progress_hires_one_applicant_and_marks_all_others_job_taken(self):
+        job = self.create_job()
+        self.authorize(self.applicant)
+        first = self.post_json(
+            f"/api/jobs/{job['id']}/applications/",
+            {"cover_message": "Experienced maintenance worker"},
+        ).json()
+        self.authorize(self.other)
+        second = self.post_json(
+            f"/api/jobs/{job['id']}/applications/",
+            {"cover_message": "Additional candidate"},
+        ).json()
+
+        self.authorize(self.owner)
+        next_statuses = ["reviewing", "shortlisted", "interview", "offer", "hired"]
+        for status in next_statuses:
+            response = self.client.patch(
+                f"/api/job-applications/{first['id']}/",
+                data=json.dumps({"status": status}),
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(response.json()["status"], status)
+
+        job_record = JobPosting.objects.get(pk=job["id"])
+        self.assertFalse(job_record.is_active)
+        other_application = JobApplication.objects.get(pk=second["id"])
+        self.assertEqual(other_application.status, JobApplication.Status.JOB_TAKEN)
+        self.assertEqual(
+            [event["status"] for event in other_application.status_history],
+            ["pending", "job_taken"],
+        )
+        self.assertEqual(
+            [event["status"] for event in JobApplication.objects.get(
+                pk=first["id"]
+            ).status_history],
+            ["pending", *next_statuses],
+        )
+        self.assertTrue(Notification.objects.filter(user=self.other).exists())
+
+        late_applicant = self.make_user("late-applicant", User.Roles.TENANT)
+        self.authorize(late_applicant)
+        self.assertEqual(self.client.get("/api/jobs/").json()["results"], [])
+        response = self.post_json(
+            f"/api/jobs/{job['id']}/applications/",
+            {"cover_message": "I would like to apply"},
+        )
+        self.assertEqual(response.status_code, 409)
+
+    def test_service_progress_is_tracked_without_closing_listing_for_other_customers(self):
+        service = self.create_service()
+        self.authorize(self.applicant)
+        first = self.post_json(
+            f"/api/services/{service['id']}/requests/",
+            {"message": "Please fix a leaking tap"},
+        ).json()
+        self.authorize(self.other)
+        second = self.post_json(
+            f"/api/services/{service['id']}/requests/",
+            {"message": "Please inspect a drain"},
+        ).json()
+
+        self.authorize(self.owner)
+        for status in ["accepted", "in_progress", "completed"]:
+            response = self.client.patch(
+                f"/api/service-requests/{first['id']}/",
+                data=json.dumps({"status": status}),
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(response.json()["status"], status)
+
+        self.assertEqual(
+            [event["status"] for event in ServiceRequest.objects.get(
+                pk=first["id"]
+            ).status_history],
+            ["pending", "accepted", "in_progress", "completed"],
+        )
+        response = self.client.patch(
+            f"/api/service-requests/{second['id']}/",
+            data=json.dumps({"status": "accepted"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(ServiceListing.objects.get(pk=service["id"]).is_active)
+        self.assertEqual(len(self.client.get("/api/services/").json()["results"]), 1)
+
+        self.authorize(self.other)
+        response = self.client.patch(
+            f"/api/service-requests/{second['id']}/",
+            data=json.dumps({"status": "completed"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 class GoogleSignInConfigTests(TestCase):
