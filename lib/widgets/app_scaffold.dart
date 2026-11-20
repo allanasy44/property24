@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
@@ -469,7 +468,8 @@ class _BottomNavItem extends StatelessWidget {
                     item.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(
+                    style: TextStyle(
+                      fontFamily: 'Arial',
                       fontSize: 10,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                       color: selected

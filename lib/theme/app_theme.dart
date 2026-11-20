@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   AppTheme._();
@@ -48,7 +47,8 @@ class AppTheme {
     const mutedText = _darkTextSecondary;
     const darkBorder = _darkBorder;
     final base = ThemeData.dark(useMaterial3: true);
-    final textTheme = GoogleFonts.poppinsTextTheme().apply(
+    final textTheme = base.textTheme.apply(
+      fontFamily: 'Arial',
       bodyColor: darkText,
       displayColor: darkText,
     );
@@ -83,17 +83,13 @@ class AppTheme {
         backgroundColor: surface,
         contentTextStyle: const TextStyle(color: darkText),
         actionTextColor: _darkSecondary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       listTileTheme: ListTileThemeData(
         iconColor: mutedText,
         textColor: darkText,
         tileColor: card,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       textTheme: textTheme.copyWith(
         headlineSmall: textTheme.headlineSmall?.copyWith(
@@ -214,7 +210,8 @@ class AppTheme {
 
   static ThemeData get lightTheme {
     final base = ThemeData.light(useMaterial3: true);
-    final textTheme = GoogleFonts.poppinsTextTheme().apply(
+    final textTheme = base.textTheme.apply(
+      fontFamily: 'Arial',
       bodyColor: _lightTextPrimary,
       displayColor: _lightTextPrimary,
     );

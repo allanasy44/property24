@@ -24,6 +24,7 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
   StreamSubscription<GoogleSignInAuthenticationEvent>? _subscription;
   String? _error;
   bool _initialized = false;
+  bool _timedOut = false;
 
   @override
   void initState() {
@@ -32,10 +33,22 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
   }
 
   Future<void> _initialize() async {
+    if (mounted) {
+      setState(() {
+        _error = null;
+        _initialized = false;
+        _timedOut = false;
+      });
+    }
     try {
       await _subscription?.cancel();
       _subscription = null;
-      await Property24Api().initializeGoogleSignIn();
+      await Property24Api().initializeGoogleSignIn().timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => throw TimeoutException(
+          'Google sign-in configuration took too long',
+        ),
+      );
       _subscription = GoogleSignIn.instance.authenticationEvents.listen(
         (event) {
           if (event case GoogleSignInAuthenticationEventSignIn(:final user)) {
@@ -53,7 +66,15 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
       );
       if (mounted) setState(() => _initialized = true);
     } catch (exception) {
-      if (mounted) setState(() => _error = userFacingError(exception));
+      if (mounted) {
+        setState(() {
+          if (exception is TimeoutException) {
+            _timedOut = true;
+          } else {
+            _error = userFacingError(exception);
+          }
+        });
+      }
     }
   }
 
@@ -65,6 +86,18 @@ class _GoogleWebSignInButtonState extends State<GoogleWebSignInButton> {
 
   @override
   Widget build(BuildContext context) {
+    if (_timedOut) {
+      return SizedBox(
+        height: 48,
+        child: Center(
+          child: TextButton.icon(
+            onPressed: _initialize,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Google sign-in is taking longer — retry'),
+          ),
+        ),
+      );
+    }
     if (_error != null) {
       return Text(_error!, textAlign: TextAlign.center);
     }

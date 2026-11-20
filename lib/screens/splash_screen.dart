@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -380,7 +379,8 @@ class _OnboardingView extends StatelessWidget {
               ),
               child: Text(
                 'Skip',
-                style: GoogleFonts.poppins(
+                style: TextStyle(
+                  fontFamily: 'Arial',
                   color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -418,7 +418,8 @@ class _OnboardingView extends StatelessWidget {
                     // Subtitle
                     Text(
                       slides[currentPage].subtitle,
-                      style: GoogleFonts.poppins(
+                      style: TextStyle(
+                        fontFamily: 'Arial',
                         color: AppTheme.textSecondary,
                         fontSize: 14,
                         height: 1.6,
@@ -482,7 +483,8 @@ class _OnboardingView extends StatelessWidget {
                               children: [
                                 Text(
                                   isLast ? 'Get Started' : 'Next',
-                                  style: GoogleFonts.poppins(
+                                  style: TextStyle(
+                                    fontFamily: 'Arial',
                                     color: Colors.white,
                                     fontSize: 15,
                                     fontWeight: FontWeight.w600,
@@ -515,7 +517,8 @@ class _OnboardingView extends StatelessWidget {
 
     return RichText(
       text: TextSpan(
-        style: GoogleFonts.poppins(
+        style: TextStyle(
+          fontFamily: 'Arial',
           fontSize: 34,
           fontWeight: FontWeight.w700,
           color: AppTheme.textPrimary,
@@ -606,7 +609,8 @@ class _GettingStartedViewState extends State<_GettingStartedView>
                         Text(
                           'What would you like to do first?',
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
+                          style: TextStyle(
+                            fontFamily: 'Arial',
                             color: AppTheme.textPrimary,
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
@@ -616,7 +620,8 @@ class _GettingStartedViewState extends State<_GettingStartedView>
                         Text(
                           'Choose a starting point. You can still explore every marketplace after creating your account.',
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
+                          style: TextStyle(
+                            fontFamily: 'Arial',
                             color: AppTheme.textSecondary,
                             fontSize: 13,
                             height: 1.4,
@@ -700,7 +705,8 @@ class _GettingStartedViewState extends State<_GettingStartedView>
                               ),
                               child: Text(
                                 'Continue',
-                                style: GoogleFonts.poppins(
+                                style: TextStyle(
+                                  fontFamily: 'Arial',
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -780,7 +786,8 @@ class _IntentCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.poppins(
+                    style: TextStyle(
+                      fontFamily: 'Arial',
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: AppTheme.textPrimary,
@@ -789,7 +796,8 @@ class _IntentCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
-                    style: GoogleFonts.poppins(
+                    style: TextStyle(
+                      fontFamily: 'Arial',
                       fontSize: 11,
                       color: AppTheme.textSecondary,
                       height: 1.35,
