@@ -121,16 +121,27 @@ def property_insights(property_obj):
 
     owner = property_obj.owner
     now = timezone.now()
-    latest_verification = VerificationRequest.objects.filter(
-        user=owner,
-        status__in=[VerificationRequest.Status.VERIFIED, VerificationRequest.Status.APPROVED],
-    ).order_by("-reviewed_at", "-submitted_at").first()
+    latest_verification_location = getattr(
+        property_obj,
+        "insight_latest_verification_location",
+        None,
+    )
+    if not hasattr(property_obj, "insight_latest_verification_location"):
+        latest_verification = VerificationRequest.objects.filter(
+            user=owner,
+            status__in=[VerificationRequest.Status.VERIFIED, VerificationRequest.Status.APPROVED],
+        ).order_by("-reviewed_at", "-submitted_at").first()
+        latest_verification_location = (
+            latest_verification.address_gps_confirmed if latest_verification else False
+        )
     location_verified = bool(
         (property_obj.latitude is not None and property_obj.longitude is not None)
-        or (latest_verification and latest_verification.address_gps_confirmed)
+        or latest_verification_location
     )
     freshness_days = (now - property_obj.updated_at).days if property_obj.updated_at else 999
-    photos_present = property_obj.photos.exists()
+    photos_present = getattr(property_obj, "insight_has_photos", None)
+    if photos_present is None:
+        photos_present = property_obj.photos.exists()
     positive = [
         ("Identity verification", 20, bool(owner.is_verified), "Owner identity review"),
         ("ID images submitted", 10, bool(owner.identity_documents_submitted), "Owner submitted both ID images"),
@@ -145,25 +156,37 @@ def property_insights(property_obj):
         for label, points, complete, detail in positive
     ]
     reports = DisputeReport.objects.filter(property=property_obj)
-    resolved_text = " ".join(
-        f"{report.subject} {report.description}".lower()
-        for report in reports.filter(status=DisputeReport.Status.RESOLVED)
-    )
     penalty = 0
     penalties = []
-    if "scam" in resolved_text or "fraud" in resolved_text:
+    if hasattr(property_obj, "insight_scam_report"):
+        scam_report = property_obj.insight_scam_report
+        false_listing_report = property_obj.insight_false_listing_report
+        resolved_report_count = property_obj.insight_resolved_report_count or 0
+        review_required = property_obj.insight_admin_review_required
+    else:
+        resolved_text = " ".join(
+            f"{report.subject} {report.description}".lower()
+            for report in reports.filter(status=DisputeReport.Status.RESOLVED)
+        )
+        scam_report = "scam" in resolved_text or "fraud" in resolved_text
+        false_listing_report = "false property" in resolved_text or "misrepresentation" in resolved_text
+        resolved_report_count = reports.filter(status=DisputeReport.Status.RESOLVED).count()
+        review_required = reports.filter(
+            status__in=[DisputeReport.Status.OPEN, DisputeReport.Status.REVIEWING]
+        ).exists()
+
+    if scam_report:
         penalty += 40
         penalties.append("confirmed_scam_report")
-    if "false property" in resolved_text or "misrepresentation" in resolved_text:
+    if false_listing_report:
         penalty += 20
         penalties.append("false_property_information")
-    if reports.filter(status=DisputeReport.Status.RESOLVED).count() >= 3:
+    if resolved_report_count >= 3:
         penalty += 15
         penalties.append("repeated_complaints")
     if not owner.is_verified:
         penalty += 5
         penalties.append("verification_expired_or_incomplete")
-    review_required = reports.filter(status__in=[DisputeReport.Status.OPEN, DisputeReport.Status.REVIEWING]).exists()
     score = max(0, min(100, sum(item["score"] for item in breakdown) - penalty))
 
     confirmed_at = property_obj.availability_confirmed_at or property_obj.updated_at or property_obj.created_at

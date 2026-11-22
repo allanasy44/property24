@@ -111,6 +111,8 @@ else:
         }
     }
 DATABASE_ENGINE = env_str("DATABASE_ENGINE", "sqlite").lower()
+if IS_PRODUCTION and DATABASE_ENGINE != "postgresql":
+    raise ImproperlyConfigured("DATABASE_ENGINE=postgresql is required in production")
 if DATABASE_ENGINE == "postgresql":
     DATABASES = {
         "default": {
@@ -120,9 +122,18 @@ if DATABASE_ENGINE == "postgresql":
             "PASSWORD": env_str("POSTGRES_PASSWORD", ""),
             "HOST": env_str("POSTGRES_HOST", "127.0.0.1"),
             "PORT": env_str("POSTGRES_PORT", "5432"),
-            "CONN_MAX_AGE": env_int("POSTGRES_CONN_MAX_AGE", 60),
+            # Django persistent connections are not recommended under ASGI;
+            # Psycopg's bounded pool provides reuse without one connection per thread.
+            "CONN_MAX_AGE": env_int("POSTGRES_CONN_MAX_AGE", 0),
             "CONN_HEALTH_CHECKS": True,
             "ATOMIC_REQUESTS": True,
+            "OPTIONS": {
+                "pool": {
+                    "min_size": env_int("POSTGRES_POOL_MIN_SIZE", 1),
+                    "max_size": env_int("POSTGRES_POOL_MAX_SIZE", 8),
+                    "timeout": env_int("POSTGRES_POOL_TIMEOUT", 5),
+                },
+            },
         }
     }
 else:

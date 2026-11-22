@@ -17,6 +17,7 @@ from .ws_auth import JwtAuthMiddlewareStack
 class ChatRealtimeTests(TransactionTestCase):
     reset_sequences = True
 
+    @override_settings(REDIS_URL="")
     async def test_presence_tracks_each_live_connection_until_its_disconnects(self):
         token = await database_sync_to_async(self._create_user_token)()
         application = JwtAuthMiddlewareStack(URLRouter(websocket_urlpatterns))

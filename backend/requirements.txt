@@ -4,7 +4,7 @@ google-auth>=2.0,<3
 requests>=2.31,<3
 Pillow==12.3.0
 pytesseract>=0.3.13,<0.4
-psycopg[binary]==3.3.2
+psycopg[binary,pool]==3.3.2
 gunicorn==23.0.0
 redis>=5.0,<7
 channels==4.3.1

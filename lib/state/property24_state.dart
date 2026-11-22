@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -12,8 +13,11 @@ import '../services/property24_api.dart';
 
 class Property24State extends ChangeNotifier {
   Property24State({Property24Api? api}) : _api = api ?? Property24Api() {
-    _syncTimer = Timer.periodic(const Duration(seconds: 20), (_) {
-      if (signedIn && !_refreshing) refresh(silent: true);
+    final syncInterval = Duration(seconds: 900 + Random().nextInt(900));
+    _syncTimer = Timer.periodic(syncInterval, (_) {
+      if (signedIn && !_refreshing && !_liveConnected) {
+        refresh(silent: true, reloadAccount: false);
+      }
     });
   }
 
@@ -50,6 +54,12 @@ class Property24State extends ChangeNotifier {
       StreamController<Map<String, dynamic>>.broadcast();
   bool _refreshing = false;
   bool _refreshPending = false;
+  bool _loadingMoreProperties = false;
+  bool _loadingMoreServices = false;
+  bool _loadingMoreJobs = false;
+  bool _hasMoreProperties = false;
+  bool _hasMoreServices = false;
+  bool _hasMoreJobs = false;
 
   PlatformSnapshot snapshot = PlatformSnapshot.empty();
   List<PropertyListing> followedProperties = <PropertyListing>[];
@@ -107,6 +117,9 @@ class Property24State extends ChangeNotifier {
   bool get signedIn => _token != null && user != null;
   bool get liveConnected => _liveConnected;
   String? get liveConnectionIssue => _liveConnectionIssue;
+  bool get loadingMoreProperties => _loadingMoreProperties;
+  bool get loadingMoreServices => _loadingMoreServices;
+  bool get loadingMoreJobs => _loadingMoreJobs;
   bool get canManageListings =>
       account.capabilities.contains('add_properties') ||
       account.capabilities.contains('list_properties');
@@ -191,13 +204,16 @@ class Property24State extends ChangeNotifier {
         }
       }
     } finally {
+      _hasMoreProperties = snapshot.properties.length >= 50;
+      _hasMoreServices = snapshot.services.length >= 50;
+      _hasMoreJobs = snapshot.jobs.length >= 50;
       loading = false;
       notifyListeners();
       if (signedIn) unawaited(_connectLiveSocket());
     }
   }
 
-  Future<void> refresh({bool silent = false}) async {
+  Future<void> refresh({bool silent = false, bool reloadAccount = true}) async {
     if (_refreshing) {
       _refreshPending = true;
       return;
@@ -210,8 +226,10 @@ class Property24State extends ChangeNotifier {
         if (_token == null || _token!.isEmpty) {
           _replaceSnapshot(await _api.snapshot());
         } else {
-          final session = await _api.me(_token!);
-          _applySession(session);
+          if (reloadAccount) {
+            final session = await _api.me(_token!);
+            _applySession(session);
+          }
           _replaceSnapshot(
             await _api.snapshot(
               token: _token,
@@ -237,6 +255,9 @@ class Property24State extends ChangeNotifier {
         }
       }
       await _refreshFollowedProperties();
+      _hasMoreProperties = snapshot.properties.length >= 50;
+      _hasMoreServices = snapshot.services.length >= 50;
+      _hasMoreJobs = snapshot.jobs.length >= 50;
     } catch (exception) {
       error = userFacingError(exception);
     } finally {
@@ -246,6 +267,213 @@ class Property24State extends ChangeNotifier {
         _refreshPending = false;
         unawaited(refresh(silent: true));
       }
+    }
+  }
+
+  Future<void> loadMoreProperties() async {
+    if (!_hasMoreProperties ||
+        _loadingMoreProperties ||
+        snapshot.properties.isEmpty) {
+      return;
+    }
+    final cursor = snapshot.properties.last.id;
+    _loadingMoreProperties = true;
+    try {
+      final page = await _api.nextPropertiesPage(_token, cursor);
+      if (_disposed) return;
+      final existing = snapshot.properties.map((item) => item.id).toSet();
+      _replaceSnapshot(
+        snapshot.copyWith(
+          properties: [
+            ...snapshot.properties,
+            ...page.where((item) => existing.add(item.id)),
+          ],
+        ),
+      );
+      _hasMoreProperties = page.length >= 50;
+      notifyListeners();
+    } catch (exception) {
+      error = userFacingError(exception);
+      notifyListeners();
+    } finally {
+      _loadingMoreProperties = false;
+    }
+  }
+
+  Future<void> loadMoreServices() async {
+    if (!_hasMoreServices ||
+        _loadingMoreServices ||
+        snapshot.services.isEmpty) {
+      return;
+    }
+    final cursor = snapshot.services.last.id;
+    _loadingMoreServices = true;
+    try {
+      final page = await _api.nextServicesPage(_token, cursor);
+      if (_disposed) return;
+      final existing = snapshot.services.map((item) => item.id).toSet();
+      _replaceSnapshot(
+        snapshot.copyWith(
+          services: [
+            ...snapshot.services,
+            ...page.where((item) => existing.add(item.id)),
+          ],
+        ),
+      );
+      _hasMoreServices = page.length >= 50;
+      notifyListeners();
+    } catch (exception) {
+      error = userFacingError(exception);
+      notifyListeners();
+    } finally {
+      _loadingMoreServices = false;
+    }
+  }
+
+  Future<void> loadMoreJobs() async {
+    if (!_hasMoreJobs || _loadingMoreJobs || snapshot.jobs.isEmpty) return;
+    final cursor = snapshot.jobs.last.id;
+    _loadingMoreJobs = true;
+    try {
+      final page = await _api.nextJobsPage(_token, cursor);
+      if (_disposed) return;
+      final existing = snapshot.jobs.map((item) => item.id).toSet();
+      _replaceSnapshot(
+        snapshot.copyWith(
+          jobs: [
+            ...snapshot.jobs,
+            ...page.where((item) => existing.add(item.id)),
+          ],
+        ),
+      );
+      _hasMoreJobs = page.length >= 50;
+      notifyListeners();
+    } catch (exception) {
+      error = userFacingError(exception);
+      notifyListeners();
+    } finally {
+      _loadingMoreJobs = false;
+    }
+  }
+
+  Future<void> _refreshAccount() async {
+    final activeToken = _token;
+    if (activeToken == null || activeToken.isEmpty || !signedIn) return;
+    try {
+      final session = await _api.me(activeToken);
+      if (_disposed || _token != activeToken) return;
+      _applySession(session);
+      notifyListeners();
+    } catch (exception) {
+      if (_isUnauthorized(exception)) unawaited(refresh(silent: true));
+    }
+  }
+
+  Future<void> _refreshComparisons() async {
+    final activeToken = _token;
+    if (activeToken == null || activeToken.isEmpty || !signedIn) return;
+    try {
+      final latest = await _api.comparisonsSnapshot(activeToken);
+      if (_disposed || _token != activeToken) return;
+      _replaceSnapshot(
+        snapshot.copyWith(
+          comparisonProperties: latest.comparisonProperties,
+          comparisonSuggestions: latest.comparisonSuggestions,
+        ),
+      );
+      notifyListeners();
+    } catch (_) {
+      // The periodic snapshot remains the fallback.
+    }
+  }
+
+  Future<void> _refreshSavedSearches() async {
+    final activeToken = _token;
+    if (activeToken == null || activeToken.isEmpty || !signedIn) return;
+    try {
+      final searches = await _api.savedSearchesSnapshot(activeToken);
+      if (_disposed || _token != activeToken) return;
+      _replaceSnapshot(snapshot.copyWith(savedSearches: searches));
+      notifyListeners();
+    } catch (_) {
+      // The periodic snapshot remains the fallback.
+    }
+  }
+
+  Future<void> _refreshApplications() async {
+    final activeToken = _token;
+    if (activeToken == null || activeToken.isEmpty || !signedIn) return;
+    try {
+      final applications = await _api.applicationsSnapshot(activeToken);
+      if (_disposed || _token != activeToken) return;
+      _replaceSnapshot(snapshot.copyWith(applications: applications));
+      notifyListeners();
+    } catch (_) {
+      // The periodic snapshot remains the fallback.
+    }
+  }
+
+  Future<void> _refreshViewings() async {
+    final activeToken = _token;
+    if (activeToken == null || activeToken.isEmpty || !signedIn) return;
+    try {
+      final viewings = await _api.viewingsSnapshot(activeToken);
+      if (_disposed || _token != activeToken) return;
+      _replaceSnapshot(snapshot.copyWith(viewings: viewings));
+      notifyListeners();
+    } catch (_) {
+      // The periodic snapshot remains the fallback.
+    }
+  }
+
+  Future<void> _refreshServiceRequests() async {
+    final activeToken = _token;
+    if (activeToken == null || activeToken.isEmpty || !signedIn) return;
+    try {
+      final requests = await _api.serviceRequestsSnapshot(activeToken);
+      if (_disposed || _token != activeToken) return;
+      _replaceSnapshot(snapshot.copyWith(serviceRequests: requests));
+      notifyListeners();
+    } catch (_) {
+      // The periodic snapshot remains the fallback.
+    }
+  }
+
+  Future<void> _refreshJobApplications() async {
+    final activeToken = _token;
+    if (activeToken == null || activeToken.isEmpty || !signedIn) return;
+    try {
+      final applications = await _api.jobApplicationsSnapshot(activeToken);
+      if (_disposed || _token != activeToken) return;
+      _replaceSnapshot(snapshot.copyWith(jobApplications: applications));
+      notifyListeners();
+    } catch (_) {
+      // The periodic snapshot remains the fallback.
+    }
+  }
+
+  Future<void> _loadConversationDetail(String conversationId) async {
+    final activeToken = _token;
+    if (activeToken == null || activeToken.isEmpty || !signedIn) return;
+    try {
+      final conversation = await _api.conversationDetail(
+        activeToken,
+        conversationId,
+      );
+      if (_disposed || _token != activeToken) return;
+      final conversations = snapshot.conversations.toList();
+      final index = conversations.indexWhere(
+        (item) => item.id == conversation.id,
+      );
+      if (index >= 0) {
+        conversations[index] = conversation;
+      } else {
+        conversations.insert(0, conversation);
+      }
+      _replaceSnapshot(snapshot.copyWith(conversations: conversations));
+      notifyListeners();
+    } catch (_) {
+      // The periodic snapshot remains the fallback if a conversation is unavailable.
     }
   }
 
@@ -305,7 +533,7 @@ class Property24State extends ChangeNotifier {
         }
       }
       _presencePingTimer?.cancel();
-      _presencePingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _presencePingTimer = Timer.periodic(const Duration(seconds: 60), (_) {
         sendLiveEvent('presence.ping', '');
       });
     } catch (exception) {
@@ -415,16 +643,26 @@ class Property24State extends ChangeNotifier {
       if (conversationId.isNotEmpty &&
           type == 'call.started' &&
           payload is Map<String, dynamic>) {
-        _activeCalls[conversationId] = CallLogItem.fromJson(payload);
+        final call = CallLogItem.fromJson(payload);
+        _activeCalls[conversationId] = call;
+        _upsertCall(call);
         notifyListeners();
-      } else if (conversationId.isNotEmpty && type == 'call.ended') {
+      } else if (conversationId.isNotEmpty &&
+          type == 'call.ended' &&
+          payload is Map<String, dynamic>) {
         _activeCalls.remove(conversationId);
+        _upsertCall(CallLogItem.fromJson(payload));
         notifyListeners();
       }
       if (type == 'notification.created' && payload is Map) {
         final notifiedConversationId = '${payload['conversation_id'] ?? ''}';
         if (notifiedConversationId.isNotEmpty) {
           joinConversation(notifiedConversationId);
+          if (!snapshot.conversations.any(
+            (item) => item.id == notifiedConversationId,
+          )) {
+            unawaited(_loadConversationDetail(notifiedConversationId));
+          }
         }
         final notificationId = '${payload['notification_id'] ?? ''}'.trim();
         final createdAt = payload['created_at'];
@@ -439,6 +677,20 @@ class Property24State extends ChangeNotifier {
           // Older servers may send only an event summary. Load the persisted
           // notification instead of inventing a timestamp or message locally.
           unawaited(refresh(silent: true));
+        }
+        final notificationKind = '${payload['kind'] ?? ''}';
+        if (notificationKind == 'application' ||
+            notificationKind == 'application.updated') {
+          unawaited(_refreshApplications());
+        } else if (notificationKind == 'viewing' ||
+            notificationKind == 'viewing.updated') {
+          unawaited(_refreshViewings());
+        } else if (notificationKind == 'service_request_status') {
+          unawaited(_refreshServiceRequests());
+        } else if (notificationKind == 'job_application_status') {
+          unawaited(_refreshJobApplications());
+        } else if (notificationKind == 'identity_verification') {
+          unawaited(_refreshAccount());
         }
       }
       if (type == 'notification.updated' && payload is Map<String, dynamic>) {
@@ -483,6 +735,18 @@ class Property24State extends ChangeNotifier {
         if (message.senderId != user?.id) {
           sendLiveEvent('delivered', message.conversationId);
         }
+      }
+      if (type == 'conversation.updated' && payload is Map<String, dynamic>) {
+        final updated = ConversationItem.fromJson(payload);
+        final conversations = snapshot.conversations.toList();
+        final index = conversations.indexWhere((item) => item.id == updated.id);
+        if (index >= 0) {
+          conversations[index] = updated;
+        } else {
+          conversations.insert(0, updated);
+        }
+        _replaceSnapshot(snapshot.copyWith(conversations: conversations));
+        notifyListeners();
       }
       if (conversationId.isNotEmpty &&
           (type.startsWith('message.') ||
@@ -566,21 +830,39 @@ class Property24State extends ChangeNotifier {
           notifyListeners();
         }
       }
-      if (type == 'property.changed' ||
-          type == 'marketplace.changed' ||
-          type == 'comparison.changed' ||
-          type == 'saved_searches.changed' ||
-          type == 'admin.data.changed' ||
-          (type == 'notification.created' &&
-              (conversationId.isEmpty ||
-                  !snapshot.conversations.any(
-                    (conversation) => conversation.id == conversationId,
-                  ))) ||
-          type == 'account.changed' ||
-          type.startsWith('conversation.') ||
-          type.startsWith('call.')) {
-        unawaited(refresh(silent: true));
+      if (type == 'marketplace.changed' && payload is Map<String, dynamic>) {
+        final entity = '${payload['entity'] ?? ''}';
+        final action = '${payload['action'] ?? ''}';
+        final id = '${payload['id'] ?? ''}';
+        final rawItem = payload['item'];
+        if (entity == 'service') {
+          var services = snapshot.services;
+          if (action == 'archived') {
+            services = services.where((item) => item.id != id).toList();
+          } else if (rawItem is Map<String, dynamic>) {
+            final updated = ServiceListing.fromJson(rawItem);
+            services = [
+              updated,
+              ...services.where((item) => item.id != updated.id),
+            ];
+          }
+          _replaceSnapshot(snapshot.copyWith(services: services));
+          notifyListeners();
+        } else if (entity == 'job') {
+          var jobs = snapshot.jobs;
+          if (action == 'archived') {
+            jobs = jobs.where((item) => item.id != id).toList();
+          } else if (rawItem is Map<String, dynamic>) {
+            final updated = JobPosting.fromJson(rawItem);
+            jobs = [updated, ...jobs.where((item) => item.id != updated.id)];
+          }
+          _replaceSnapshot(snapshot.copyWith(jobs: jobs));
+          notifyListeners();
+        }
       }
+      if (type == 'comparison.changed') unawaited(_refreshComparisons());
+      if (type == 'saved_searches.changed') unawaited(_refreshSavedSearches());
+      if (type == 'account.changed') unawaited(_refreshAccount());
     } catch (_) {
       // Polling remains the fallback for malformed or unsupported frames.
     }
@@ -590,6 +872,18 @@ class Property24State extends ChangeNotifier {
     if (conversationId.isEmpty) return;
     _joinedConversationIds.add(conversationId);
     sendLiveEvent('conversation.join', conversationId);
+  }
+
+  void _upsertCall(CallLogItem call) {
+    final calls = snapshot.calls.toList();
+    final index = calls.indexWhere((item) => item.id == call.id);
+    if (index >= 0) {
+      calls[index] = call;
+    } else {
+      calls.insert(0, call);
+    }
+    if (calls.length > 100) calls.removeRange(100, calls.length);
+    _replaceSnapshot(snapshot.copyWith(calls: calls));
   }
 
   void _applyMessageToConversation(ChatMessageItem message) {
@@ -1189,26 +1483,30 @@ class Property24State extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<ChatMessageItem>> loadConversationMessages(
-    String conversationId,
-  ) async {
+  Future<ConversationMessagePage> loadConversationMessages(
+    String conversationId, {
+    String? beforeId,
+  }) async {
     final activeToken = _requireToken();
     final messages = await _api.conversationMessages(
       activeToken,
       conversationId,
+      beforeId: beforeId,
     );
-    _replaceSnapshot(
-      snapshot.copyWith(
-        conversations: snapshot.conversations
-            .map(
-              (conversation) => conversation.id == conversationId
-                  ? conversation.copyWith(unreadCount: 0)
-                  : conversation,
-            )
-            .toList(growable: false),
-      ),
-    );
-    notifyListeners();
+    if (beforeId == null) {
+      _replaceSnapshot(
+        snapshot.copyWith(
+          conversations: snapshot.conversations
+              .map(
+                (conversation) => conversation.id == conversationId
+                    ? conversation.copyWith(unreadCount: 0)
+                    : conversation,
+              )
+              .toList(growable: false),
+        ),
+      );
+      notifyListeners();
+    }
     return messages;
   }
 

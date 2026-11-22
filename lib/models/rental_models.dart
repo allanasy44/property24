@@ -158,20 +158,23 @@ class AccountUser {
     return AccountUser(
       id: textValue(json, 'id'),
       username: textValue(json, 'username', textValue(json, 'email')),
-      name:
-          textValue(json, 'name', textValue(json, 'email', 'Property24 user')),
+      name: textValue(
+        json,
+        'name',
+        textValue(json, 'email', 'Property24 user'),
+      ),
       greeting: textValue(json, 'greeting', 'Good morning'),
       email: textValue(json, 'email'),
       phone: textValue(json, 'phone'),
       role: accountRoleFromJson(account?['account_type'] ?? json['role']),
       verified: json['verified'] == true || account?['is_verified'] == true,
-      identityDocumentsSubmitted:
-          json['identity_documents_submitted'] == true,
+      identityDocumentsSubmitted: json['identity_documents_submitted'] == true,
       emailVerified:
           json['email_verified'] == true || account?['email_verified'] == true,
       phoneVerified:
           json['phone_verified'] == true || account?['phone_verified'] == true,
-      accountOnboardingComplete: json['account_onboarding_complete'] == true ||
+      accountOnboardingComplete:
+          json['account_onboarding_complete'] == true ||
           account?['account_onboarding_complete'] == true,
       profilePicture: textValue(json, 'profile_picture'),
       coverPhoto: textValue(json, 'cover_photo'),
@@ -202,7 +205,7 @@ class AccountUser {
   bool get isCurrentlyOnline =>
       online == true &&
       lastSeenAt != null &&
-      DateTime.now().difference(lastSeenAt!).inSeconds <= 45;
+      DateTime.now().difference(lastSeenAt!).inSeconds <= 150;
 }
 
 class AccountContext {
@@ -228,8 +231,9 @@ class AccountContext {
       phoneVerified: json['phone_verified'] == true,
       visibleSections: List<String>.from(json['visible_sections'] ?? const []),
       capabilities: List<String>.from(json['capabilities'] ?? const []),
-      onboardingRequirements:
-          List<String>.from(onboarding['requirements'] ?? const []),
+      onboardingRequirements: List<String>.from(
+        onboarding['requirements'] ?? const [],
+      ),
       fullVerificationRequired:
           onboarding['full_verification_required'] == true,
     );
@@ -554,8 +558,7 @@ class PropertyListing {
       monthlyRent: textValue(json, 'monthly_rent', '0'),
       depositRequired: textValue(json, 'deposit_required', '0'),
       propertyType: titleize(json['property_type']),
-      accommodationInstitution:
-          textValue(json, 'accommodation_institution'),
+      accommodationInstitution: textValue(json, 'accommodation_institution'),
       sharedRoom: json['shared_room'] == true,
       bedrooms: int.tryParse('${json['bedrooms']}') ?? 0,
       bathrooms: num.tryParse('${json['bathrooms']}') ?? 0,
@@ -687,10 +690,8 @@ class PropertyListing {
   int get maxGuests => _listingDetailInt('max_guests');
   int get weddingCapacity => _listingDetailInt('wedding_capacity');
   int get conferenceCapacity => _listingDetailInt('conference_capacity');
-  bool get cateringAvailable =>
-      listingDetails['catering_available'] == true;
-  bool get guestAccommodation =>
-      listingDetails['guest_accommodation'] == true;
+  bool get cateringAvailable => listingDetails['catering_available'] == true;
+  bool get guestAccommodation => listingDetails['guest_accommodation'] == true;
   String get rentLabel {
     if (isStay && nightlyRate.isNotEmpty) {
       return money(nightlyRate, suffix: '/ night');
@@ -702,6 +703,7 @@ class PropertyListing {
         ? money(monthlyRent)
         : money(monthlyRent, suffix: '/ month');
   }
+
   bool get isLand => propertyType.toLowerCase().contains('land');
   bool get isStudentAccommodation =>
       propertyType.toLowerCase().contains('student accommodation');
@@ -873,14 +875,14 @@ class NeighborhoodData {
   });
 
   const NeighborhoodData.unavailable()
-      : available = false,
-        status = 'not_available',
-        waterReliability = null,
-        safetyScore = null,
-        commuteToCbdMinutes = null,
-        amenities = const [],
-        sourceName = '',
-        verifiedAt = '';
+    : available = false,
+      status = 'not_available',
+      waterReliability = null,
+      safetyScore = null,
+      commuteToCbdMinutes = null,
+      amenities = const [],
+      sourceName = '',
+      verifiedAt = '';
 
   factory NeighborhoodData.fromJson(Map<String, dynamic> json) {
     return NeighborhoodData(
@@ -1036,9 +1038,7 @@ class AiSearchResponse {
           ? Map<String, dynamic>.from(json['intent'] as Map)
           : const <String, dynamic>{},
       requirements: json['interpreted_requirements'] is Map<String, dynamic>
-          ? Map<String, dynamic>.from(
-              json['interpreted_requirements'] as Map,
-            )
+          ? Map<String, dynamic>.from(json['interpreted_requirements'] as Map)
           : const <String, dynamic>{},
       explanation: textValue(json, 'explanation'),
       results: (json['results'] as List<dynamic>? ?? const [])
@@ -1046,7 +1046,8 @@ class AiSearchResponse {
           .map(AiSearchCandidate.fromJson)
           .toList(growable: false),
       sessionId: textValue(json, 'session_id'),
-      totalMatches: int.tryParse('${json['total_matches']}') ??
+      totalMatches:
+          int.tryParse('${json['total_matches']}') ??
           (json['results'] as List<dynamic>? ?? const []).length,
       exactMatches: int.tryParse('${json['exact_matches']}') ?? 0,
       closeMatches: int.tryParse('${json['close_matches']}') ?? 0,
@@ -1084,16 +1085,16 @@ class AiSearchCandidate {
         : json;
     return AiSearchCandidate(
       property: PropertyListing.fromJson(propertyJson),
-      score: int.tryParse(
-            '${json['match_score'] ?? json['search_score']}',
-          ) ??
-          0,
+      score:
+          int.tryParse('${json['match_score'] ?? json['search_score']}') ?? 0,
       reasons: List<String>.from(json['match_reasons'] ?? const []),
       matchType: textValue(json, 'match_type', 'exact'),
-      missingRequirements:
-          List<String>.from(json['missing_requirements'] ?? const []),
-      missingPreferences:
-          List<String>.from(json['missing_preferences'] ?? const []),
+      missingRequirements: List<String>.from(
+        json['missing_requirements'] ?? const [],
+      ),
+      missingPreferences: List<String>.from(
+        json['missing_preferences'] ?? const [],
+      ),
     );
   }
 
@@ -1375,9 +1376,8 @@ class ConversationItem {
     final participants = (rawParticipants is List ? rawParticipants : const [])
         .whereType<Map>()
         .map(
-          (participant) => AccountUser.fromJson(
-            Map<String, dynamic>.from(participant),
-          ),
+          (participant) =>
+              AccountUser.fromJson(Map<String, dynamic>.from(participant)),
         )
         .toList();
     final rawLastMessage = json['last_message'];

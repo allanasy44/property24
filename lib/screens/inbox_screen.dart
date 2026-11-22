@@ -475,6 +475,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final AudioRecorder _audioRecorder = AudioRecorder();
   List<ChatMessageItem> _messages = <ChatMessageItem>[];
   bool _loading = false;
+  bool _loadingOlder = false;
+  bool _hasOlderMessages = false;
+  bool _hasLoadedOlderPage = false;
+  String? _olderMessagesCursor;
   bool _recording = false;
   bool _uploading = false;
   bool _reloadPending = false;
@@ -558,15 +562,44 @@ class _ConversationScreenState extends State<ConversationScreen> {
         _messagesScrollController.position.maxScrollExtent -
                 _messagesScrollController.position.pixels <
             160;
+    final preserveHistory = _hasLoadedOlderPage;
+    final previousCursor = _olderMessagesCursor;
+    final previousHasMore = _hasOlderMessages;
     if (mounted) setState(() => _loading = true);
     try {
-      final messages = await state.loadConversationMessages(
-        widget.conversation.id,
-      );
+      final page = await state.loadConversationMessages(widget.conversation.id);
       state.sendLiveEvent('delivered', widget.conversation.id);
       state.sendLiveEvent('read', widget.conversation.id);
       if (mounted) {
-        setState(() => _messages = messages);
+        setState(() {
+          if (preserveHistory) {
+            final merged = <String, ChatMessageItem>{
+              for (final message in _messages) message.id: message,
+            };
+            for (final message in page.messages) {
+              merged[message.id] = message;
+            }
+            _messages = merged.values.toList()
+              ..sort((a, b) {
+                final aTime =
+                    a.createdAtDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+                final bTime =
+                    b.createdAtDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+                final byTime = aTime.compareTo(bTime);
+                return byTime != 0
+                    ? byTime
+                    : (int.tryParse(a.id) ?? 0).compareTo(
+                        int.tryParse(b.id) ?? 0,
+                      );
+              });
+            _hasOlderMessages = previousHasMore;
+            _olderMessagesCursor = previousCursor;
+          } else {
+            _messages = page.messages;
+            _hasOlderMessages = page.hasMore;
+            _olderMessagesCursor = page.nextBeforeId;
+          }
+        });
         if (wasNearLatest) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted || !_messagesScrollController.hasClients) return;
@@ -590,6 +623,53 @@ class _ConversationScreenState extends State<ConversationScreen> {
         _reloadPending = false;
         unawaited(_loadMessages());
       }
+    }
+  }
+
+  Future<void> _loadOlderMessages() async {
+    final cursor = _olderMessagesCursor;
+    if (_loadingOlder || !_hasOlderMessages || cursor == null) return;
+    final state = context.read<Property24State>();
+    if (!state.signedIn) return;
+    final oldPixels = _messagesScrollController.hasClients
+        ? _messagesScrollController.position.pixels
+        : 0.0;
+    final oldMaxExtent = _messagesScrollController.hasClients
+        ? _messagesScrollController.position.maxScrollExtent
+        : 0.0;
+    setState(() => _loadingOlder = true);
+    try {
+      final page = await state.loadConversationMessages(
+        widget.conversation.id,
+        beforeId: cursor,
+      );
+      if (!mounted) return;
+      setState(() {
+        _messages = [...page.messages, ..._messages];
+        _hasOlderMessages = page.hasMore;
+        _olderMessagesCursor = page.nextBeforeId;
+        _hasLoadedOlderPage = true;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_messagesScrollController.hasClients) return;
+        final extentAdded =
+            _messagesScrollController.position.maxScrollExtent - oldMaxExtent;
+        final target = (oldPixels + extentAdded)
+            .clamp(
+              _messagesScrollController.position.minScrollExtent,
+              _messagesScrollController.position.maxScrollExtent,
+            )
+            .toDouble();
+        _messagesScrollController.jumpTo(target);
+      });
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+      }
+    } finally {
+      if (mounted) setState(() => _loadingOlder = false);
     }
   }
 
@@ -779,6 +859,24 @@ class _ConversationScreenState extends State<ConversationScreen> {
               controller: _messagesScrollController,
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
               children: [
+                if (_hasOlderMessages)
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: _loadingOlder ? null : _loadOlderMessages,
+                      icon: _loadingOlder
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(CupertinoIcons.arrow_up),
+                      label: Text(
+                        _loadingOlder
+                            ? 'Loading earlier messages'
+                            : 'Load earlier messages',
+                      ),
+                    ),
+                  ),
                 if (_loading && _messages.isEmpty)
                   const Center(child: CircularProgressIndicator()),
                 if (!_loading && _messages.isEmpty) ...[

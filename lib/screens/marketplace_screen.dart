@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -100,6 +102,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   String _jobType = '';
   late String _view;
   bool _didHandleCreate = false;
+  final ScrollController _feedScrollController = ScrollController();
 
   bool get _isServices => widget.market == 'services';
 
@@ -107,7 +110,17 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   void initState() {
     super.initState();
     _view = widget.initialView;
+    _feedScrollController.addListener(_onFeedScroll);
     if (widget.createOnOpen) _scheduleCreate();
+  }
+
+  void _onFeedScroll() {
+    if (!_feedScrollController.hasClients ||
+        _feedScrollController.position.extentAfter > 600) {
+      return;
+    }
+    final state = context.read<Property24State>();
+    unawaited(_isServices ? state.loadMoreServices() : state.loadMoreJobs());
   }
 
   @override
@@ -132,6 +145,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   @override
   void dispose() {
+    _feedScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -198,6 +212,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         child: RefreshIndicator(
           onRefresh: state.refresh,
           child: CustomScrollView(
+            controller: _feedScrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverPadding(

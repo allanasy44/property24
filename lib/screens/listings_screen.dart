@@ -39,6 +39,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
   String _query = '';
   String _market = 'properties';
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _feedScrollController = ScrollController();
   bool _returnToOriginOnCancel = false;
 
   static Color get _searchFill => AppTheme.bgSurface;
@@ -48,6 +49,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
   @override
   void initState() {
     super.initState();
+    _feedScrollController.addListener(_onFeedScroll);
     if (widget.openComposerOnOpen) {
       _returnToOriginOnCancel = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -56,8 +58,17 @@ class _ListingsScreenState extends State<ListingsScreen> {
     }
   }
 
+  void _onFeedScroll() {
+    if (!_feedScrollController.hasClients ||
+        _feedScrollController.position.extentAfter > 600) {
+      return;
+    }
+    unawaited(context.read<Property24State>().loadMoreProperties());
+  }
+
   @override
   void dispose() {
+    _feedScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -122,6 +133,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
         child: RefreshIndicator(
           onRefresh: state.refresh,
           child: CustomScrollView(
+            controller: _feedScrollController,
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(

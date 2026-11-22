@@ -8,8 +8,9 @@ from ipaddress import ip_address
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.db import connection, transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 
 from .models import CallSession, ChatBlock, ChatReport, Conversation, Message, MessageReceipt, Notification, PushDevice, SecurityAuditEvent, UserPresenceSession
@@ -23,9 +24,33 @@ CHAT_GROUP_PREFIX = "conversation"
 PUBLIC_GROUP_PREFIX = "public"
 USER_GROUP_PREFIX = "user"
 ADMIN_GROUP_NAME = "support.admins"
-PRESENCE_SESSION_TIMEOUT_SECONDS = 45
+PRESENCE_SESSION_TIMEOUT_SECONDS = 150
 
 User = get_user_model()
+_presence_redis = None
+_presence_redis_url = None
+
+
+def _presence_store():
+    global _presence_redis, _presence_redis_url
+    redis_url = getattr(settings, "REDIS_URL", "")
+    if not redis_url:
+        return None
+    if _presence_redis is None or _presence_redis_url != redis_url:
+        import redis
+
+        _presence_redis = redis.Redis.from_url(
+            redis_url,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+            decode_responses=True,
+        )
+        _presence_redis_url = redis_url
+    return _presence_redis
+
+
+def _presence_key(user_id):
+    return f"property24:presence:user:{user_id}"
 
 
 def conversation_group_name(conversation_id):
@@ -52,7 +77,21 @@ def is_admin(user):
 
 
 def user_conversations(user):
-    queryset = Conversation.objects.prefetch_related("participants", "messages").order_by("-updated_at")
+    latest_messages = (
+        Message.objects.select_related("sender")
+        .prefetch_related(
+            Prefetch(
+                "receipts",
+                queryset=MessageReceipt.objects.select_related("user"),
+                to_attr="_loaded_receipts",
+            )
+        )
+        .order_by("-created_at", "-id")[:1]
+    )
+    queryset = Conversation.objects.prefetch_related(
+        "participants",
+        Prefetch("messages", queryset=latest_messages, to_attr="latest_messages"),
+    ).order_by("-updated_at")
     if not user or not user.is_authenticated:
         return queryset.none()
     if is_admin(user):
@@ -134,24 +173,6 @@ def create_message_receipts(message):
     MessageReceipt.objects.bulk_create(receipts, ignore_conflicts=True)
 
 
-def ensure_message_receipts(conversation):
-    for message in conversation.messages.select_related("conversation", "sender").prefetch_related("conversation__participants"):
-        existing_user_ids = set(message.receipts.values_list("user_id", flat=True))
-        missing_user_ids = [item for item in message.conversation.participants.values_list("id", flat=True) if item not in existing_user_ids]
-        if not missing_user_ids:
-            continue
-        now = timezone.now()
-        MessageReceipt.objects.bulk_create([
-            MessageReceipt(
-                message=message,
-                user_id=user_id,
-                delivered_at=now if user_id == message.sender_id else None,
-                read_at=message.read_at if user_id != message.sender_id else now,
-            )
-            for user_id in missing_user_ids
-        ], ignore_conflicts=True)
-
-
 def create_chat_message(conversation, sender, body="", *, attachment=None, attachment_url="", attachment_type="", attachment_name="", client_message_id=""):
     if conversation_blocked_for_user(conversation, sender):
         raise ValueError("Messaging is blocked for this conversation")
@@ -200,14 +221,15 @@ def create_text_message(conversation, sender, body, client_message_id=""):
 def mark_conversation_delivered(conversation, recipient):
     if is_admin(recipient):
         return []
-    ensure_message_receipts(conversation)
     now = timezone.now()
     queryset = MessageReceipt.objects.filter(
         message__conversation=conversation,
         user=recipient,
         delivered_at__isnull=True,
     ).exclude(message__sender=recipient)
-    message_ids = list(queryset.values_list("message_id", flat=True))
+    message_ids = list(
+        queryset.order_by("-message_id").values_list("message_id", flat=True)[:500]
+    )
     if message_ids:
         queryset.update(delivered_at=now)
     return message_ids
@@ -216,14 +238,15 @@ def mark_conversation_delivered(conversation, recipient):
 def mark_conversation_read(conversation, reader):
     if is_admin(reader):
         return []
-    ensure_message_receipts(conversation)
     now = timezone.now()
     queryset = MessageReceipt.objects.filter(
         message__conversation=conversation,
         user=reader,
         read_at__isnull=True,
     ).exclude(message__sender=reader)
-    message_ids = list(queryset.values_list("message_id", flat=True))
+    message_ids = list(
+        queryset.order_by("-message_id").values_list("message_id", flat=True)[:500]
+    )
     if message_ids:
         queryset.filter(delivered_at__isnull=True).update(delivered_at=now)
         queryset.update(read_at=now)
@@ -329,6 +352,17 @@ def touch_user_presence(user):
 
 def create_presence_session(user, session_id):
     now = timezone.now()
+    store = _presence_store()
+    if store is not None:
+        try:
+            key = _presence_key(user.id)
+            pipeline = store.pipeline(transaction=False)
+            pipeline.zadd(key, {session_id: now.timestamp()})
+            pipeline.expire(key, PRESENCE_SESSION_TIMEOUT_SECONDS + 30)
+            pipeline.execute()
+            return now
+        except Exception:
+            logger.exception("Redis presence registration failed", extra={"user_id": user.id})
     cutoff = now - timedelta(seconds=PRESENCE_SESSION_TIMEOUT_SECONDS)
     UserPresenceSession.objects.filter(last_ping_at__lt=cutoff).delete()
     UserPresenceSession.objects.create(
@@ -344,6 +378,17 @@ def create_presence_session(user, session_id):
 
 def touch_presence_session(user, session_id):
     now = timezone.now()
+    store = _presence_store()
+    if store is not None:
+        key = _presence_key(user.id)
+        try:
+            pipeline = store.pipeline(transaction=False)
+            pipeline.zadd(key, {session_id: now.timestamp()})
+            pipeline.expire(key, PRESENCE_SESSION_TIMEOUT_SECONDS + 30)
+            pipeline.execute()
+            return now
+        except Exception:
+            logger.exception("Redis presence update failed", extra={"user_id": user.id})
     UserPresenceSession.objects.filter(
         session_id=session_id,
         user=user,
@@ -354,6 +399,14 @@ def touch_presence_session(user, session_id):
 
 
 def end_presence_session(user, session_id):
+    store = _presence_store()
+    if store is not None:
+        try:
+            store.zrem(_presence_key(user.id), session_id)
+        except Exception:
+            logger.exception("Redis presence cleanup failed", extra={"user_id": user.id})
+        else:
+            return touch_user_presence(user)
     UserPresenceSession.objects.filter(
         session_id=session_id,
         user=user,
@@ -364,6 +417,17 @@ def end_presence_session(user, session_id):
 def user_is_online(user, now=None):
     now = now or timezone.now()
     cutoff = now - timedelta(seconds=PRESENCE_SESSION_TIMEOUT_SECONDS)
+    store = _presence_store()
+    if store is not None:
+        key = _presence_key(user.id)
+        try:
+            pipeline = store.pipeline(transaction=False)
+            pipeline.zremrangebyscore(key, "-inf", cutoff.timestamp())
+            pipeline.zcard(key)
+            _, active_sessions = pipeline.execute()
+            return active_sessions > 0
+        except Exception:
+            logger.exception("Redis presence lookup failed", extra={"user_id": user.id})
     return UserPresenceSession.objects.filter(
         user=user,
         last_ping_at__gte=cutoff,
@@ -414,30 +478,27 @@ def broadcast_to_user(user_id, event_type, payload):
 
     data = dict(payload or {})
 
-    def persist_and_dispatch():
-        notification = Notification.objects.create(
-            user_id=user_id,
-            kind=str(data.get("kind") or "general")[:80],
-            message=notification_message(data),
-            payload=data,
-        )
-        event_payload = {
-            **data,
-            "id": str(notification.pk),
-            "notification_id": str(notification.pk),
-            "message": notification.message,
-            "is_read": notification.is_read,
-            "created_at": notification.created_at.isoformat(),
-            "payload": notification.payload,
-        }
-        _broadcast_group(
-            user_group_name(user_id),
-            event_type,
-            event_payload,
-            context={"user_id": user_id},
-        )
-
-    _dispatch_realtime(persist_and_dispatch)
+    notification = Notification.objects.create(
+        user_id=user_id,
+        kind=str(data.get("kind") or "general")[:80],
+        message=notification_message(data),
+        payload=data,
+    )
+    event_payload = {
+        **data,
+        "id": str(notification.pk),
+        "notification_id": str(notification.pk),
+        "message": notification.message,
+        "is_read": notification.is_read,
+        "created_at": notification.created_at.isoformat(),
+        "payload": notification.payload,
+    }
+    _broadcast_group(
+        user_group_name(user_id),
+        event_type,
+        event_payload,
+        context={"user_id": user_id},
+    )
 
 
 def notification_message(payload):
@@ -480,7 +541,11 @@ def broadcast_presence(user, online, conversation_ids: Iterable[int] | None = No
         "name": str(user),
         "role": user.role,
         "online": bool(online),
-        "last_seen_at": user.last_seen_at.isoformat() if user.last_seen_at else None,
+        "last_seen_at": (
+            timezone.now().isoformat()
+            if online
+            else user.last_seen_at.isoformat() if user.last_seen_at else None
+        ),
     }
     target_conversations = (
         user_conversation_ids(user) if conversation_ids is None else conversation_ids

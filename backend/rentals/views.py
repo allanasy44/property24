@@ -25,7 +25,8 @@ from django.core.validators import URLValidator
 from django.core.validators import validate_email as validate_email_value
 from django.db import IntegrityError, transaction
 from django.db import connection
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, IntegerField, OuterRef, Prefetch, Q, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -85,13 +86,13 @@ from .chat_services import (
     default_attachment_body,
     delete_chat_message,
     edit_chat_message,
-    ensure_message_receipts,
     list_conversations_for_user,
     mark_conversation_delivered,
     mark_conversation_read,
     open_listing_conversation,
     register_push_device,
     report_chat_message,
+    user_is_online,
 )
 from .google_auth import GoogleAuthError, verify_google_id_token
 from .identity_verification import get_identity_verification_provider
@@ -1052,7 +1053,80 @@ def properties_collection(request):
         else:
             properties = public_listings(properties)
         properties = apply_property_filters(properties, request.GET)
-        return JsonResponse({"results": [serialize_property(item) for item in properties.order_by("-created_at")]})
+        resolved_reports = DisputeReport.objects.filter(
+            property_id=OuterRef("pk"),
+            status=DisputeReport.Status.RESOLVED,
+        )
+        active_reports = DisputeReport.objects.filter(
+            property_id=OuterRef("pk"),
+            status__in=[DisputeReport.Status.OPEN, DisputeReport.Status.REVIEWING],
+        )
+        latest_verified = VerificationRequest.objects.filter(
+            user_id=OuterRef("owner_id"),
+            status__in=[VerificationRequest.Status.VERIFIED, VerificationRequest.Status.APPROVED],
+        ).order_by("-reviewed_at", "-submitted_at")
+        properties = properties.annotate(
+            saved_total=_related_count_subquery(SavedProperty),
+            likes_total=_related_count_subquery(PropertyLike),
+            application_total=_related_count_subquery(Application),
+            comment_total=_related_count_subquery(PropertyComment),
+            insight_latest_verification_location=Subquery(
+                latest_verified.values("address_gps_confirmed")[:1]
+            ),
+            insight_resolved_report_count=Subquery(
+                resolved_reports.order_by()
+                .values("property_id")
+                .annotate(total=Count("pk"))
+                .values("total")[:1],
+                output_field=IntegerField(),
+            ),
+            insight_scam_report=Exists(
+                resolved_reports.filter(
+                    Q(subject__icontains="scam")
+                    | Q(subject__icontains="fraud")
+                    | Q(description__icontains="scam")
+                    | Q(description__icontains="fraud")
+                )
+            ),
+            insight_false_listing_report=Exists(
+                resolved_reports.filter(
+                    Q(subject__icontains="false property")
+                    | Q(subject__icontains="misrepresentation")
+                    | Q(description__icontains="false property")
+                    | Q(description__icontains="misrepresentation")
+                )
+            ),
+            insight_admin_review_required=Exists(active_reports),
+            insight_has_photos=Exists(PropertyPhoto.objects.filter(property_id=OuterRef("pk"))),
+        )
+        page, page_error = _cursor_page(request, properties)
+        if page_error:
+            return page_error
+
+        page_items = page["results"]
+        neighbourhood_keys = {
+            (item.city.strip().casefold(), item.suburb.strip().casefold())
+            for item in page_items
+        }
+        neighbourhood_query = Q()
+        for city, suburb in neighbourhood_keys:
+            neighbourhood_query |= Q(city__iexact=city, suburb__iexact=suburb)
+        neighbourhoods = (
+            NeighborhoodProfile.objects.filter(neighbourhood_query)
+            if neighbourhood_keys
+            else NeighborhoodProfile.objects.none()
+        )
+        neighbourhood_by_key = {
+            (item.city.strip().casefold(), item.suburb.strip().casefold()): item
+            for item in neighbourhoods
+        }
+        for item in page_items:
+            item._prefetched_neighbourhood_profile = neighbourhood_by_key.get(
+                (item.city.strip().casefold(), item.suburb.strip().casefold())
+            )
+
+        page["results"] = [serialize_property(item) for item in page_items]
+        return JsonResponse(page)
 
     data = request_data(request)
     if data is None:
@@ -1395,7 +1469,11 @@ def services_collection(request):
         services = ServiceListing.objects.select_related("owner")
         acting_user = current_user(request)[0] if request.headers.get("Authorization") else None
         services = services.filter(Q(is_active=True) | Q(owner=acting_user)) if acting_user else services.filter(is_active=True)
-        return JsonResponse({"results": [serialize_service_listing(item) for item in services]})
+        page, page_error = _cursor_page(request, services)
+        if page_error:
+            return page_error
+        page["results"] = [serialize_service_listing(item) for item in page["results"]]
+        return JsonResponse(page)
 
     acting_user, auth_response = marketplace_authenticated_user(request)
     if auth_response:
@@ -1412,7 +1490,7 @@ def services_collection(request):
     service = ServiceListing.objects.create(owner=acting_user, **values)
     broadcast_to_public(
         "marketplace.changed",
-        {"entity": "service", "action": "created", "id": str(service.id)},
+        {"entity": "service", "action": "created", "id": str(service.id), "item": serialize_service_listing(service)},
     )
     return JsonResponse(serialize_service_listing(service), status=201)
 
@@ -1451,7 +1529,7 @@ def service_detail(request, service_id):
     service.save()
     broadcast_to_public(
         "marketplace.changed",
-        {"entity": "service", "action": "updated", "id": str(service.id)},
+        {"entity": "service", "action": "updated", "id": str(service.id), "item": serialize_service_listing(service)},
     )
     return JsonResponse(serialize_service_listing(service))
 
@@ -1567,7 +1645,11 @@ def jobs_collection(request):
         jobs = JobPosting.objects.select_related("owner")
         acting_user = current_user(request)[0] if request.headers.get("Authorization") else None
         jobs = jobs.filter(Q(is_active=True) | Q(owner=acting_user)) if acting_user else jobs.filter(is_active=True)
-        return JsonResponse({"results": [serialize_job_posting(item) for item in jobs]})
+        page, page_error = _cursor_page(request, jobs)
+        if page_error:
+            return page_error
+        page["results"] = [serialize_job_posting(item) for item in page["results"]]
+        return JsonResponse(page)
     acting_user, auth_response = marketplace_authenticated_user(request)
     if auth_response:
         return auth_response
@@ -1583,7 +1665,7 @@ def jobs_collection(request):
     job = JobPosting.objects.create(owner=acting_user, **values)
     broadcast_to_public(
         "marketplace.changed",
-        {"entity": "job", "action": "created", "id": str(job.id)},
+        {"entity": "job", "action": "created", "id": str(job.id), "item": serialize_job_posting(job)},
     )
     return JsonResponse(serialize_job_posting(job), status=201)
 
@@ -1621,7 +1703,7 @@ def job_detail(request, job_id):
     job.save()
     broadcast_to_public(
         "marketplace.changed",
-        {"entity": "job", "action": "updated", "id": str(job.id)},
+        {"entity": "job", "action": "updated", "id": str(job.id), "item": serialize_job_posting(job)},
     )
     return JsonResponse(serialize_job_posting(job))
 
@@ -2231,6 +2313,8 @@ def _serialize_neighborhood(profile):
 
 
 def _neighborhood_for_property(prop):
+    if hasattr(prop, "_prefetched_neighbourhood_profile"):
+        return prop._prefetched_neighbourhood_profile
     return NeighborhoodProfile.objects.filter(
         city__iexact=prop.city.strip(),
         suburb__iexact=prop.suburb.strip(),
@@ -3601,7 +3685,9 @@ def property_hold(request, property_id):
 @csrf_exempt
 @require_http_methods(["GET", "PATCH", "DELETE", "OPTIONS"])
 def conversation_detail(request, conversation_id):
-    conversation = get_object_or_404(Conversation.objects.prefetch_related("participants", "messages"), pk=conversation_id)
+    conversation = get_object_or_404(
+        Conversation.objects.prefetch_related("participants"), pk=conversation_id
+    )
     acting_user, auth_response = require_authenticated(request)
     if auth_response:
         return auth_response
@@ -3639,15 +3725,41 @@ def conversation_messages(request, conversation_id):
         return forbidden()
 
     if request.method == "GET":
-        messages = conversation.messages.select_related("sender")
-        message_ids = mark_conversation_read(conversation, acting_user)
-        if message_ids:
-            broadcast_to_conversation(conversation.id, "messages.read", {
-                "conversation_id": str(conversation.id),
-                "reader_id": str(acting_user.id),
-                "message_ids": [str(item) for item in message_ids],
-            })
-        return JsonResponse({"results": [serialize_message(item) for item in messages]})
+        try:
+            limit = min(max(int(request.GET.get("limit", 50)), 1), 100)
+            before_id = request.GET.get("before_id")
+            before_id = int(before_id) if before_id else None
+            if before_id is not None and before_id < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            return json_error("limit and before_id must be positive integers")
+
+        messages = conversation.messages.select_related("sender").prefetch_related(
+            Prefetch(
+                "receipts",
+                queryset=MessageReceipt.objects.select_related("user"),
+                to_attr="_loaded_receipts",
+            )
+        ).order_by("-id")
+        if before_id is not None:
+            messages = messages.filter(id__lt=before_id)
+        rows = list(messages[: limit + 1])
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        rows.reverse()
+        if before_id is None:
+            message_ids = mark_conversation_read(conversation, acting_user)
+            if message_ids:
+                broadcast_to_conversation(conversation.id, "messages.read", {
+                    "conversation_id": str(conversation.id),
+                    "reader_id": str(acting_user.id),
+                    "message_ids": [str(item) for item in message_ids],
+                })
+        return JsonResponse({
+            "results": [serialize_message(item) for item in rows],
+            "has_more": has_more,
+            "next_before_id": str(rows[0].id) if has_more and rows else None,
+        })
 
     if request.content_type and request.content_type.startswith("multipart/form-data"):
         data = request.POST
@@ -4204,6 +4316,43 @@ def json_error(message, status=400, errors=None):
     if errors:
         payload["errors"] = errors
     return JsonResponse(payload, status=status)
+
+
+def _related_count_subquery(model):
+    counts = (
+        model.objects.filter(property_id=OuterRef("pk"))
+        .order_by()
+        .values("property_id")
+        .annotate(total=Count("pk"))
+        .values("total")[:1]
+    )
+    return Coalesce(
+        Subquery(counts, output_field=IntegerField()),
+        Value(0),
+        output_field=IntegerField(),
+    )
+
+
+def _cursor_page(request, queryset, *, default_limit=50, max_limit=100):
+    try:
+        limit = int(request.GET.get("limit", default_limit))
+        before_id = request.GET.get("before_id")
+        before_id = int(before_id) if before_id else None
+    except (TypeError, ValueError):
+        return None, json_error("limit and before_id must be positive integers")
+    if limit < 1 or limit > max_limit or (before_id is not None and before_id < 1):
+        return None, json_error(f"limit must be between 1 and {max_limit}; before_id must be positive")
+
+    if before_id is not None:
+        queryset = queryset.filter(pk__lt=before_id)
+    rows = list(queryset.order_by("-pk")[: limit + 1])
+    has_more = len(rows) > limit
+    results = rows[:limit]
+    return {
+        "results": results,
+        "has_more": has_more,
+        "next_before_id": str(results[-1].pk) if has_more and results else None,
+    }, None
 
 
 def normalize_listing_categories(value):
@@ -5251,7 +5400,8 @@ def user_greeting():
         return "Good afternoon"
     return "Good evening"
 def serialize_user(user):
-    last_seen_at = user.last_seen_at
+    online = user_is_online(user)
+    last_seen_at = timezone.now() if online else user.last_seen_at
     return {
         "id": user.id,
         "username": user.username,
@@ -5277,10 +5427,7 @@ def serialize_user(user):
         "cover_photo": account_media_url(user, "cover_photo"),
         "bio": user.bio,
         "last_seen_at": last_seen_at.isoformat() if last_seen_at else None,
-        "online": UserPresenceSession.objects.filter(
-            user_id=user.id,
-            last_ping_at__gte=timezone.now() - timedelta(seconds=45),
-        ).exists(),
+        "online": online,
     }
 
 
@@ -5565,9 +5712,9 @@ def serialize_property(prop):
         "photos": [signed_media_url(photo.image) if photo.image else photo.caption for photo in prop.photos.all()],
         "videos": [video.external_url or (signed_media_url(video.video) if video.video else video.caption) for video in prop.videos.all()],
         "listing_views": prop.views_count,
-        "saved_count": prop.saved_by.count(),
-        "likes_count": prop.likes.count(),
-        "applications_count": getattr(prop, "application_total", prop.applications.count()),
+        "saved_count": getattr(prop, "saved_total", None) if hasattr(prop, "saved_total") else prop.saved_by.count(),
+        "likes_count": getattr(prop, "likes_total", None) if hasattr(prop, "likes_total") else prop.likes.count(),
+        "applications_count": getattr(prop, "application_total", None) if hasattr(prop, "application_total") else prop.applications.count(),
         "passport_id": insights["passport_id"],
         "trust_score": insights["trust_score"],
         "trust_breakdown": insights["trust_breakdown"],
@@ -5580,7 +5727,7 @@ def serialize_property(prop):
         "availability_needs_confirmation": insights["availability_needs_confirmation"],
         "availability_temporarily_hidden": insights["availability_temporarily_hidden"],
         "neighborhood": neighborhood,
-        "comments_count": getattr(prop, "comment_total", prop.comments.count()),
+        "comments_count": getattr(prop, "comment_total", None) if hasattr(prop, "comment_total") else prop.comments.count(),
     }
 
 
@@ -5696,10 +5843,15 @@ def serialize_viewing(viewing, conversation_id=None):
 
 
 def serialize_conversation(conversation, viewer=None):
-    messages = list(conversation.messages.all())
+    messages = getattr(conversation, "latest_messages", None)
+    if messages is None:
+        messages = list(
+            conversation.messages.select_related("sender").order_by(
+                "-created_at", "-id"
+            )[:1]
+        )
     unread_count = 0
     if viewer and not is_admin(viewer):
-        ensure_message_receipts(conversation)
         unread_count = MessageReceipt.objects.filter(
             message__conversation_id=conversation.id,
             user_id=viewer.id,
@@ -5711,14 +5863,17 @@ def serialize_conversation(conversation, viewer=None):
         "title": conversation.title,
         "participants": [serialize_user(user) for user in conversation.participants.all()],
         "phone_numbers_revealed": conversation.phone_numbers_revealed,
-        "last_message": serialize_message(messages[-1]) if messages else None,
+        "last_message": serialize_message(messages[0]) if messages else None,
         "updated_at": conversation.updated_at.isoformat(),
         "unread_count": unread_count,
     }
 
 
 def serialize_message(message):
-    receipts = [serialize_message_receipt(receipt) for receipt in message.receipts.select_related("user").all()]
+    loaded_receipts = getattr(message, "_loaded_receipts", None)
+    if loaded_receipts is None:
+        loaded_receipts = message.receipts.select_related("user").all()
+    receipts = [serialize_message_receipt(receipt) for receipt in loaded_receipts]
     active_receipts = [receipt for receipt in receipts if str(receipt["user_id"]) != str(message.sender_id)]
     if active_receipts and all(receipt.get("read_at") for receipt in active_receipts):
         delivery_status = "read"

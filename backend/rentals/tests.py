@@ -7,7 +7,9 @@ from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from PIL import Image
 
@@ -880,6 +882,55 @@ class MarketplaceCapabilityTests(TestCase):
         )
 
 
+@override_settings(REDIS_URL="")
+class PropertyFeedScaleTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="feed-owner",
+            email="feed-owner@example.test",
+            password="A-strong-password-123!",
+            role=User.Roles.LANDLORD,
+            is_verified=True,
+        )
+
+    def create_property(self, title):
+        return Property.objects.create(
+            owner=self.owner,
+            title=title,
+            address="1 Feed Road",
+            city="Harare",
+            suburb="Avondale",
+            monthly_rent=Decimal("500.00"),
+            deposit_required=Decimal("500.00"),
+            property_type=Property.PropertyType.HOUSE,
+            listing_status=Property.ListingStatus.VERIFIED,
+        )
+
+    def test_property_feed_insight_query_count_stays_bounded(self):
+        for index in range(5):
+            self.create_property(f"Feed listing {index}")
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get("/api/properties/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(len(response.json()["results"]), 5)
+        self.assertLessEqual(len(queries), 12)
+
+    def test_property_feed_uses_stable_id_cursor_pages(self):
+        created = [self.create_property(f"Cursor listing {index}") for index in range(3)]
+
+        first_page = self.client.get("/api/properties/?limit=2").json()
+        self.assertTrue(first_page["has_more"])
+        self.assertEqual(first_page["next_before_id"], str(created[1].id))
+
+        second_page = self.client.get(
+            f"/api/properties/?limit=2&before_id={first_page['next_before_id']}"
+        ).json()
+        self.assertFalse(second_page["has_more"])
+        self.assertEqual([item["id"] for item in second_page["results"]], [created[0].id])
+
+
 class IdentityDocumentSubmissionTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -1047,6 +1098,40 @@ class ConversationInboxTests(TestCase):
         self.assertTrue(deleted.json()["deleted"])
         self.assertEqual(deleted.json()["body"], "This message was deleted")
 
+    def test_message_history_is_cursor_paginated_and_chronological(self):
+        messages = [
+            Message(
+                conversation=self.conversation,
+                sender=self.first,
+                body=f"History message {index}",
+            )
+            for index in range(55)
+        ]
+        Message.objects.bulk_create(messages)
+        self._authorize(self.second_token)
+
+        with CaptureQueriesContext(connection) as latest_queries:
+            latest = self.client.get(
+                f"/api/conversations/{self.conversation.id}/messages/?limit=20"
+            )
+        self.assertEqual(latest.status_code, 200, latest.content)
+        self.assertLess(len(latest_queries), 20)
+        self.assertEqual(len(latest.json()["results"]), 20)
+        self.assertTrue(latest.json()["has_more"])
+        latest_bodies = [item["body"] for item in latest.json()["results"]]
+        self.assertEqual(latest_bodies[0], "History message 35")
+        self.assertEqual(latest_bodies[-1], "History message 54")
+
+        cursor = latest.json()["next_before_id"]
+        earlier = self.client.get(
+            f"/api/conversations/{self.conversation.id}/messages/?limit=20&before_id={cursor}"
+        )
+        self.assertEqual(earlier.status_code, 200, earlier.content)
+        earlier_bodies = [item["body"] for item in earlier.json()["results"]]
+        self.assertEqual(earlier_bodies[0], "History message 15")
+        self.assertEqual(earlier_bodies[-1], "History message 34")
+        self.assertTrue(earlier.json()["has_more"])
+
 
 class SupportAdminTests(TestCase):
     def setUp(self):
@@ -1132,6 +1217,7 @@ class SupportAdminTests(TestCase):
         self.tenant.refresh_from_db()
         self.assertTrue(self.tenant.is_active)
 
+    @override_settings(REDIS_URL="")
     def test_admin_user_list_reports_live_session_and_last_seen_separately(self):
         self.tenant.last_seen_at = timezone.now()
         self.tenant.save(update_fields=["last_seen_at"])

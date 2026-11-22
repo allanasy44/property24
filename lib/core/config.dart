@@ -1,14 +1,30 @@
+import 'package:flutter/foundation.dart';
+
 class AppConfig {
   const AppConfig._();
 
-  static const apiBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:8010/api',
-  );
+  static const _configuredApiBaseUrl = String.fromEnvironment('API_BASE_URL');
+  static String get apiBaseUrl {
+    final configured = _configuredApiBaseUrl.trim();
+    if (configured.isEmpty && kDebugMode) {
+      return 'http://127.0.0.1:8010/api';
+    }
+    if (configured.isEmpty) {
+      throw StateError(
+        'Build release apps with --dart-define=API_BASE_URL=https://your-api-host/api.',
+      );
+    }
+    if (!kDebugMode && !configured.startsWith('https://')) {
+      throw StateError('Release API_BASE_URL must use HTTPS.');
+    }
+    return configured;
+  }
+
   static const _turnUrls = String.fromEnvironment('WEBRTC_TURN_URLS');
   static const _turnUsername = String.fromEnvironment('WEBRTC_TURN_USERNAME');
-  static const _turnCredential =
-      String.fromEnvironment('WEBRTC_TURN_CREDENTIAL');
+  static const _turnCredential = String.fromEnvironment(
+    'WEBRTC_TURN_CREDENTIAL',
+  );
 
   static List<Map<String, dynamic>> get webrtcIceServers {
     final servers = <Map<String, dynamic>>[

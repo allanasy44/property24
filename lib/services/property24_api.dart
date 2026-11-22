@@ -46,6 +46,18 @@ class AuthSession {
   final String? refreshToken;
 }
 
+class ConversationMessagePage {
+  const ConversationMessagePage({
+    required this.messages,
+    required this.hasMore,
+    this.nextBeforeId,
+  });
+
+  final List<ChatMessageItem> messages;
+  final bool hasMore;
+  final String? nextBeforeId;
+}
+
 class PropertyDraft {
   const PropertyDraft({
     required this.title,
@@ -601,6 +613,37 @@ class Property24Api {
     );
   }
 
+  Future<List<PropertyListing>> nextPropertiesPage(
+    String? token,
+    String beforeId,
+  ) async => _results(
+    await _get(
+      'properties/',
+      token: token,
+      query: {'limit': '50', 'before_id': beforeId},
+    ),
+  ).map(PropertyListing.fromJson).toList(growable: false);
+
+  Future<List<ServiceListing>> nextServicesPage(
+    String? token,
+    String beforeId,
+  ) async => _results(
+    await _get(
+      'services/',
+      token: token,
+      query: {'limit': '50', 'before_id': beforeId},
+    ),
+  ).map(ServiceListing.fromJson).toList(growable: false);
+
+  Future<List<JobPosting>> nextJobsPage(String? token, String beforeId) async =>
+      _results(
+        await _get(
+          'jobs/',
+          token: token,
+          query: {'limit': '50', 'before_id': beforeId},
+        ),
+      ).map(JobPosting.fromJson).toList(growable: false);
+
   Future<Map<String, dynamic>> adminDashboard(String token) =>
       _get('admin/dashboard/', token: token);
 
@@ -617,11 +660,7 @@ class Property24Api {
     required String userId,
     required bool active,
   }) async {
-    await _patch(
-      'users/$userId/',
-      token: token,
-      body: {'active': active},
-    );
+    await _patch('users/$userId/', token: token, body: {'active': active});
   }
 
   Future<List<VerificationItem>> adminFailedLandlordVerifications(
@@ -669,6 +708,11 @@ class Property24Api {
           .toList(),
     );
   }
+
+  Future<List<SavedSearchItem>> savedSearchesSnapshot(String token) async =>
+      _results(
+        await _get('tenant/saved-searches/', token: token),
+      ).map(SavedSearchItem.fromJson).toList(growable: false);
 
   Future<void> toggleComparison({
     required String token,
@@ -751,6 +795,27 @@ class Property24Api {
         .map(ComparisonSuggestion.fromJson)
         .toList(growable: false);
   }
+
+  Future<List<ApplicationItem>> applicationsSnapshot(String token) async =>
+      _results(
+        await _get('applications/', token: token),
+      ).map(ApplicationItem.fromJson).toList(growable: false);
+
+  Future<List<ViewingItem>> viewingsSnapshot(String token) async => _results(
+    await _get('viewings/', token: token),
+  ).map(ViewingItem.fromJson).toList(growable: false);
+
+  Future<List<ServiceRequestItem>> serviceRequestsSnapshot(
+    String token,
+  ) async => _results(
+    await _get('service-requests/', token: token),
+  ).map(ServiceRequestItem.fromJson).toList(growable: false);
+
+  Future<List<JobApplicationItem>> jobApplicationsSnapshot(
+    String token,
+  ) async => _results(
+    await _get('job-applications/', token: token),
+  ).map(JobApplicationItem.fromJson).toList(growable: false);
 
   Future<void> markNotificationRead({
     required String token,
@@ -1332,16 +1397,30 @@ class Property24Api {
     return _decode(response);
   }
 
-  Future<List<ChatMessageItem>> conversationMessages(
+  Future<ConversationMessagePage> conversationMessages(
     String token,
-    String conversationId,
-  ) async {
+    String conversationId, {
+    String? beforeId,
+    int limit = 50,
+  }) async {
     final body = await _get(
       'conversations/$conversationId/messages/',
       token: token,
+      query: {'limit': '$limit', 'before_id': beforeId},
     );
-    return _results(body).map(ChatMessageItem.fromJson).toList();
+    return ConversationMessagePage(
+      messages: _results(body).map(ChatMessageItem.fromJson).toList(),
+      hasMore: body['has_more'] == true,
+      nextBeforeId: body['next_before_id']?.toString(),
+    );
   }
+
+  Future<ConversationItem> conversationDetail(
+    String token,
+    String conversationId,
+  ) async => ConversationItem.fromJson(
+    await _get('conversations/$conversationId/', token: token),
+  );
 
   Future<Map<String, dynamic>> _post(
     String path, {

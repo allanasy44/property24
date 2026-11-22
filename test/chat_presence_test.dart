@@ -17,14 +17,14 @@ void main() {
       expect(user.isCurrentlyOnline, isTrue);
     });
 
-    test('does not show stale online activity as current', () {
+    test('does not show expired online activity as current', () {
       final user = AccountUser.fromJson({
         'id': '42',
         'name': 'Property owner',
         'online': true,
         'last_seen_at': DateTime.now()
             .toUtc()
-            .subtract(const Duration(minutes: 2))
+            .subtract(const Duration(minutes: 3))
             .toIso8601String(),
       });
 

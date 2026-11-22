@@ -1,15 +1,20 @@
-import 'dart:html' as html;
+import 'dart:async';
+import 'dart:js_interop';
 
 import 'package:latlong2/latlong.dart';
+import 'package:web/web.dart' as web;
 
 Future<LatLng> getCurrentDeviceLocation() async {
-  final geolocation = html.window.navigator.geolocation;
-  final position = await geolocation.getCurrentPosition();
-  final coordinates = position.coords;
-  final latitude = coordinates?.latitude;
-  final longitude = coordinates?.longitude;
-  if (latitude == null || longitude == null) {
-    throw StateError('The browser did not return device coordinates.');
-  }
-  return LatLng(latitude.toDouble(), longitude.toDouble());
+  final position = Completer<LatLng>();
+  web.window.navigator.geolocation.getCurrentPosition(
+    ((web.GeolocationPosition result) {
+      position.complete(
+        LatLng(result.coords.latitude, result.coords.longitude),
+      );
+    }).toJS,
+    ((web.GeolocationPositionError error) {
+      position.completeError(StateError(error.message));
+    }).toJS,
+  );
+  return position.future;
 }

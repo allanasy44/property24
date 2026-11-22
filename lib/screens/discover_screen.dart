@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter_map/flutter_map.dart';
@@ -55,6 +56,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   _DiscoveryArea? _selectedArea;
   String? _locationError;
   bool _locationLoading = false;
+  final ScrollController _feedScrollController = ScrollController();
   Property24State? _listenedState;
   final Set<String> _seenPropertyNotificationIds = <String>{};
 
@@ -73,6 +75,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     _searchController.text = _query;
     _createRequestId = widget.createRequestId;
     _createOnOpen = _createRequestId != null;
+    _feedScrollController.addListener(_onFeedScroll);
+  }
+
+  void _onFeedScroll() {
+    if (!_feedScrollController.hasClients ||
+        _feedScrollController.position.extentAfter > 600) {
+      return;
+    }
+    if (_market != 'services' && _market != 'jobs') {
+      unawaited(context.read<Property24State>().loadMoreProperties());
+    }
   }
 
   @override
@@ -123,6 +136,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   void dispose() {
     _listenedState?.removeListener(_onPropertyNotification);
+    _feedScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -402,6 +416,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         child: RefreshIndicator(
           onRefresh: state.refresh,
           child: CustomScrollView(
+            controller: _feedScrollController,
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
