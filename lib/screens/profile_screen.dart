@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -43,17 +43,14 @@ class _ProfileHero extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppTheme.accent, AppTheme.accent.withValues(alpha: 0.78)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(26),
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.border),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.accent.withValues(alpha: 0.22),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
+            color: const Color(0xff24174a).withValues(alpha: 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 7),
           ),
         ],
       ),
@@ -67,11 +64,8 @@ class _ProfileHero extends StatelessWidget {
                 height: 76,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.18),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    width: 2,
-                  ),
+                  color: AppTheme.accent,
+                  border: Border.all(color: AppTheme.border, width: 2),
                   image: hasImage
                       ? DecorationImage(
                           image: NetworkImage(profilePicture!),
@@ -99,9 +93,9 @@ class _ProfileHero extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: AppTheme.accentTeal,
+                      color: AppTheme.accent,
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.accent, width: 2),
+                      border: Border.all(color: AppTheme.bgCard, width: 2),
                     ),
                     child: const Icon(
                       CupertinoIcons.checkmark,
@@ -118,20 +112,11 @@ class _ProfileHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'My account',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.78),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
                     fontSize: 19,
                     fontWeight: FontWeight.w800,
                   ),
@@ -141,10 +126,7 @@ class _ProfileHero extends StatelessWidget {
                   email,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.78),
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                 ),
               ],
             ),
@@ -153,8 +135,8 @@ class _ProfileHero extends StatelessWidget {
             tooltip: 'Edit profile',
             onPressed: onEdit,
             style: IconButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.16),
-              foregroundColor: Colors.white,
+              backgroundColor: AppTheme.bgSurface,
+              foregroundColor: AppTheme.accent,
             ),
             icon: const Icon(CupertinoIcons.pencil, size: 18),
           ),
@@ -200,24 +182,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .map((p) => p[0].toUpperCase())
         .join();
     final hasImage = user?.profilePicture.isNotEmpty == true;
-    final userId = user?.id;
-    final hasMyServices = state.snapshot.services.any(
-      (service) => service.owner.id == userId,
-    );
-    final hasMyJobs = state.snapshot.jobs.any((job) => job.owner.id == userId);
-    final hasMyApplications = state.snapshot.jobApplications.any(
-      (application) => application.applicantId == userId,
-    );
-    final hasReceivedApplications = state.snapshot.jobApplications.any(
-      (application) => application.ownerId == userId,
-    );
-    final hasJobProfile = user?.bio.trim().isNotEmpty == true;
-    final hasBusinessActivity =
-        state.canManageListings ||
-        hasMyServices ||
-        state.snapshot.serviceRequests.isNotEmpty ||
-        hasMyJobs ||
-        hasReceivedApplications;
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -232,6 +196,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           physics: const BouncingScrollPhysics(),
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 14),
+              child: Text(
+                'You',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
             _ProfileHero(
               name: name,
               email: user?.email.isNotEmpty == true
@@ -244,184 +219,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   : () => _openProfileEditor(context, user),
               verified: user?.verified == true,
             ),
+            if (user != null && !user.verified) ...[
+              const SizedBox(height: 14),
+              _IdentityPrompt(
+                submitted: user.identityDocumentsSubmitted,
+                onTap: () => _openVerification(context, user),
+              ),
+            ],
             const SizedBox(height: 26),
 
             const _ProfileSectionHeading('ACTIVITY'),
-            if (!state.canManageListings)
-              _MenuCardTile(
-                icon: CupertinoIcons.house,
-                label: 'My Rentals',
-                onTap: () => context.push(AppRoutes.activityScreen),
-              ),
             _MenuCardTile(
               icon: CupertinoIcons.heart,
               label: 'Saved',
               onTap: () => context.push(AppRoutes.callsScreen),
             ),
-            if (hasBusinessActivity) ...[
-              const SizedBox(height: 24),
-              const _ProfileSectionHeading('MY BUSINESS'),
-              if (state.canManageListings)
-                _MenuCardTile(
-                  icon: CupertinoIcons.building_2_fill,
-                  label: 'My Properties',
-                  onTap: () => context.push(AppRoutes.listingsScreen),
-                  showBottomSpacing:
-                      !hasMyServices &&
-                      state.snapshot.serviceRequests.isEmpty &&
-                      !hasMyJobs,
-                ),
-              if (hasMyServices)
-                _MenuCardTile(
-                  icon: CupertinoIcons.wrench,
-                  label: 'My Services',
-                  onTap: () => context.go(
-                    '${AppRoutes.exploreScreen}?market=services&view=mine',
-                  ),
-                  showBottomSpacing:
-                      state.snapshot.serviceRequests.isNotEmpty || hasMyJobs,
-                ),
-              if (state.snapshot.serviceRequests.isNotEmpty)
-                _MenuCardTile(
-                  icon: CupertinoIcons.chat_bubble,
-                  label: 'Service Requests',
-                  onTap: () => context.go(
-                    '${AppRoutes.exploreScreen}?market=services&view=requests',
-                  ),
-                  showBottomSpacing: hasMyJobs,
-                ),
-              if (hasMyJobs)
-                _MenuCardTile(
-                  icon: CupertinoIcons.briefcase,
-                  label: 'My Job Posts',
-                  onTap: () => context.go(
-                    '${AppRoutes.exploreScreen}?market=jobs&view=mine',
-                  ),
-                  showBottomSpacing: hasReceivedApplications,
-                ),
-              if (hasReceivedApplications)
-                _MenuCardTile(
-                  icon: CupertinoIcons.person_2,
-                  label: 'Candidate Applications',
-                  onTap: () => context.go(
-                    '${AppRoutes.exploreScreen}?market=jobs&view=candidates',
-                  ),
-                  showBottomSpacing: false,
-                ),
-            ],
-            if (!state.canManageListings || (!hasMyServices && !hasMyJobs)) ...[
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.bgSurface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      state.canManageListings
-                          ? 'Explore more ways to participate'
-                          : 'Want to list a property, stay or venue?',
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      state.canManageListings
-                          ? 'Offer a service or explore jobs when you are ready.'
-                          : 'Enable property listings now. You can still use the rest of the marketplace.',
-                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        if (!state.canManageListings)
-                          TextButton(
-                            onPressed: user == null
-                                ? null
-                                : () async {
-                                    try {
-                                      await state.enablePropertyListings();
-                                      if (!context.mounted) return;
-                                      context.push(
-                                        '${AppRoutes.listingsScreen}?category=homes&create=${DateTime.now().microsecondsSinceEpoch}',
-                                      );
-                                    } catch (exception) {
-                                      if (!context.mounted) return;
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            userFacingError(exception),
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                            child: const Text('Enable property listings'),
-                          ),
-                        TextButton(
-                          onPressed: () => context.go(
-                            '${AppRoutes.exploreScreen}?market=services&create=${DateTime.now().microsecondsSinceEpoch}',
-                          ),
-                          child: const Text('Offer a service'),
-                        ),
-                        TextButton(
-                          onPressed: () => context.go(
-                            '${AppRoutes.exploreScreen}?market=jobs',
-                          ),
-                          child: const Text('Explore jobs'),
-                        ),
-                        if (!hasJobProfile)
-                          TextButton(
-                            onPressed: user == null
-                                ? null
-                                : () => _openProfileEditor(context, user),
-                            child: const Text('Create job profile'),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            if (hasJobProfile || hasMyApplications) ...[
-              const SizedBox(height: 24),
-              const _ProfileSectionHeading('WORK'),
-              if (hasJobProfile)
-                _MenuCardTile(
-                  icon: CupertinoIcons.person_crop_circle,
-                  label: 'My Job Profile',
-                  onTap: user == null
-                      ? null
-                      : () => _openProfileEditor(context, user),
-                  showBottomSpacing: hasMyApplications,
-                ),
-              if (hasMyApplications)
-                _MenuCardTile(
-                  icon: CupertinoIcons.doc_text,
-                  label: 'My Applications',
-                  onTap: () => context.go(
-                    '${AppRoutes.exploreScreen}?market=jobs&view=applications',
-                  ),
-                  showBottomSpacing: false,
-                ),
-            ],
+            _MenuCardTile(
+              icon: CupertinoIcons.building_2_fill,
+              label: 'My listings',
+              subtitle: 'Homes, stays, services, jobs',
+              onTap: () => context.push(AppRoutes.listingsScreen),
+            ),
+            _MenuCardTile(
+              icon: CupertinoIcons.calendar,
+              label: 'Bookings',
+              subtitle:
+                  '${state.snapshot.viewings.where((item) => item.isAvailableBooking).length} active',
+              onTap: () => context.push(AppRoutes.activityScreen),
+            ),
             const SizedBox(height: 24),
             const _ProfileSectionHeading('ACCOUNT'),
-            _MenuCardTile(
-              icon: CupertinoIcons.checkmark_shield,
-              label: 'Verification',
-              subtitle: _verificationSummary(user),
-              onTap: () => _openVerification(context, user),
-            ),
             _MenuCardTile(
               icon: CupertinoIcons.gear,
               label: 'Settings',
@@ -458,14 +285,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  String _verificationSummary(AccountUser? user) {
-    if (user == null) return 'Sign in to verify your account';
-    if (user.verified) return 'Identity verified';
-    if (user.identityDocumentsSubmitted) return 'ID images submitted';
-    return 'Upload both sides of your ID to create listings';
-  }
-
   Future<void> _signOut(BuildContext context) async {
+    final shouldSignOut = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'You will need to log in again to message hosts or manage listings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (shouldSignOut != true || !context.mounted) return;
     await context.read<Property24State>().signOut();
     if (context.mounted) context.go(AppRoutes.initial);
   }
@@ -515,6 +355,82 @@ class _ProfileSectionHeading extends StatelessWidget {
   }
 }
 
+class _IdentityPrompt extends StatelessWidget {
+  const _IdentityPrompt({required this.submitted, required this.onTap});
+
+  final bool submitted;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.bgCard,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppTheme.border),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xff24174a).withValues(alpha: 0.05),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(
+                  CupertinoIcons.checkmark_shield,
+                  color: AppTheme.accent,
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Verification',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      submitted
+                          ? 'Your ID is being reviewed'
+                          : 'Upload both sides of your ID to list',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(CupertinoIcons.chevron_right, color: AppTheme.textPrimary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 Future<T?> _openSidePanel<T>({
   required BuildContext context,
   required Widget child,
@@ -534,11 +450,11 @@ Future<T?> _openSidePanel<T>({
           child: Material(
             color: AppTheme.bgCard,
             elevation: 12,
-            borderRadius: const BorderRadius.horizontal(
-              left: Radius.circular(24),
-            ),
+            borderRadius: width < 560
+                ? BorderRadius.zero
+                : const BorderRadius.horizontal(left: Radius.circular(24)),
             child: SizedBox(
-              width: width < 560 ? width * 0.92 : 440,
+              width: width < 560 ? width : 440,
               height: double.infinity,
               child: child,
             ),
@@ -572,7 +488,6 @@ class _MenuCardTile extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.subtitle,
-    this.showBottomSpacing = true,
   }) : badge = null;
 
   final IconData icon;
@@ -580,13 +495,12 @@ class _MenuCardTile extends StatelessWidget {
   final String? subtitle;
   final VoidCallback? onTap;
   final int? badge;
-  final bool showBottomSpacing;
 
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     return Padding(
-      padding: EdgeInsets.only(bottom: showBottomSpacing ? 12 : 0),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Material(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(16),
@@ -729,9 +643,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 title: 'Settings',
                 onClose: () => Navigator.of(context).pop(),
               ),
-              const SizedBox(height: 20),
-              _SyncSummary(state: state),
-              const SizedBox(height: 20),
               const _SectionLabel('Account'),
               const SizedBox(height: 10),
               _MenuCard(
@@ -826,7 +737,49 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ),
                 ],
               ),
+              const SizedBox(height: 24),
+              const _SectionLabel('SUPPORT'),
               const SizedBox(height: 10),
+              _MenuCard(
+                children: [
+                  _SettingsTile(
+                    icon: CupertinoIcons.question_circle,
+                    label: 'Help center',
+                    onTap: () =>
+                        _openNestedPanel(context, const _HelpCenterSheet()),
+                    showDivider: false,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'For account recovery, booking disputes, verification or chat safety, email us with your account name and the property or booking.',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const SelectableText(
+                'support@property24.co.zw',
+                style: TextStyle(color: AppTheme.accent),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                '${state.snapshot.conversations.length} chat · '
+                '${state.snapshot.viewings.where((item) => item.isAvailableBooking).length} bookings · '
+                '${state.snapshot.verifications.length} verifications',
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => _signOutFromSettings(context, state),
+                  child: const Text('Sign out'),
+                ),
+              ),
             ],
           ),
         ),
@@ -836,6 +789,36 @@ class _SettingsSheetState extends State<_SettingsSheet> {
 
   void _openNestedPanel(BuildContext context, Widget child) {
     _openSidePanel<void>(context: context, child: child);
+  }
+
+  Future<void> _signOutFromSettings(
+    BuildContext context,
+    Property24State state,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'You will need to log in again to message hosts or manage listings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await state.signOut();
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
+    context.go(AppRoutes.initial);
   }
 }
 
@@ -858,49 +841,8 @@ class _PanelHeader extends StatelessWidget {
             ),
           ),
         ),
-        IconButton(
-          tooltip: 'Close',
-          onPressed: onClose,
-          icon: const Icon(CupertinoIcons.xmark),
-        ),
+        TextButton(onPressed: onClose, child: const Text('Done')),
       ],
-    );
-  }
-}
-
-class _SyncSummary extends StatelessWidget {
-  const _SyncSummary({required this.state});
-  final Property24State state;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.bgSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Account overview',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${state.snapshot.conversations.length} chats · '
-            '${state.snapshot.viewings.length} bookings · '
-            '${state.snapshot.verifications.length} verifications',
-            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1045,11 +987,12 @@ class _SectionLabel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(left: 4),
       child: Text(
-        text,
+        text.toUpperCase(),
         style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
           color: AppTheme.textMuted,
+          letterSpacing: 0.8,
         ),
       ),
     );
@@ -1629,7 +1572,7 @@ class _HelpCenterSheet extends StatelessWidget {
               title: 'Help center',
               onClose: () => Navigator.of(context).pop(),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             _MenuCard(
               children: [
                 _InfoRow(
@@ -1650,17 +1593,131 @@ class _HelpCenterSheet extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 18),
-            Text(
-              'For account recovery, booking disputes, property verification, document review, and chat safety, contact support with your account name and the relevant property or booking.',
-              style: TextStyle(color: AppTheme.textMuted, height: 1.4),
+            const SizedBox(height: 22),
+            const _ProfileSectionHeading('WHAT DO YOU NEED?'),
+            _MenuCard(
+              children: [
+                _SettingsTile(
+                  icon: CupertinoIcons.person_crop_circle,
+                  label: 'Account recovery',
+                  onTap: () => _showHelpTopic(context, 'Account recovery'),
+                ),
+                _SettingsTile(
+                  icon: CupertinoIcons.calendar,
+                  label: 'Booking disputes',
+                  onTap: () => _showHelpTopic(context, 'Booking disputes'),
+                ),
+                _SettingsTile(
+                  icon: CupertinoIcons.checkmark_shield,
+                  label: 'Property verification',
+                  onTap: () => _showHelpTopic(context, 'Property verification'),
+                ),
+                _SettingsTile(
+                  icon: CupertinoIcons.lock_shield,
+                  label: 'Chat safety',
+                  onTap: () => _showHelpTopic(context, 'Chat safety'),
+                  showDivider: false,
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            const SelectableText(
-              'support@property24.co.zw',
-              style: TextStyle(color: AppTheme.accent),
+            const SizedBox(height: 14),
+            Text(
+              'Include your account name and the property or booking when you write to us.',
+              style: TextStyle(color: AppTheme.textSecondary, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => _showSupportContact(context),
+                child: const Text('Email support'),
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showHelpTopic(BuildContext context, String topic) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: AppTheme.bgCard,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 8, 22, 26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                topic,
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Contact support with your account name and the relevant property or booking.',
+                style: TextStyle(color: AppTheme.textSecondary, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              const SelectableText('support@property24.co.zw'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSupportContact(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: AppTheme.bgCard,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Contact support',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const SelectableText('support@property24.co.zw'),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      const ClipboardData(text: 'support@property24.co.zw'),
+                    );
+                    if (sheetContext.mounted) Navigator.pop(sheetContext);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Support email copied')),
+                      );
+                    }
+                  },
+                  child: const Text('Copy address'),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(sheetContext),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -9,6 +9,7 @@ from django.contrib.auth.models import AnonymousUser
 
 from .chat_services import (
     audit_event,
+    admin_group_name,
     broadcast_presence,
     conversation_group_name,
     create_call,
@@ -17,6 +18,7 @@ from .chat_services import (
     end_presence_session,
     end_call,
     get_authorized_conversation,
+    is_admin,
     mark_conversation_delivered,
     mark_conversation_read,
     touch_presence_session,
@@ -50,11 +52,18 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4401)
             return
 
-        self.conversation_ids = await database_sync_to_async(user_conversation_ids)(self.user)
+        self.is_support_admin = is_admin(self.user)
+        self.conversation_ids = (
+            []
+            if self.is_support_admin
+            else await database_sync_to_async(user_conversation_ids)(self.user)
+        )
         for conversation_id in self.conversation_ids:
             await self.channel_layer.group_add(conversation_group_name(conversation_id), self.channel_name)
         await self.channel_layer.group_add(user_group_name(self.user.id), self.channel_name)
         await self.channel_layer.group_add(public_group_name(), self.channel_name)
+        if self.is_support_admin:
+            await self.channel_layer.group_add(admin_group_name(), self.channel_name)
 
         last_seen_at = await database_sync_to_async(create_presence_session)(
             self.user,
@@ -90,6 +99,8 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_discard(conversation_group_name(conversation_id), self.channel_name)
         await self.channel_layer.group_discard(user_group_name(self.user.id), self.channel_name)
         await self.channel_layer.group_discard(public_group_name(), self.channel_name)
+        if getattr(self, "is_support_admin", False):
+            await self.channel_layer.group_discard(admin_group_name(), self.channel_name)
 
     async def receive_json(self, content, **kwargs):
         if not await self.within_rate_limit():

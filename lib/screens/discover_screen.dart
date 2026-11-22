@@ -214,11 +214,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         }),
       );
     }
-    final marketTitle = switch (_market) {
-      'stays' => 'Stays',
-      'venues' => 'Venues',
-      _ => 'Properties',
-    };
     final activeFilterCount = [
       _type != 'Popular',
       _studentInstitution != null,
@@ -421,32 +416,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Explore $marketTitle',
+                                  'Explore',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 24,
+                                    fontSize: 28,
                                     height: 1.2,
                                     color: _textDark,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: -0.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  switch (_market) {
-                                    'stays' =>
-                                      'Find a place to stay, near or far.',
-                                    'venues' =>
-                                      'Discover spaces for your next occasion.',
-                                    _ => 'Find a home that feels right.',
-                                  },
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: _textMuted,
-                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ],
@@ -455,14 +433,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         ],
                       ),
 
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 14),
 
                       // ─── Property search controls ───
                       Container(
-                        height: 54,
+                        height: 44,
                         decoration: BoxDecoration(
                           color: AppTheme.bgSurface,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                           border: Border.all(color: AppTheme.border),
                         ),
                         child: TextField(
@@ -1127,6 +1105,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         ),
                       ),
                       TextButton(
+                        onPressed: () => Navigator.of(
+                          sheetContext,
+                        ).pop((draftMode, resetAll)),
+                        child: const Text('Done'),
+                      ),
+                      TextButton(
                         onPressed: () {
                           setSheetState(() {
                             draftMode = 'Popular';
@@ -1139,7 +1123,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sort by',
+                    'SORT BY',
                     style: TextStyle(
                       color: _textMuted,
                       fontSize: 12,
@@ -1164,7 +1148,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    'More ways to explore',
+                    'MORE WAYS TO EXPLORE',
                     style: TextStyle(
                       color: _textMuted,
                       fontSize: 12,
@@ -1910,9 +1894,11 @@ class _ExploreModeChip extends StatelessWidget {
       selected: selected,
       showCheckmark: false,
       onSelected: (_) => onSelected(),
-      selectedColor: AppTheme.accent,
+      selectedColor: AppTheme.textPrimary,
       backgroundColor: AppTheme.bgSurface,
-      side: BorderSide(color: selected ? AppTheme.accent : AppTheme.border),
+      side: BorderSide(
+        color: selected ? AppTheme.textPrimary : AppTheme.border,
+      ),
       labelStyle: TextStyle(
         color: selected ? Colors.white : AppTheme.textPrimary,
         fontSize: 12,

@@ -14,7 +14,7 @@ class MarketNavigation extends StatelessWidget {
   final ValueChanged<String> onSelected;
 
   static const _markets = [
-    ('Properties', 'properties', CupertinoIcons.house_fill),
+    ('Homes', 'properties', CupertinoIcons.house_fill),
     ('Stays', 'stays', CupertinoIcons.bed_double_fill),
     ('Venues', 'venues', CupertinoIcons.building_2_fill),
     ('Services', 'services', CupertinoIcons.wrench_fill),
@@ -57,11 +57,13 @@ class MarketNavigation extends StatelessWidget {
       selected: isSelected,
       label: label,
       child: Material(
-        color: isSelected ? AppTheme.accent : AppTheme.bgSurface,
-        borderRadius: BorderRadius.circular(compact ? 11 : 15),
+        color: isSelected
+            ? (compact ? AppTheme.textPrimary : AppTheme.accent)
+            : AppTheme.bgSurface,
+        borderRadius: BorderRadius.circular(compact ? 18 : 15),
         child: InkWell(
           onTap: () => onSelected(value),
-          borderRadius: BorderRadius.circular(compact ? 11 : 15),
+          borderRadius: BorderRadius.circular(compact ? 18 : 15),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             constraints: compact
@@ -69,9 +71,11 @@ class MarketNavigation extends StatelessWidget {
                 : const BoxConstraints(minWidth: 76),
             padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 11),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(compact ? 11 : 15),
+              borderRadius: BorderRadius.circular(compact ? 18 : 15),
               border: Border.all(
-                color: isSelected ? AppTheme.accent : AppTheme.border,
+                color: isSelected
+                    ? (compact ? AppTheme.textPrimary : AppTheme.accent)
+                    : AppTheme.border,
               ),
               boxShadow: isSelected && !compact
                   ? [

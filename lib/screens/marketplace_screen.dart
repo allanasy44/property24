@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -80,18 +81,12 @@ class MarketplaceComposerPage extends StatelessWidget {
     final isServices = market == 'services';
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      appBar: AppBar(
-        title: Text(isServices ? 'Post a service' : 'Post a job'),
-        centerTitle: true,
-        leading: IconButton(
-          tooltip: 'Back',
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(CupertinoIcons.chevron_left),
-        ),
-      ),
       body: SafeArea(
         child: SizedBox.expand(
-          child: _MarketplaceListingForm(isServices: isServices),
+          child: _MarketplaceListingForm(
+            isServices: isServices,
+            fullScreen: true,
+          ),
         ),
       ),
     );
@@ -216,60 +211,32 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _isServices ? 'Services' : 'Jobs',
+                                'Explore',
                                 style: TextStyle(
                                   color: AppTheme.textPrimary,
-                                  fontSize: 24,
+                                  fontSize: 28,
                                   height: 1.2,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: -0.5,
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _isServices
-                                    ? 'Find trusted help for everyday tasks.'
-                                    : 'Discover opportunities that fit your skills.',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: AppTheme.textMuted,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
                             ],
                           ),
                         ),
-                        if (signedIn) ...[
-                          const SizedBox(width: 12),
-                          IconButton.filled(
-                            tooltip: _isServices
-                                ? 'Post a service'
-                                : 'Post a job',
-                            onPressed: _openCreateForm,
-                            style: IconButton.styleFrom(
-                              backgroundColor: AppTheme.accent,
-                              foregroundColor: Colors.white,
-                              fixedSize: const Size(44, 44),
-                            ),
-                            icon: const Icon(CupertinoIcons.add),
-                          ),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 14),
-                    MarketNavigation(
-                      selected: widget.market,
-                      onSelected: widget.onSelectMarket ?? (_) {},
-                    ),
-                    const SizedBox(height: 16),
                     _SearchField(
                       controller: _searchController,
                       hintText: _isServices
                           ? 'What service do you need?'
                           : 'Search jobs or locations',
                       onChanged: (value) => setState(() => _query = value),
+                    ),
+                    const SizedBox(height: 14),
+                    MarketNavigation(
+                      selected: widget.market,
+                      onSelected: widget.onSelectMarket ?? (_) {},
                     ),
                     const SizedBox(height: 14),
                     Row(
@@ -308,6 +275,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         services: state.snapshot.services,
                         userId: userId,
                         onStatusChange: _updateServiceRequest,
+                        onEmptyAction: () => setState(() => _view = 'browse'),
                       )
                     else if (_view == 'applications')
                       _JobApplications(
@@ -328,6 +296,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                               : 'Try another search or be the first to offer a service.',
                           actionLabel: signedIn ? 'Offer a service' : null,
                           onAction: signedIn ? _openCreateForm : null,
+                          secondaryActionLabel: _view == 'browse'
+                              ? 'Request a service'
+                              : null,
+                          onSecondaryAction: _view == 'browse'
+                              ? () => setState(() => _view = 'requests')
+                              : null,
                         )
                       else
                         for (final service in services)
@@ -363,7 +337,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           hasApplied: state.snapshot.jobApplications.any(
                             (application) => application.jobId == job.id,
                           ),
+                          applicationsCount: state.snapshot.jobApplications
+                              .where(
+                                (application) => application.jobId == job.id,
+                              )
+                              .length,
                           onApply: () => _applyToJob(job),
+                          onApplicants: () =>
+                              setState(() => _view = 'candidates'),
+                          onCloseApplications: () => _closeJobApplications(job),
                           onEdit: () => _openCreateForm(job: job),
                           onDelete: () => _deleteJob(job),
                         ),
@@ -518,6 +500,21 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     }
   }
 
+  Future<void> _closeJobApplications(JobPosting job) async {
+    try {
+      await context.read<Property24State>().deleteJob(job.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Applications are closed for this job.'),
+          ),
+        );
+      }
+    } catch (exception) {
+      _showError(exception);
+    }
+  }
+
   Future<void> _updateServiceRequest(
     ServiceRequestItem request,
     String status,
@@ -652,12 +649,12 @@ class _ViewTabs extends StatelessWidget {
           ]
         : [
             const ('Find work', 'browse'),
-            const ('My job posts', 'mine'),
-            const ('My applications', 'applications'),
+            const ('My posts', 'mine'),
+            const ('Applications', 'applications'),
             if (showCandidates) const ('Candidates', 'candidates'),
           ];
     return SizedBox(
-      height: 38,
+      height: 34,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: tabs.length,
@@ -669,16 +666,18 @@ class _ViewTabs extends StatelessWidget {
             onTap: () => onSelected(value),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? AppTheme.accent.withAlpha(24) : null,
+                color: isSelected ? AppTheme.textPrimary : AppTheme.bgSurface,
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: isSelected ? AppTheme.accent : AppTheme.textMuted,
-                  fontSize: 12,
+                  color: isSelected ? Colors.white : AppTheme.textSecondary,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -782,11 +781,10 @@ class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 52,
+      height: 42,
       decoration: BoxDecoration(
         color: AppTheme.bgSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.border),
+        borderRadius: BorderRadius.circular(13),
       ),
       child: TextField(
         controller: controller,
@@ -819,11 +817,13 @@ class _SearchField extends StatelessWidget {
 class _MarketplaceListingForm extends StatefulWidget {
   const _MarketplaceListingForm({
     required this.isServices,
+    this.fullScreen = false,
     this.service,
     this.job,
   });
 
   final bool isServices;
+  final bool fullScreen;
   final ServiceListing? service;
   final JobPosting? job;
 
@@ -887,9 +887,6 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
         : isEditing
         ? 'Edit your job post'
         : 'Post a job';
-    final subtitle = widget.isServices
-        ? 'Help customers understand what you offer and how to reach you.'
-        : 'Share the role, location and pay details with potential applicants.';
     final submitLabel = isEditing
         ? 'Save changes'
         : widget.isServices
@@ -903,86 +900,51 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
       padding: EdgeInsets.only(bottom: bottomInset),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: media.size.height - media.padding.top - bottomInset - 12,
+          maxHeight: widget.fullScreen
+              ? media.size.height - bottomInset
+              : media.size.height - media.padding.top - bottomInset - 12,
         ),
         child: Container(
           decoration: BoxDecoration(
             color: AppTheme.bgCard,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-            border: Border.all(color: AppTheme.border.withAlpha(130)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(50),
-                blurRadius: 32,
-                offset: const Offset(0, -8),
-              ),
-            ],
+            borderRadius: widget.fullScreen
+                ? BorderRadius.zero
+                : const BorderRadius.vertical(top: Radius.circular(30)),
+            border: widget.fullScreen
+                ? null
+                : Border.all(color: AppTheme.border.withAlpha(130)),
+            boxShadow: widget.fullScreen
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(50),
+                      blurRadius: 32,
+                      offset: const Offset(0, -8),
+                    ),
+                  ],
           ),
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 38,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppTheme.textMuted.withAlpha(85),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 18, 12, 16),
+                  padding: const EdgeInsets.fromLTRB(20, 10, 14, 14),
                   child: Row(
                     children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: AppTheme.accent.withAlpha(22),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Icon(
-                          widget.isServices
-                              ? CupertinoIcons.wrench
-                              : CupertinoIcons.briefcase,
-                          color: AppTheme.accent,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: TextStyle(
-                                color: AppTheme.textPrimary,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -0.35,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              subtitle,
-                              style: TextStyle(
-                                color: AppTheme.textMuted,
-                                fontSize: 12,
-                                height: 1.35,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Close',
+                      TextButton(
                         onPressed: () => context.pop(),
-                        icon: Icon(
-                          CupertinoIcons.xmark_circle_fill,
-                          color: AppTheme.textMuted,
+                        child: const Text('Cancel'),
+                      ),
+                      Expanded(
+                        child: Text(
+                          title,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ],
@@ -1009,20 +971,21 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
                             if (constraints.maxWidth < 430) {
                               return Column(
                                 children: [
-                                  _input(_category, 'Category'),
+                                  _categoryField(),
                                   _input(_location, 'Location'),
                                 ],
                               );
                             }
                             return Row(
                               children: [
-                                Expanded(child: _input(_category, 'Category')),
+                                Expanded(child: _categoryField()),
                                 const SizedBox(width: 12),
                                 Expanded(child: _input(_location, 'Location')),
                               ],
                             );
                           },
                         ),
+                        _formSectionLabel('DESCRIPTION'),
                         _input(
                           _description,
                           widget.isServices
@@ -1174,6 +1137,75 @@ class _MarketplaceListingFormState extends State<_MarketplaceListingForm> {
         },
       ),
     );
+  }
+
+  Widget _categoryField() {
+    if (!widget.isServices) return _input(_category, 'Category');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextFormField(
+        controller: _category,
+        readOnly: true,
+        onTap: _chooseServiceCategory,
+        decoration: _inputDecoration('Category').copyWith(
+          suffixIcon: Icon(
+            CupertinoIcons.chevron_down,
+            size: 16,
+            color: AppTheme.textMuted,
+          ),
+        ),
+        validator: (value) =>
+            value == null || value.trim().isEmpty ? 'Choose a category' : null,
+      ),
+    );
+  }
+
+  Future<void> _chooseServiceCategory() async {
+    const categories = [
+      'Cleaning',
+      'Plumbing',
+      'Electrical',
+      'Moving and transport',
+      'Garden and outdoor',
+      'Other',
+    ];
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: AppTheme.bgCard,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Choose a category',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            for (final category in categories)
+              ListTile(
+                title: Text(category),
+                trailing: _category.text == category
+                    ? const Icon(
+                        CupertinoIcons.checkmark,
+                        color: AppTheme.accent,
+                      )
+                    : null,
+                onTap: () => Navigator.of(sheetContext).pop(category),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      setState(() => _category.text = selected);
+    }
   }
 
   InputDecoration _inputDecoration(String label) => InputDecoration(
@@ -1559,7 +1591,10 @@ class _JobCard extends StatelessWidget {
     required this.job,
     required this.isOwner,
     required this.hasApplied,
+    required this.applicationsCount,
     required this.onApply,
+    required this.onApplicants,
+    required this.onCloseApplications,
     required this.onEdit,
     required this.onDelete,
   });
@@ -1567,7 +1602,10 @@ class _JobCard extends StatelessWidget {
   final JobPosting job;
   final bool isOwner;
   final bool hasApplied;
+  final int applicationsCount;
   final VoidCallback onApply;
+  final VoidCallback onApplicants;
+  final VoidCallback onCloseApplications;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -1575,21 +1613,17 @@ class _JobCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final workType = job.employmentType
         .split('_')
-        .map(
-          (part) => part.isEmpty
-              ? part
-              : '${part[0].toUpperCase()}${part.substring(1)}',
-        )
+        .map((part) => part.isEmpty ? part : titleize(part))
         .join('-');
     return Card(
       color: AppTheme.bgCard,
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 14),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppTheme.border),
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: AppTheme.border.withValues(alpha: 0.72)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(17),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1600,41 +1634,71 @@ class _JobCard extends StatelessWidget {
                     job.title,
                     style: TextStyle(
                       color: AppTheme.textPrimary,
-                      fontSize: 16,
+                      fontSize: 17,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                if (job.status != 'active')
-                  const Chip(
-                    label: Text('Position filled'),
-                    visualDensity: VisualDensity.compact,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
                   ),
-                if (isOwner) ...[
-                  IconButton(
-                    tooltip: 'Edit job post',
-                    onPressed: onEdit,
+                  decoration: BoxDecoration(
+                    color: isOwner
+                        ? AppTheme.accent.withValues(alpha: 0.1)
+                        : AppTheme.bgSurface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    isOwner ? 'Your post' : workType,
+                    style: TextStyle(
+                      color: isOwner ? AppTheme.accent : AppTheme.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (isOwner)
+                  PopupMenuButton<String>(
+                    tooltip: 'Job options',
+                    onSelected: (value) {
+                      if (value == 'edit') onEdit();
+                      if (value == 'close') onCloseApplications();
+                      if (value == 'delete') onDelete();
+                      if (value == 'share') {
+                        Clipboard.setData(
+                          ClipboardData(text: '${job.title} · ${job.location}'),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Job details copied')),
+                        );
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Edit job')),
+                      PopupMenuItem(value: 'share', child: Text('Share')),
+                      PopupMenuItem(
+                        value: 'close',
+                        child: Text('Close applications'),
+                      ),
+                      PopupMenuItem(value: 'delete', child: Text('Delete job')),
+                    ],
                     icon: Icon(
-                      CupertinoIcons.pencil,
+                      CupertinoIcons.ellipsis,
                       color: AppTheme.textMuted,
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Remove job post',
-                    onPressed: onDelete,
-                    icon: Icon(CupertinoIcons.trash, color: AppTheme.textMuted),
-                  ),
-                ],
               ],
             ),
             Text(
               '${job.location} · $workType',
-              style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 7),
             Text(
               job.description,
-              maxLines: 3,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
@@ -1649,21 +1713,45 @@ class _JobCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Posted by ${job.owner.name}',
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+            if (isOwner)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onEdit,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 40),
+                        foregroundColor: AppTheme.accent,
+                        side: BorderSide(color: AppTheme.borderMid),
+                      ),
+                      child: const Text('Edit'),
+                    ),
                   ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: onApplicants,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 40),
+                      ),
+                      child: Text(
+                        'Applicants ($applicationsCount)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: hasApplied ? null : onApply,
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+                  child: Text(hasApplied ? 'Applied' : 'Apply'),
                 ),
-                if (!isOwner)
-                  FilledButton(
-                    onPressed: hasApplied ? null : onApply,
-                    child: Text(hasApplied ? 'Applied' : 'Apply'),
-                  ),
-              ],
-            ),
+              ),
           ],
         ),
       ),
@@ -1677,20 +1765,24 @@ class _ServiceRequests extends StatelessWidget {
     required this.services,
     required this.userId,
     required this.onStatusChange,
+    required this.onEmptyAction,
   });
 
   final List<ServiceRequestItem> requests;
   final List<ServiceListing> services;
   final String? userId;
   final Future<void> Function(ServiceRequestItem, String) onStatusChange;
+  final VoidCallback onEmptyAction;
 
   @override
   Widget build(BuildContext context) {
     if (requests.isEmpty) {
-      return const _MarketplaceEmpty(
+      return _MarketplaceEmpty(
         icon: CupertinoIcons.chat_bubble,
         title: 'No service requests yet',
         body: 'Requests you send or receive will appear here.',
+        actionLabel: 'Browse services',
+        onAction: onEmptyAction,
       );
     }
     return Column(
@@ -1900,6 +1992,8 @@ class _MarketplaceEmpty extends StatelessWidget {
     required this.body,
     this.actionLabel,
     this.onAction,
+    this.secondaryActionLabel,
+    this.onSecondaryAction,
   });
 
   final IconData icon;
@@ -1907,49 +2001,72 @@ class _MarketplaceEmpty extends StatelessWidget {
   final String body;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final String? secondaryActionLabel;
+  final VoidCallback? onSecondaryAction;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        border: Border.all(color: AppTheme.border),
-        borderRadius: BorderRadius.circular(16),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 54, 12, 18),
       child: Column(
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
-              color: AppTheme.accent.withAlpha(20),
+              color: AppTheme.accent.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 25, color: AppTheme.accent),
+            child: Icon(icon, size: 22, color: AppTheme.accent),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           Text(
             title,
+            textAlign: TextAlign.center,
             style: TextStyle(
               color: AppTheme.textPrimary,
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           Text(
             body,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: AppTheme.textMuted,
               fontSize: 12,
-              height: 1.5,
+              height: 1.45,
             ),
           ),
           if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: onAction,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 46),
+                  backgroundColor: AppTheme.accent,
+                ),
+                child: Text(actionLabel!),
+              ),
+            ),
+          ],
+          if (secondaryActionLabel != null && onSecondaryAction != null) ...[
             const SizedBox(height: 8),
-            TextButton(onPressed: onAction, child: Text(actionLabel!)),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onSecondaryAction,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 46),
+                  foregroundColor: AppTheme.textPrimary,
+                  side: BorderSide(color: AppTheme.border),
+                ),
+                child: Text(secondaryActionLabel!),
+              ),
+            ),
           ],
         ],
       ),

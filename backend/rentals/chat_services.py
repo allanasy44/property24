@@ -22,6 +22,7 @@ MAX_TYPING_LENGTH = 120
 CHAT_GROUP_PREFIX = "conversation"
 PUBLIC_GROUP_PREFIX = "public"
 USER_GROUP_PREFIX = "user"
+ADMIN_GROUP_NAME = "support.admins"
 PRESENCE_SESSION_TIMEOUT_SECONDS = 45
 
 User = get_user_model()
@@ -37,6 +38,10 @@ def user_group_name(user_id):
 
 def public_group_name():
     return f"{PUBLIC_GROUP_PREFIX}.properties"
+
+
+def admin_group_name():
+    return ADMIN_GROUP_NAME
 
 def is_conversation_participant(user, conversation):
     return bool(user and user.is_authenticated and (is_admin(user) or conversation.participants.filter(id=user.id).exists()))
@@ -416,7 +421,15 @@ def broadcast_to_user(user_id, event_type, payload):
             message=notification_message(data),
             payload=data,
         )
-        event_payload = {**data, "notification_id": str(notification.pk)}
+        event_payload = {
+            **data,
+            "id": str(notification.pk),
+            "notification_id": str(notification.pk),
+            "message": notification.message,
+            "is_read": notification.is_read,
+            "created_at": notification.created_at.isoformat(),
+            "payload": notification.payload,
+        }
         _broadcast_group(
             user_group_name(user_id),
             event_type,
@@ -452,6 +465,15 @@ def broadcast_to_public(event_type, payload):
         context={},
     )
 
+
+def broadcast_to_admins(event_type, payload):
+    _broadcast_group(
+        admin_group_name(),
+        event_type,
+        payload,
+        context={"audience": "admins"},
+    )
+
 def broadcast_presence(user, online, conversation_ids: Iterable[int] | None = None):
     payload = {
         "user_id": str(user.id),
@@ -460,7 +482,10 @@ def broadcast_presence(user, online, conversation_ids: Iterable[int] | None = No
         "online": bool(online),
         "last_seen_at": user.last_seen_at.isoformat() if user.last_seen_at else None,
     }
-    for conversation_id in conversation_ids or user_conversation_ids(user):
+    target_conversations = (
+        user_conversation_ids(user) if conversation_ids is None else conversation_ids
+    )
+    for conversation_id in target_conversations:
         broadcast_to_conversation(conversation_id, "presence.changed", payload)
 
 

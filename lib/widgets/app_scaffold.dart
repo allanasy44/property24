@@ -469,7 +469,7 @@ class _BottomNavItem extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: 'Arial',
+                      fontFamily: 'cursive',
                       fontSize: 10,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                       color: selected
@@ -511,19 +511,19 @@ Future<void> _showCreateActions(BuildContext context) async {
   final actions = [
     const _CreateAction(
       icon: CupertinoIcons.house,
-      label: 'List a property',
+      label: 'Home',
       category: 'homes',
       requiresPropertyCapability: true,
     ),
     const _CreateAction(
       icon: CupertinoIcons.bed_double,
-      label: 'List accommodation',
+      label: 'Stay',
       category: 'stays',
       requiresPropertyCapability: true,
     ),
     const _CreateAction(
       icon: Icons.celebration,
-      label: 'List an event venue',
+      label: 'Event venue',
       category: 'venues',
       requiresPropertyCapability: true,
     ),
@@ -574,18 +574,9 @@ Future<void> _showCreateActions(BuildContext context) async {
                     child: Container(
                       padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            AppTheme.bgCard,
-                            AppTheme.bgCard.withAlpha(242),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(32),
-                        border: Border.all(
-                          color: AppTheme.accent.withAlpha(70),
-                        ),
+                        color: AppTheme.bgCard,
+                        borderRadius: BorderRadius.circular(26),
+                        border: Border.all(color: AppTheme.border),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withAlpha(48),
@@ -609,7 +600,7 @@ Future<void> _showCreateActions(BuildContext context) async {
                               alignment: Alignment.center,
                               children: [
                                 Text(
-                                  'Create something',
+                                  'Create',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: AppTheme.textPrimary,
@@ -632,28 +623,37 @@ Future<void> _showCreateActions(BuildContext context) async {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: actions.length,
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
-                                  mainAxisExtent: 102,
-                                  crossAxisSpacing: 8,
-                                  mainAxisSpacing: 6,
+                          const SizedBox(height: 8),
+                          const _CreateSectionLabel('LIST'),
+                          Row(
+                            children: [
+                              for (final action in actions.take(3))
+                                Expanded(
+                                  child: _CreateActionBubble(
+                                    action: action,
+                                    onTap: () => Navigator.of(
+                                      dialogContext,
+                                      rootNavigator: true,
+                                    ).pop(action),
+                                  ),
                                 ),
-                            itemBuilder: (context, index) {
-                              final action = actions[index];
-                              return _CreateActionBubble(
-                                action: action,
-                                onTap: () => Navigator.of(
-                                  dialogContext,
-                                  rootNavigator: true,
-                                ).pop(action),
-                              );
-                            },
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const _CreateSectionLabel('OFFER OR HIRE'),
+                          Row(
+                            children: [
+                              for (final action in actions.skip(3))
+                                Expanded(
+                                  child: _CreateActionBubble(
+                                    action: action,
+                                    onTap: () => Navigator.of(
+                                      dialogContext,
+                                      rootNavigator: true,
+                                    ).pop(action),
+                                  ),
+                                ),
+                            ],
                           ),
                         ],
                       ),
@@ -726,33 +726,13 @@ class _CreateActionBubble extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 54,
-                height: 54,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppTheme.accent.withAlpha(230),
-                      AppTheme.accent.withAlpha(150),
-                    ],
-                  ),
-                  border: Border.all(color: Colors.white.withAlpha(95)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.accent.withAlpha(55),
-                      blurRadius: 14,
-                      offset: const Offset(0, 6),
-                    ),
-                    const BoxShadow(
-                      color: Colors.white24,
-                      blurRadius: 4,
-                      offset: Offset(-2, -2),
-                    ),
-                  ],
+                  color: AppTheme.accent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(15),
                 ),
-                child: Icon(action.icon, color: Colors.white, size: 23),
+                child: Icon(action.icon, color: AppTheme.accent, size: 22),
               ),
               const SizedBox(height: 7),
               Text(
@@ -762,7 +742,7 @@ class _CreateActionBubble extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: AppTheme.textPrimary,
-                  fontSize: 10,
+                  fontSize: 11,
                   height: 1.15,
                   fontWeight: FontWeight.w600,
                 ),
@@ -773,6 +753,29 @@ class _CreateActionBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CreateSectionLabel extends StatelessWidget {
+  const _CreateSectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerLeft,
+    child: Padding(
+      padding: const EdgeInsets.only(left: 2, bottom: 4),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: AppTheme.textMuted,
+          fontSize: 10,
+          letterSpacing: 0.8,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
+  );
 }
 
 class _CreateAction {

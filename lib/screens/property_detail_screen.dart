@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
@@ -24,9 +26,7 @@ class PropertyDetailScreen extends StatefulWidget {
 
 class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   int _page = 0;
-  bool _saved = false;
   int _listingViews = 0;
-  int _savedCount = 0;
   bool _liked = false;
   int _likesCount = 0;
   bool _followingSupplier = false;
@@ -39,12 +39,13 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   List<PropertyCommentItem> _comments = <PropertyCommentItem>[];
   List<ComparisonSuggestion> _similarProperties = <ComparisonSuggestion>[];
   PropertyCommentItem? _replyTo;
+  Property24State? _observedState;
+  int _propertyRevision = -1;
 
   @override
   void initState() {
     super.initState();
     _listingViews = widget.property.listingViews;
-    _savedCount = widget.property.savedCount;
     _likesCount = widget.property.likesCount;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeEngagement();
@@ -55,13 +56,29 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = context.read<Property24State>();
+    if (_observedState != state) {
+      _observedState?.removeListener(_onPropertyStateChanged);
+      _observedState = state..addListener(_onPropertyStateChanged);
+      _propertyRevision = state.propertyRevision(widget.property.id);
+    }
+  }
+
+  void _onPropertyStateChanged() {
+    final state = _observedState;
+    if (!mounted || state == null) return;
+    final nextRevision = state.propertyRevision(widget.property.id);
+    if (nextRevision == _propertyRevision) return;
+    _propertyRevision = nextRevision;
+    unawaited(_loadComments());
+    unawaited(_loadLikeStatus());
+  }
+
   Future<void> _initializeEngagement() async {
     final state = context.read<Property24State>();
-    if (mounted) {
-      setState(
-        () => _saved = state.savedPropertyIds.contains(widget.property.id),
-      );
-    }
     try {
       final views = await state.recordPropertyView(widget.property.id);
       if (mounted) setState(() => _listingViews = views);
@@ -83,17 +100,8 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       return;
     }
 
-    final wasSaved = state.savedPropertyIds.contains(widget.property.id);
     try {
       await state.toggleSaved(widget.property);
-      if (mounted) {
-        setState(() {
-          _saved = state.savedPropertyIds.contains(widget.property.id);
-          _savedCount = (_savedCount + (wasSaved ? -1 : 1))
-              .clamp(0, 1 << 31)
-              .toInt();
-        });
-      }
     } catch (exception) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -105,6 +113,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
 
   @override
   void dispose() {
+    _observedState?.removeListener(_onPropertyStateChanged);
     _commentController.dispose();
     super.dispose();
   }
@@ -329,18 +338,12 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final property = widget.property;
     final state = context.watch<Property24State>();
-    final currentProperty = state.snapshot.properties.firstWhere(
-      (item) => item.id == property.id,
-      orElse: () => property,
-    );
-    final listingViews = currentProperty.listingViews > _listingViews
-        ? currentProperty.listingViews
+    final property = state.currentProperty(widget.property);
+    final listingViews = property.listingViews > _listingViews
+        ? property.listingViews
         : _listingViews;
-    final savedCount = currentProperty.savedCount > _savedCount
-        ? currentProperty.savedCount
-        : _savedCount;
+    final savedCount = property.savedCount;
     final photos = property.photos.isEmpty ? <String>[''] : property.photos;
     final amenities = _amenities(property);
 
@@ -354,7 +357,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                 child: _HeroGallery(
                   photos: photos,
                   page: _page,
-                  saved: _saved,
+                  saved: state.savedPropertyIds.contains(property.id),
                   onPageChanged: (index) => setState(() => _page = index),
                   onBack: () => Navigator.pop(context),
                   onSave: _toggleSaved,
@@ -376,6 +379,8 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       _PriceHeader(property: property),
                       const SizedBox(height: 14),
                       _MetaLine(property: property),
+                      const SizedBox(height: 14),
+                      const _DetailTabs(),
                       if (property.sharedRoom ||
                           (property.isStudentAccommodation &&
                               property
@@ -408,8 +413,6 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       const SizedBox(height: 14),
                       _AvailabilityCard(property: property),
                       const SizedBox(height: 14),
-                      _NeighborhoodCard(property: property),
-                      const SizedBox(height: 14),
                       if (!property.isStayOrVenue)
                         _AffordabilityCard(property: property),
                       const SizedBox(height: 14),
@@ -418,7 +421,6 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         const SizedBox(height: 14),
                         _StayVenueDetails(property: property),
                       ],
-                      const SizedBox(height: 18),
                       OsmMapPreview(
                         label: property.heroLocation,
                         latitude: property.mapLatitude,
@@ -487,8 +489,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         ],
                       ),
                       const SizedBox(height: 18),
-                      const _DetailTabs(),
-                      const SizedBox(height: 14),
+                      const _SectionEyebrow('ABOUT'),
                       if (property.description.trim().isNotEmpty)
                         Text(
                           property.description.trim(),
@@ -497,11 +498,16 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                             fontSize: 12.5,
                             height: 1.55,
                           ),
+                        )
+                      else
+                        Text(
+                          'No description yet.',
+                          style: TextStyle(color: AppTheme.textMuted),
                         ),
                       const SizedBox(height: 20),
                       if (amenities.isNotEmpty) ...[
                         Text(
-                          'What this house offers',
+                          'WHAT THIS HOUSE OFFERS',
                           style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 14,
@@ -519,7 +525,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         const SizedBox(height: 20),
                       ],
                       if (state.signedIn &&
-                          state.user?.id != widget.property.owner?.id) ...[
+                          state.user?.id != property.owner?.id) ...[
                         _SimilarPropertiesSection(
                           suggestions: _similarProperties,
                           isLoading: _similarPropertiesLoading,
@@ -972,55 +978,36 @@ class _PriceHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                property.rentLabel,
+                property.title,
                 style: TextStyle(
                   color: AppTheme.textPrimary,
-                  fontSize: 22,
+                  fontSize: 21,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                property.title,
+                property.heroLocation,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                property.rentLabel,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: AppTheme.textPrimary,
-                  fontSize: 13,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                property.heroLocation,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: AppTheme.textMuted, fontSize: 11.5),
               ),
             ],
           ),
         ),
-        const SizedBox(width: 10),
-        const _HeaderIcon(icon: CupertinoIcons.clock),
-        const _HeaderIcon(icon: CupertinoIcons.bookmark),
-        const _HeaderIcon(icon: CupertinoIcons.location),
-        const _HeaderIcon(icon: CupertinoIcons.heart),
       ],
-    );
-  }
-}
-
-class _HeaderIcon extends StatelessWidget {
-  const _HeaderIcon({required this.icon});
-
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 8),
-      child: Icon(icon, size: 16, color: AppTheme.textSecondary),
     );
   }
 }
@@ -1032,29 +1019,48 @@ class _MetaLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
       children: [
-        Text(
-          '${property.trustScore}% trust / ${property.isLand ? property.standSummary : '${property.moveInTotalLabel} rent + deposit'}',
-          style: TextStyle(
-            color: AppTheme.textPrimary,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
+        _DetailAttribute(
+          property.availabilityLabel,
+          color: const Color(0xffe4f4e8),
+          textColor: const Color(0xff246b39),
         ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Icon(CupertinoIcons.eye, size: 13, color: AppTheme.textMuted),
-            const SizedBox(width: 5),
-            Text(
-              property.availabilityLabel,
-              style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
-            ),
-          ],
-        ),
+        _DetailAttribute(property.propertyType),
+        _DetailAttribute('${property.bedrooms} beds'),
+        _DetailAttribute('${property.bathrooms} baths'),
+        if (property.parking.trim().isNotEmpty)
+          _DetailAttribute(property.parking),
       ],
+    );
+  }
+}
+
+class _DetailAttribute extends StatelessWidget {
+  const _DetailAttribute(this.label, {this.color, this.textColor});
+
+  final String label;
+  final Color? color;
+  final Color? textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: color ?? AppTheme.bgSurface,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor ?? AppTheme.textSecondary,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }
@@ -1174,69 +1180,6 @@ class _AvailabilityCard extends StatelessWidget {
   }
 }
 
-class _NeighborhoodCard extends StatelessWidget {
-  const _NeighborhoodCard({required this.property});
-
-  final PropertyListing property;
-
-  @override
-  Widget build(BuildContext context) {
-    final neighborhood = property.neighborhood;
-    if (!neighborhood.available) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    final details = <String>[
-      if (neighborhood.waterReliability != null)
-        'Water ${neighborhood.waterReliability}%',
-      if (neighborhood.safetyScore != null)
-        'Safety ${neighborhood.safetyScore}/100',
-      if (neighborhood.commuteToCbdMinutes != null)
-        '${neighborhood.commuteToCbdMinutes} min to CBD',
-    ];
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Neighbourhood',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            details.join(' · '),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (neighborhood.amenities.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              neighborhood.amenities.join(' · '),
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-          if (neighborhood.sourceName.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Source: ${neighborhood.sourceName}${neighborhood.verifiedAt.isEmpty ? '' : ' · ${neighborhood.verifiedAt}'}',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _AffordabilityCard extends StatefulWidget {
   const _AffordabilityCard({required this.property});
 
@@ -1253,6 +1196,7 @@ class _AffordabilityCardState extends State<_AffordabilityCard> {
   AffordabilityResult? _result;
   String? _error;
   bool _calculating = false;
+  bool _expanded = false;
 
   @override
   void dispose() {
@@ -1295,47 +1239,65 @@ class _AffordabilityCardState extends State<_AffordabilityCard> {
     }
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        color: AppTheme.bgCard,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Can I afford this?',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => setState(() => _expanded = !_expanded),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+                child: Text(_expanded ? 'Close' : 'Check'),
+              ),
+            ],
+          ),
           Text(
-            'Affordability',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
+            'Private. Stays on your device.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppTheme.textMuted,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Uses this listing’s current rent and deposit. Your figures remain on this device.',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          _moneyField(_income, 'Monthly income'),
-          const SizedBox(height: 8),
-          _moneyField(_commitments, 'Monthly commitments'),
-          const SizedBox(height: 8),
-          _moneyField(_savings, 'Savings available for move-in'),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              onPressed: _calculating ? null : _calculate,
-              icon: _calculating
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(CupertinoIcons.equal_circle, size: 17),
-              label: const Text('Calculate'),
+          if (_expanded) ...[
+            const SizedBox(height: 12),
+            _moneyField(_income, 'Monthly income'),
+            const SizedBox(height: 8),
+            _moneyField(_commitments, 'Monthly commitments'),
+            const SizedBox(height: 8),
+            _moneyField(_savings, 'Savings available for move-in'),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: _calculating ? null : _calculate,
+                icon: _calculating
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(CupertinoIcons.equal_circle, size: 17),
+                label: const Text('Calculate'),
+              ),
             ),
-          ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 8),
             Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
@@ -1620,6 +1582,28 @@ class _DetailTabs extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _SectionEyebrow extends StatelessWidget {
+  const _SectionEyebrow(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: AppTheme.textMuted,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+        ),
+      ),
     );
   }
 }

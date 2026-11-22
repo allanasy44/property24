@@ -53,7 +53,7 @@ class _SavedSearchesContent extends StatelessWidget {
               FilledButton.icon(
                 onPressed: () => _createSearch(context, state),
                 icon: const Icon(CupertinoIcons.add, size: 18),
-                label: const Text('Create alert'),
+                label: const Text('New alert'),
               ),
             ],
           ),
@@ -61,10 +61,48 @@ class _SavedSearchesContent extends StatelessWidget {
           Expanded(
             child: searches.isEmpty
                 ? Center(
-                    child: Text(
-                      'Save a search to get alerts when a matching home is listed.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: AppTheme.textMuted),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              CupertinoIcons.bell,
+                              color: AppTheme.accent,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No alerts yet',
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Save a search and we will tell you when a matching home is listed.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          FilledButton(
+                            onPressed: () => _createSearch(context, state),
+                            child: const Text('Create alert'),
+                          ),
+                        ],
+                      ),
                     ),
                   )
                 : ListView.separated(

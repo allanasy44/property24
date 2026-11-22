@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
@@ -18,11 +19,41 @@ class AdminSupportScreen extends StatefulWidget {
 
 class _AdminSupportScreenState extends State<AdminSupportScreen> {
   late Future<List<VerificationItem>> _verifications;
+  Property24State? _observedState;
+  int _lastAdminDataRevision = 0;
 
   @override
   void initState() {
     super.initState();
     _verifications = _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = context.read<Property24State>();
+    if (_observedState == next) return;
+    _observedState?.removeListener(_onStateChanged);
+    _observedState = next;
+    _lastAdminDataRevision = next.adminDataRevision;
+    next.addListener(_onStateChanged);
+  }
+
+  void _onStateChanged() {
+    final state = _observedState;
+    if (!mounted ||
+        state == null ||
+        state.adminDataRevision == _lastAdminDataRevision) {
+      return;
+    }
+    _lastAdminDataRevision = state.adminDataRevision;
+    unawaited(_reload());
+  }
+
+  @override
+  void dispose() {
+    _observedState?.removeListener(_onStateChanged);
+    super.dispose();
   }
 
   Future<List<VerificationItem>> _load() {

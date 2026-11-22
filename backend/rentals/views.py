@@ -76,6 +76,7 @@ from .auth import issue_token_pair, user_from_authorization_header, user_from_to
 from .chat_services import (
     audit_event,
     block_chat_user,
+    broadcast_to_admins,
     broadcast_to_conversation,
     broadcast_to_public,
     broadcast_to_user,
@@ -652,6 +653,8 @@ def auth_profile(request):
             register_media_asset(user, user.profile_picture, scope=MediaAsset.Scope.PROFILE, source_model="user", source_id=user.id, original_name="profile_picture", mime_type="image/jpeg", metadata={"slot": "profile_picture"})
         if "cover_photo" in changed_fields and user.cover_photo:
             register_media_asset(user, user.cover_photo, scope=MediaAsset.Scope.PROFILE, source_model="user", source_id=user.id, original_name="cover_photo", mime_type="image/jpeg", metadata={"slot": "cover_photo"})
+        broadcast_to_user(user.id, "account.changed", {})
+        broadcast_to_admins("admin.data.changed", {})
     return JsonResponse({"user": serialize_user(user), "account": serialize_account_context(user)})
 
 
@@ -665,6 +668,7 @@ def notifications_collection(request):
         notifications = Notification.objects.filter(user=acting_user).order_by("-created_at")[:100]
         return JsonResponse({"results": [serialize_notification(item) for item in notifications]})
     deleted_count, _ = Notification.objects.filter(user=acting_user).delete()
+    broadcast_to_user(acting_user.id, "notifications.cleared", {})
     return JsonResponse({"cleared": True, "deleted_count": deleted_count})
 
 
@@ -675,6 +679,7 @@ def notifications_mark_all_read(request):
     if auth_response:
         return auth_response
     updated_count = Notification.objects.filter(user=acting_user, is_read=False).update(is_read=True)
+    broadcast_to_user(acting_user.id, "notifications.read_all", {})
     return JsonResponse({"marked_read": True, "updated_count": updated_count})
 
 
@@ -688,6 +693,11 @@ def notification_mark_read(request, notification_id):
     if not notification.is_read:
         notification.is_read = True
         notification.save(update_fields=["is_read"])
+    broadcast_to_user(
+        acting_user.id,
+        "notification.updated",
+        serialize_notification(notification),
+    )
     return JsonResponse(serialize_notification(notification))
 
 
@@ -699,6 +709,11 @@ def notification_detail(request, notification_id):
         return auth_response
     notification = get_object_or_404(Notification, pk=notification_id, user=acting_user)
     notification.delete()
+    broadcast_to_user(
+        acting_user.id,
+        "notification.deleted",
+        {"id": str(notification_id)},
+    )
     return JsonResponse({"deleted": True, "notification_id": str(notification_id)})
 
 
@@ -885,6 +900,7 @@ def landlord_agents_collection(request):
         )
     except IntegrityError:
         return json_error("An account with these details already exists")
+    broadcast_to_admins("admin.data.changed", {})
     return JsonResponse({"user": serialize_user(agent), "temporary_password_created": not bool(data.get("password"))}, status=201)
 
 
@@ -907,6 +923,7 @@ def landlord_agent_detail(request, agent_id):
         agent.is_active = False
         agent.save(update_fields=["agent_is_active", "is_active"])
         Property.objects.filter(agent=agent).update(agent=None)
+        broadcast_to_admins("admin.data.changed", {})
         return JsonResponse({"removed": True, "user": serialize_user(agent)})
 
     data = request_data(request)
@@ -939,6 +956,7 @@ def landlord_agent_detail(request, agent_id):
             changed_fields.append("phone")
     if changed_fields:
         agent.save(update_fields=sorted(set(changed_fields)))
+        broadcast_to_admins("admin.data.changed", {})
     return JsonResponse(serialize_user(agent))
 
 @csrf_exempt
@@ -968,6 +986,7 @@ def user_detail(request, user_id):
     if request.method == "DELETE":
         user.is_active = False
         user.save(update_fields=["is_active"])
+        broadcast_to_admins("admin.data.changed", {})
         return JsonResponse({"deactivated": True, "user": serialize_user(user)})
     if request.method == "PATCH":
         data = request_json(request)
@@ -977,6 +996,7 @@ def user_detail(request, user_id):
             return json_error("The active field must be true or false")
         user.is_active = data["active"]
         user.save(update_fields=["is_active"])
+        broadcast_to_admins("admin.data.changed", {})
         return JsonResponse(serialize_user(user))
 
     return JsonResponse({})
@@ -1356,11 +1376,15 @@ def record_marketplace_status(instance, status, actor):
 
 def notify_marketplace_status(user, kind, status, item_id, title):
     status_label = status.replace("_", " ")
-    Notification.objects.create(
-        user=user,
-        kind=kind,
-        message=f"{title}: {status_label}",
-        payload={"status": status, "item_id": str(item_id)},
+    broadcast_to_user(
+        user.id,
+        "notification.created",
+        {
+            "kind": kind,
+            "message": f"{title}: {status_label}",
+            "status": status,
+            "item_id": str(item_id),
+        },
     )
 
 
@@ -1386,6 +1410,10 @@ def services_collection(request):
     if error:
         return error
     service = ServiceListing.objects.create(owner=acting_user, **values)
+    broadcast_to_public(
+        "marketplace.changed",
+        {"entity": "service", "action": "created", "id": str(service.id)},
+    )
     return JsonResponse(serialize_service_listing(service), status=201)
 
 
@@ -1407,6 +1435,10 @@ def service_detail(request, service_id):
     if request.method == "DELETE":
         service.is_active = False
         service.save(update_fields=["is_active", "updated_at"])
+        broadcast_to_public(
+            "marketplace.changed",
+            {"entity": "service", "action": "archived", "id": str(service.id)},
+        )
         return JsonResponse(serialize_service_listing(service))
     data, error = marketplace_payload(request)
     if error:
@@ -1417,6 +1449,10 @@ def service_detail(request, service_id):
     for field, value in values.items():
         setattr(service, field, value)
     service.save()
+    broadcast_to_public(
+        "marketplace.changed",
+        {"entity": "service", "action": "updated", "id": str(service.id)},
+    )
     return JsonResponse(serialize_service_listing(service))
 
 
@@ -1545,6 +1581,10 @@ def jobs_collection(request):
     if error:
         return error
     job = JobPosting.objects.create(owner=acting_user, **values)
+    broadcast_to_public(
+        "marketplace.changed",
+        {"entity": "job", "action": "created", "id": str(job.id)},
+    )
     return JsonResponse(serialize_job_posting(job), status=201)
 
 
@@ -1565,6 +1605,10 @@ def job_detail(request, job_id):
     if request.method == "DELETE":
         job.is_active = False
         job.save(update_fields=["is_active", "updated_at"])
+        broadcast_to_public(
+            "marketplace.changed",
+            {"entity": "job", "action": "archived", "id": str(job.id)},
+        )
         return JsonResponse(serialize_job_posting(job))
     data, error = marketplace_payload(request)
     if error:
@@ -1575,6 +1619,10 @@ def job_detail(request, job_id):
     for field, value in values.items():
         setattr(job, field, value)
     job.save()
+    broadcast_to_public(
+        "marketplace.changed",
+        {"entity": "job", "action": "updated", "id": str(job.id)},
+    )
     return JsonResponse(serialize_job_posting(job))
 
 
@@ -1829,6 +1877,7 @@ def property_like(request, property_id):
     else:
         PropertyLike.objects.get_or_create(property=prop, user=acting_user)
         liked = True
+    broadcast_property_engagement(prop, "like_updated")
     return JsonResponse({
         "property_id": prop.id,
         "liked": liked,
@@ -1872,6 +1921,7 @@ def property_comments_collection(request, property_id):
         body=body,
         media_url=str(data.get("media_url") or data.get("mediaUri") or "").strip()[:500],
     )
+    broadcast_property_engagement(prop, "comment_created")
     return JsonResponse(serialize_property_comment(comment), status=201)
 
 
@@ -1888,6 +1938,7 @@ def property_comment_detail(request, property_id, comment_id):
         return forbidden()
     if request.method == "DELETE":
         comment.delete()
+        broadcast_property_engagement(prop, "comment_deleted")
         return JsonResponse({"deleted": True, "comment_id": comment_id})
     data = request_json(request)
     if data is None:
@@ -1899,6 +1950,7 @@ def property_comment_detail(request, property_id, comment_id):
         return json_error("Comment body must be 1200 characters or fewer")
     comment.body = body
     comment.save(update_fields=["body", "updated_at"])
+    broadcast_property_engagement(prop, "comment_updated")
     return JsonResponse(serialize_property_comment(comment))
 
 
@@ -2632,6 +2684,7 @@ def saved_searches_collection(request):
     ).filter(Q(agent__isnull=True) | Q(agent__is_verified=True))
     for prop in live_properties.iterator(chunk_size=100):
         _record_saved_search_match(saved_search, prop)
+    broadcast_to_user(tenant.id, "saved_searches.changed", {})
     return JsonResponse(_serialize_saved_search(saved_search), status=201 if created else 200)
 
 
@@ -2644,6 +2697,7 @@ def saved_search_detail(request, search_id):
     saved_search = get_object_or_404(SavedSearch, pk=search_id, tenant=tenant)
     if request.method == "DELETE":
         saved_search.delete()
+        broadcast_to_user(tenant.id, "saved_searches.changed", {})
         return JsonResponse({"deleted": True, "id": str(search_id)})
     data = request_json(request)
     if data is None:
@@ -2658,6 +2712,7 @@ def saved_search_detail(request, search_id):
         except ValueError as exc:
             return json_error(str(exc))
     saved_search.save(update_fields=["name", "is_active", "criteria", "updated_at"])
+    broadcast_to_user(tenant.id, "saved_searches.changed", {})
     return JsonResponse(_serialize_saved_search(saved_search))
 
 
@@ -3905,9 +3960,11 @@ def supplier_follow(request, supplier_id):
 
     if request.method == "DELETE":
         SupplierFollow.objects.filter(follower=acting_user, supplier=supplier).delete()
+        broadcast_to_public("supplier.followers.changed", {"supplier_id": str(supplier.id)})
         return JsonResponse(serialize_supplier_follow(supplier, False))
 
     SupplierFollow.objects.get_or_create(follower=acting_user, supplier=supplier)
+    broadcast_to_public("supplier.followers.changed", {"supplier_id": str(supplier.id)})
     return JsonResponse(serialize_supplier_follow(supplier, True), status=201)
 
 
@@ -4425,6 +4482,7 @@ def notify_identity_status(user, verification, actor=None):
         "message": message,
     }
     broadcast_to_user(user.pk, "notification.created", payload)
+    broadcast_to_admins("admin.data.changed", {})
     if status in {VerificationRequest.Status.VERIFIED, VerificationRequest.Status.REJECTED}:
         send_push_to_users(
             [user.pk],
@@ -4991,6 +5049,7 @@ def create_public_account_from_otp(challenge):
         user.save()
     except IntegrityError:
         return None, "An account with these details already exists"
+    broadcast_to_admins("admin.data.changed", {})
     return user, ""
 
 def create_public_account(data, require_password=True):
@@ -5052,6 +5111,7 @@ def create_public_account(data, require_password=True):
         )
     except IntegrityError:
         return None, "An account with these details already exists"
+    broadcast_to_admins("admin.data.changed", {})
     return user, ""
 
 
@@ -5094,8 +5154,7 @@ def create_google_account(claims, data):
         if phone and User.objects.filter(phone_identity_query(phone)).exists():
             return None, "An account with this phone number already exists"
         try:
-            return (
-                User.objects.create_user(
+            user = User.objects.create_user(
                     username=f"google:{subject}",
                     email=email,
                     password=get_random_string(32),
@@ -5111,11 +5170,11 @@ def create_google_account(claims, data):
                     profile_picture_url=picture,
                     cover_photo_url=data.get("cover_photo_url") or data.get("cover_photo", ""),
                     bio=data.get("bio", ""),
-                ),
-                "",
-            )
+                )
         except IntegrityError:
             return None, "A Google account with these details already exists"
+        broadcast_to_admins("admin.data.changed", {})
+        return user, ""
 
     changed_fields = []
     updates = {
@@ -5447,6 +5506,13 @@ def broadcast_property_change(prop, action):
     for recipient_id in recipient_ids:
         broadcast_to_user(recipient_id, "property.changed", payload)
     _notify_saved_search_matches(prop)
+
+
+def broadcast_property_engagement(prop, action):
+    broadcast_to_public(
+        "property.engagement.changed",
+        {"action": action, "property": serialize_property(prop)},
+    )
 
 def serialize_property(prop):
     insights = property_insights(prop)

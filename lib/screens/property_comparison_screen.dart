@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
+import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
 
 class PropertyComparisonScreen extends StatelessWidget {
-  const PropertyComparisonScreen({
-    required this.properties,
-    super.key,
-  });
+  const PropertyComparisonScreen({required this.properties, super.key});
 
   final List<PropertyListing> properties;
 
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<Property24State>();
+    final currentProperties = properties
+        .map(state.currentProperty)
+        .toList(growable: false);
     final rows = <({String label, String Function(PropertyListing) value})>[
       (label: 'Monthly price', value: (property) => property.rentLabel),
       (label: 'Bedrooms', value: (property) => '${property.bedrooms}'),
@@ -23,10 +26,7 @@ class PropertyComparisonScreen extends StatelessWidget {
       ),
       (label: 'Solar', value: (property) => property.solarPower ? '✓' : '—'),
       (label: 'Borehole', value: (property) => property.borehole ? '✓' : '—'),
-      (
-        label: 'Furnished',
-        value: (property) => property.furnished ? '✓' : '—',
-      ),
+      (label: 'Furnished', value: (property) => property.furnished ? '✓' : '—'),
       (
         label: 'Pet friendly',
         value: (property) => property.petFriendly ? '✓' : '—',
@@ -39,7 +39,7 @@ class PropertyComparisonScreen extends StatelessWidget {
         title: const Text('Compare properties'),
         backgroundColor: AppTheme.bgCard,
       ),
-      body: properties.length < 2
+      body: currentProperties.length < 2
           ? Center(
               child: Text(
                 'Select at least two properties to compare.',
@@ -56,7 +56,7 @@ class PropertyComparisonScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(width: 124),
-                      for (final property in properties)
+                      for (final property in currentProperties)
                         SizedBox(
                           width: 184,
                           child: Padding(
@@ -105,8 +105,9 @@ class PropertyComparisonScreen extends StatelessWidget {
                           SizedBox(
                             width: 124,
                             child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
                               child: Text(
                                 row.label,
                                 style: TextStyle(
@@ -116,7 +117,7 @@ class PropertyComparisonScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-                          for (final property in properties)
+                          for (final property in currentProperties)
                             SizedBox(
                               width: 184,
                               child: Center(

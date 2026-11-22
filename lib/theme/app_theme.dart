@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 class AppTheme {
   AppTheme._();
 
-  static const Color _lightBg = Color(0xffe9eaec);
+  static const Color _lightBg = Color(0xfff5f4f8);
   static const Color _lightBgCard = Color(0xffffffff);
-  static const Color _lightBgSurface = Color(0xfff4f4f8);
-  static const Color _lightBorder = Color(0xffe8e8f4);
-  static const Color _lightBorderMid = Color(0xffc2bbfc);
-  static const Color _lightTextPrimary = Color(0xff1f1e18);
-  static const Color _lightTextSecondary = Color(0xff5f5f59);
-  static const Color _lightTextMuted = Color(0xffa4a6a6);
+  static const Color _lightBgSurface = Color(0xffecebf0);
+  static const Color _lightBorder = Color(0xffeceaf1);
+  static const Color _lightBorderMid = Color(0xffd8d0ff);
+  static const Color _lightTextPrimary = Color(0xff17151d);
+  static const Color _lightTextSecondary = Color(0xff625e6d);
+  static const Color _lightTextMuted = Color(0xff8b8794);
   static const Color _darkBg = Color(0xff0d0f13);
   static const Color _darkBgCard = Color(0xff171b22);
   static const Color _darkBgSurface = Color(0xff202631);
@@ -29,7 +29,7 @@ class AppTheme {
   static Color get bgSurface => _darkMode ? _darkBgSurface : _lightBgSurface;
   static Color get border => _darkMode ? _darkBorder : _lightBorder;
   static Color get borderMid => _darkMode ? _darkBorderMid : _lightBorderMid;
-  static const Color accent = Color(0xff6a53fe);
+  static const Color accent = Color(0xff623cff);
   static const Color accentTeal = Color(0xff55c6b7);
   static const Color accentGold = Color(0xffffb13b);
   static Color get textPrimary =>
@@ -48,7 +48,7 @@ class AppTheme {
     const darkBorder = _darkBorder;
     final base = ThemeData.dark(useMaterial3: true);
     final textTheme = base.textTheme.apply(
-      fontFamily: 'Arial',
+      fontFamily: 'cursive',
       bodyColor: darkText,
       displayColor: darkText,
     );
@@ -136,15 +136,15 @@ class AppTheme {
         hintStyle: TextStyle(color: mutedText),
         border: OutlineInputBorder(
           borderSide: BorderSide(color: darkBorder),
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
         ),
         enabledBorder: OutlineInputBorder(
           borderSide: BorderSide(color: darkBorder),
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
         ),
         focusedBorder: OutlineInputBorder(
           borderSide: BorderSide(color: accent),
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
         ),
       ),
       chipTheme: const ChipThemeData(
@@ -153,7 +153,7 @@ class AppTheme {
         side: BorderSide(color: darkBorder),
         labelStyle: TextStyle(color: darkText),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
         ),
       ),
       dividerTheme: const DividerThemeData(
@@ -195,14 +195,18 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: accent,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: const Color(0xffc9c2ff),
           side: const BorderSide(color: Color(0xff8075d8)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
     );
@@ -211,7 +215,7 @@ class AppTheme {
   static ThemeData get lightTheme {
     final base = ThemeData.light(useMaterial3: true);
     final textTheme = base.textTheme.apply(
-      fontFamily: 'Arial',
+      fontFamily: 'cursive',
       bodyColor: _lightTextPrimary,
       displayColor: _lightTextPrimary,
     );
@@ -233,6 +237,13 @@ class AppTheme {
         outlineVariant: _lightBorder,
       ),
       scaffoldBackgroundColor: _lightBg,
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xff251f35),
+        contentTextStyle: const TextStyle(color: Colors.white),
+        actionTextColor: const Color(0xffc7b9ff),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
       textTheme: textTheme.copyWith(
         headlineSmall: textTheme.headlineSmall?.copyWith(
           fontWeight: FontWeight.w800,
@@ -263,10 +274,10 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         color: _lightBgCard,
-        elevation: 0,
+        elevation: 2,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: _lightBorder),
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xfff0eef4)),
         ),
       ),
       inputDecorationTheme: const InputDecorationTheme(
@@ -274,15 +285,15 @@ class AppTheme {
         fillColor: _lightBgSurface,
         border: OutlineInputBorder(
           borderSide: BorderSide(color: _lightBorder),
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
         ),
         enabledBorder: OutlineInputBorder(
           borderSide: BorderSide(color: _lightBorder),
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
         ),
         focusedBorder: OutlineInputBorder(
           borderSide: BorderSide(color: accent),
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
         ),
       ),
       chipTheme: const ChipThemeData(
@@ -291,21 +302,25 @@ class AppTheme {
         side: BorderSide(color: _lightBorder),
         labelStyle: TextStyle(color: _lightTextPrimary),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: accent,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: accent,
           side: const BorderSide(color: _lightBorderMid),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
     );

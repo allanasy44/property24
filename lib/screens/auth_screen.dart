@@ -66,7 +66,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.bg,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -89,22 +89,8 @@ class _AuthScreenState extends State<AuthScreen> {
                         constraints: const BoxConstraints(maxWidth: 460),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 28,
-                            vertical: 22,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.bgCard.withAlpha(242),
-                            borderRadius: BorderRadius.circular(28),
-                            border: Border.all(
-                              color: AppTheme.border.withAlpha(210),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(30),
-                                blurRadius: 36,
-                                offset: const Offset(0, 18),
-                              ),
-                            ],
+                            horizontal: 8,
+                            vertical: 18,
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -283,29 +269,58 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _socialButtons() {
-    if (kIsWeb) {
-      return GoogleWebSignInButton(
-        onCredential: _googleAuthWithToken,
-        isRegistration: _registering,
-      );
-    }
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: OutlinedButton.icon(
-        onPressed: _submitting ? null : _googleAuth,
-        icon: const _GoogleMark(),
-        label: const Text('Continue with Google'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppTheme.textPrimary,
-          side: BorderSide(color: AppTheme.border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (kIsWeb)
+          GoogleWebSignInButton(
+            onCredential: _googleAuthWithToken,
+            isRegistration: _registering,
+          )
+        else
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: _submitting ? null : _googleAuth,
+              icon: const _GoogleMark(),
+              label: const Text('Continue with Google'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.textPrimary,
+                side: BorderSide(color: AppTheme.border),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
+        const SizedBox(height: 10),
+        _appleButton(),
+      ],
     );
   }
+
+  Widget _appleButton() => SizedBox(
+    height: 48,
+    child: FilledButton(
+      onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Apple sign in is not available yet.')),
+      ),
+      style: FilledButton.styleFrom(
+        backgroundColor: const Color(0xff17151d),
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('', style: TextStyle(fontSize: 18)),
+          SizedBox(width: 9),
+          Text('Continue with Apple'),
+        ],
+      ),
+    ),
+  );
 
   Future<void> _googleAuthWithToken(String idToken) async {
     await _completeGoogleAuth(
@@ -357,9 +372,7 @@ class _AuthScreenState extends State<AuthScreen> {
   void _continueAfterAuthentication() {
     final user = context.read<Property24State>().user;
     final needsEmailVerification =
-        user != null &&
-        user.role != AccountRole.admin &&
-        !user.emailVerified;
+        user != null && user.role != AccountRole.admin && !user.emailVerified;
     context.go(
       needsEmailVerification
           ? AppRoutes.emailVerificationScreen
@@ -511,6 +524,8 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                 ),
               ),
+            const SizedBox(height: 10),
+            _appleButton(),
             const SizedBox(height: 10),
             Center(
               child: Text(

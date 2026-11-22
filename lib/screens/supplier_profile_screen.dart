@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +22,8 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
   bool _following = false;
   int _followersCount = 0;
   bool _loadingFollow = true;
+  Property24State? _observedState;
+  int _lastFollowRevision = 0;
 
   AccountUser get supplier => widget.supplier;
 
@@ -27,6 +31,32 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
   void initState() {
     super.initState();
     _loadFollowStatus();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = context.read<Property24State>();
+    if (_observedState == next) return;
+    _observedState?.removeListener(_onStateChanged);
+    _observedState = next;
+    _lastFollowRevision = next.supplierFollowRevision(supplier.id);
+    next.addListener(_onStateChanged);
+  }
+
+  void _onStateChanged() {
+    final state = _observedState;
+    if (!mounted || state == null) return;
+    final revision = state.supplierFollowRevision(supplier.id);
+    if (revision == _lastFollowRevision) return;
+    _lastFollowRevision = revision;
+    unawaited(_loadFollowStatus());
+  }
+
+  @override
+  void dispose() {
+    _observedState?.removeListener(_onStateChanged);
+    super.dispose();
   }
 
   Future<void> _loadFollowStatus() async {

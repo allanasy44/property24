@@ -18,6 +18,8 @@ class AdminUsersScreen extends StatefulWidget {
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
   late Future<List<Map<String, dynamic>>> _users;
   Timer? _presenceRefreshTimer;
+  Property24State? _observedState;
+  int _lastAdminDataRevision = 0;
 
   @override
   void initState() {
@@ -31,8 +33,31 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = context.read<Property24State>();
+    if (_observedState == next) return;
+    _observedState?.removeListener(_onStateChanged);
+    _observedState = next;
+    _lastAdminDataRevision = next.adminDataRevision;
+    next.addListener(_onStateChanged);
+  }
+
+  void _onStateChanged() {
+    final state = _observedState;
+    if (!mounted ||
+        state == null ||
+        state.adminDataRevision == _lastAdminDataRevision) {
+      return;
+    }
+    _lastAdminDataRevision = state.adminDataRevision;
+    unawaited(_reload());
+  }
+
+  @override
   void dispose() {
     _presenceRefreshTimer?.cancel();
+    _observedState?.removeListener(_onStateChanged);
     super.dispose();
   }
 

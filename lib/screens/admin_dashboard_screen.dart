@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -18,11 +20,41 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   late Future<Map<String, dynamic>> _summary;
+  Property24State? _observedState;
+  int _lastAdminDataRevision = 0;
 
   @override
   void initState() {
     super.initState();
     _summary = _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = context.read<Property24State>();
+    if (_observedState == next) return;
+    _observedState?.removeListener(_onStateChanged);
+    _observedState = next;
+    _lastAdminDataRevision = next.adminDataRevision;
+    next.addListener(_onStateChanged);
+  }
+
+  void _onStateChanged() {
+    final state = _observedState;
+    if (!mounted ||
+        state == null ||
+        state.adminDataRevision == _lastAdminDataRevision) {
+      return;
+    }
+    _lastAdminDataRevision = state.adminDataRevision;
+    unawaited(_refresh());
+  }
+
+  @override
+  void dispose() {
+    _observedState?.removeListener(_onStateChanged);
+    super.dispose();
   }
 
   Future<Map<String, dynamic>> _load() {

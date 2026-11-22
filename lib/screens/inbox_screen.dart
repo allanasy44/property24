@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../models/rental_models.dart';
+import 'property_detail_screen.dart';
 import '../services/property24_api.dart';
 import '../state/property24_state.dart';
 import '../theme/app_theme.dart';
@@ -75,22 +76,12 @@ class _InboxScreenState extends State<InboxScreen> {
                   letterSpacing: -0.6,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Your conversations about properties and services',
-                style: TextStyle(
-                  color: AppTheme.textMuted,
-                  fontSize: 12,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               Container(
-                height: 48,
+                height: 42,
                 decoration: BoxDecoration(
-                  color: AppTheme.bgCard,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.border),
+                  color: AppTheme.bgSurface,
+                  borderRadius: BorderRadius.circular(13),
                 ),
                 child: TextField(
                   controller: _searchController,
@@ -127,15 +118,18 @@ class _InboxScreenState extends State<InboxScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 14),
-              SizedBox(
-                height: 36,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
+              const SizedBox(height: 12),
+              Container(
+                height: 38,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSurface,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
                   children: [
                     for (final filter in const ['All', 'Unread'])
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
+                      Expanded(
                         child: _ChatFilter(
                           label: filter,
                           selected: _filter == filter,
@@ -145,7 +139,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               const ErrorBanner(),
               if (conversations.isEmpty)
                 const EmptyState(
@@ -161,10 +155,8 @@ class _InboxScreenState extends State<InboxScreen> {
                     currentUserId: state.user?.id,
                     state: state,
                     property: _propertyFor(state, conversations[index]),
-                    onHide: () => _hideConversation(
-                      state,
-                      conversations[index],
-                    ),
+                    onHide: () =>
+                        _hideConversation(state, conversations[index]),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => ConversationScreen(
@@ -212,7 +204,14 @@ class _InboxScreenState extends State<InboxScreen> {
     ConversationItem conversation,
   ) {
     for (final property in state.snapshot.properties) {
-      if (property.id == conversation.propertyId) return property;
+      if (property.id == conversation.propertyId) {
+        return state.currentProperty(property);
+      }
+    }
+    for (final property in state.snapshot.savedProperties) {
+      if (property.id == conversation.propertyId) {
+        return state.currentProperty(property);
+      }
     }
     return null;
   }
@@ -244,18 +243,29 @@ class _ChatFilter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? AppTheme.accent : AppTheme.bgSurface,
-      borderRadius: BorderRadius.circular(18),
+      color: selected ? AppTheme.bgCard : Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 5,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
           child: Center(
             child: Text(
               label,
               style: TextStyle(
-                color: selected ? Colors.white : AppTheme.textSecondary,
+                color: AppTheme.textPrimary,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -401,10 +411,7 @@ class _ConversationTile extends StatelessWidget {
                   if (value == 'hide') onHide();
                 },
                 itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: 'hide',
-                    child: Text('Hide chat'),
-                  ),
+                  PopupMenuItem(value: 'hide', child: Text('Hide chat')),
                 ],
                 icon: Icon(
                   CupertinoIcons.ellipsis,
@@ -589,21 +596,25 @@ class _ConversationScreenState extends State<ConversationScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    final property = widget.property;
+    final conversation = state.snapshot.conversations.firstWhere(
+      (item) => item.id == widget.conversation.id,
+      orElse: () => widget.conversation,
+    );
+    final property = _currentProperty(state);
     final canShareLocation =
         property?.hasCoordinates == true && property?.showExactLocation == true;
     final participant = _participant(state);
     final contactName = participant?.name.isNotEmpty == true
         ? participant!.name
-        : widget.conversation.title;
+        : conversation.title;
     final isOnline =
         participant != null &&
         state.isUserOnline(
           participant.id,
           fallback: participant.isCurrentlyOnline,
         );
-    final typingText = state.typingUserForConversation(widget.conversation.id);
-    final activeCall = state.activeCallForConversation(widget.conversation.id);
+    final typingText = state.typingUserForConversation(conversation.id);
+    final activeCall = state.activeCallForConversation(conversation.id);
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
@@ -660,7 +671,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
             onSelected: _handleChatOption,
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'contact', child: Text('Contact info')),
-              PopupMenuItem(value: 'mute', child: Text('Mute notifications')),
               PopupMenuItem(value: 'block', child: Text('Block contact')),
             ],
           ),
@@ -705,6 +715,65 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 ],
               ),
             ),
+          if (property != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              child: Material(
+                color: AppTheme.bgCard,
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => PropertyDetailScreen(property: property),
+                    ),
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                property.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              Text(
+                                property.rentLabel,
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  PropertyDetailScreen(property: property),
+                            ),
+                          ),
+                          child: const Text('View'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           Expanded(
             child: ListView(
               controller: _messagesScrollController,
@@ -712,6 +781,81 @@ class _ConversationScreenState extends State<ConversationScreen> {
               children: [
                 if (_loading && _messages.isEmpty)
                   const Center(child: CircularProgressIndicator()),
+                if (!_loading && _messages.isEmpty) ...[
+                  const SizedBox(height: 86),
+                  if (!isOnline)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 18),
+                      child: Text(
+                        '$contactName is offline. They will see your message when they are back.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  Center(
+                    child: Text(
+                      'Say hello to $contactName.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (conversation.phoneNumbersRevealed)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Center(
+                        child: Text(
+                          'Contact details shared',
+                          style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    )
+                  else ...[
+                    const SizedBox(height: 5),
+                    Center(
+                      child: Text(
+                        'Phone numbers remain hidden.',
+                        style: TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (property != null) ...[
+                    const SizedBox(height: 18),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      children: [
+                        for (final reply in const [
+                          'Is it still available?',
+                          'Can I view it?',
+                        ])
+                          ActionChip(
+                            label: Text(reply),
+                            onPressed: () {
+                              _message.text = reply;
+                              _message.selection = TextSelection.collapsed(
+                                offset: reply.length,
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 36),
+                ],
                 for (var index = 0; index < _messages.length; index++) ...[
                   if (_messages[index].createdAtDate != null &&
                       (index == 0 ||
@@ -934,12 +1078,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   AccountUser? _participant(Property24State state) {
-    for (final participant in widget.conversation.participants) {
+    final conversation = state.snapshot.conversations.firstWhere(
+      (item) => item.id == widget.conversation.id,
+      orElse: () => widget.conversation,
+    );
+    for (final participant in conversation.participants) {
       if (participant.id != state.user?.id) return participant;
     }
-    return widget.conversation.participants.isEmpty
+    return conversation.participants.isEmpty
         ? null
-        : widget.conversation.participants.first;
+        : conversation.participants.first;
   }
 
   Future<void> _showMessageActions(ChatMessageItem item) async {
@@ -1075,7 +1223,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  widget.conversation.title,
+                  _conversationTitle(context),
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -1083,7 +1231,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 ),
                 if (widget.property != null)
                   Text(
-                    widget.property!.title,
+                    _currentProperty(context.read<Property24State>())?.title ??
+                        widget.property!.title,
                     style: TextStyle(color: AppTheme.textMuted),
                   ),
               ],
@@ -1107,11 +1256,35 @@ class _ConversationScreenState extends State<ConversationScreen> {
           ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
         }
       }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Notifications muted for this chat')),
-      );
     }
+  }
+
+  String _conversationTitle(BuildContext context) {
+    final state = context.read<Property24State>();
+    final conversation = state.snapshot.conversations.firstWhere(
+      (item) => item.id == widget.conversation.id,
+      orElse: () => widget.conversation,
+    );
+    return conversation.title;
+  }
+
+  PropertyListing? _currentProperty(Property24State state) {
+    final conversation = state.snapshot.conversations.firstWhere(
+      (item) => item.id == widget.conversation.id,
+      orElse: () => widget.conversation,
+    );
+    for (final property in state.snapshot.properties) {
+      if (property.id == conversation.propertyId) {
+        return state.currentProperty(property);
+      }
+    }
+    for (final property in state.snapshot.savedProperties) {
+      if (property.id == conversation.propertyId) {
+        return state.currentProperty(property);
+      }
+    }
+    final fallback = widget.property;
+    return fallback == null ? null : state.currentProperty(fallback);
   }
 
   Future<void> _showEmojiPicker() async {
@@ -1178,28 +1351,66 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   Future<void> _showAttachmentSheet() async {
-    final captureVideo = await showModalBottomSheet<bool>(
+    final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(CupertinoIcons.camera),
-              title: const Text('Photo'),
-              onTap: () => Navigator.pop(sheetContext, false),
-            ),
-            ListTile(
-              leading: const Icon(CupertinoIcons.videocam),
-              title: const Text('Video'),
-              onTap: () => Navigator.pop(sheetContext, true),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(CupertinoIcons.photo),
+                title: const Text('Photo Library'),
+                onTap: () => Navigator.pop(sheetContext, 'library'),
+              ),
+              ListTile(
+                leading: const Icon(CupertinoIcons.camera),
+                title: const Text('Take Photo'),
+                onTap: () => Navigator.pop(sheetContext, 'camera'),
+              ),
+              ListTile(
+                leading: const Icon(CupertinoIcons.videocam),
+                title: const Text('Video'),
+                onTap: () => Navigator.pop(sheetContext, 'video'),
+              ),
+              ListTile(
+                leading: const Icon(CupertinoIcons.doc),
+                title: const Text('Document'),
+                onTap: () => Navigator.pop(sheetContext, 'document'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(sheetContext),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
         ),
       ),
     );
-    if (captureVideo != null) {
-      await _captureChatMedia(video: captureVideo);
+    if (action == 'library') {
+      try {
+        final file = await _picker.pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 100,
+        );
+        if (file != null) await _sendAttachment(file, 'image');
+      } catch (exception) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(userFacingError(exception))));
+        }
+      }
+    } else if (action == 'camera') {
+      await _captureChatMedia(video: false);
+    } else if (action == 'video') {
+      await _captureChatMedia(video: true);
+    } else if (action == 'document' && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Document sharing is not available yet.')),
+      );
     }
   }
 

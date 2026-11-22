@@ -30,11 +30,6 @@ class PropertyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final isCommercialProperty = const {
-      'office',
-      'shop',
-      'commercial property',
-    }.contains(property.propertyType.toLowerCase());
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.only(bottom: 14),
@@ -46,22 +41,9 @@ class PropertyCard extends StatelessWidget {
             Stack(
               children: [
                 AspectRatio(
-                  aspectRatio: 16 / 9,
+                  aspectRatio: 2.25,
                   child: property.photos.isEmpty
-                      ? DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [AppTheme.bgSurface, AppTheme.borderMid],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                          ),
-                          child: Icon(
-                            CupertinoIcons.building_2_fill,
-                            color: colorScheme.secondary,
-                            size: 46,
-                          ),
-                        )
+                      ? const _PropertyImagePlaceholder()
                       : Image.network(
                           property.photos.first,
                           fit: BoxFit.cover,
@@ -75,15 +57,6 @@ class PropertyCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                ),
-                Positioned(
-                  left: 12,
-                  top: 12,
-                  child: _ImageBadge(
-                    icon: CupertinoIcons.checkmark_seal,
-                    label: '${property.trustScore}% trust',
-                    emphasized: property.trustScore >= 80,
-                  ),
                 ),
                 Positioned(
                   right: 10,
@@ -138,6 +111,25 @@ class PropertyCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xffeee9ff),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${property.trustScore}% trust',
+                          style: TextStyle(
+                            color: AppTheme.accent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
                       ?trailing,
                     ],
                   ),
@@ -173,132 +165,38 @@ class PropertyCard extends StatelessWidget {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _Pill(
-                          icon: CupertinoIcons.money_dollar,
-                          label: property.rentLabel,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _Pill(
-                          icon: property.isLand
-                              ? CupertinoIcons.square_stack_3d_up
-                              : CupertinoIcons.money_dollar_circle,
-                          label: property.isLand
-                              ? property.standSummary
-                              : property.isStayOrVenue
-                              ? property.maxGuests > 0
-                                    ? 'Sleeps ${property.maxGuests} guests'
-                                    : property.isVenue &&
-                                          property.weddingCapacity > 0
-                                    ? 'Up to ${property.weddingCapacity} guests'
-                                    : property.isVenue &&
-                                          property.conferenceCapacity > 0
-                                    ? 'Conference up to ${property.conferenceCapacity}'
-                                    : 'Stays & events'
-                              : '${property.moveInTotalLabel} rent + deposit',
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (isCommercialProperty ||
-                          property.propertyType.toLowerCase() == 'room')
-                        _Pill(
-                          icon: CupertinoIcons.building_2_fill,
-                          label: property.propertyType,
-                        ),
-                      if (property.isLand) ...[
-                        _Pill(
-                          icon: CupertinoIcons.square,
-                          label: property.landSizeLabel,
-                        ),
-                        _Pill(
-                          icon: CupertinoIcons.doc_text,
-                          label: property.landTitleLabel,
-                        ),
-                        _Pill(
-                          icon: CupertinoIcons.location,
-                          label: property.landServicingLabel,
-                        ),
-                        if (property.electricityAvailable)
-                          const _Pill(
-                            icon: CupertinoIcons.bolt,
-                            label: 'Electricity',
+                  const SizedBox(height: 12),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: property.rentLabel,
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w700,
                           ),
-                        if (property.landWaterAvailable)
-                          const _Pill(
-                            icon: CupertinoIcons.drop,
-                            label: 'Water',
+                        ),
+                        if (property.parking.trim().isNotEmpty)
+                          TextSpan(
+                            text: '  ·  ${property.parking}',
+                            style: TextStyle(color: AppTheme.textSecondary),
                           ),
-                      ] else if (!isCommercialProperty &&
-                          (!property.isVenue ||
-                              property.isStay ||
-                              property.listingCategories.contains(
-                                'homes',
-                              ))) ...[
-                        _Pill(
-                          icon: CupertinoIcons.bed_double,
-                          label: '${property.bedrooms} beds',
+                        TextSpan(
+                          text:
+                              '  ·  ${property.isLand
+                                  ? 'Land'
+                                  : property.isStay
+                                  ? 'Stay'
+                                  : property.isVenue
+                                  ? 'Venue'
+                                  : property.propertyType}',
+                          style: TextStyle(color: AppTheme.textSecondary),
                         ),
-                        _Pill(
-                          icon: CupertinoIcons.drop,
-                          label: '${property.bathrooms} baths',
-                        ),
-                        _Pill(
-                          icon: CupertinoIcons.drop,
-                          label: property.borehole
-                              ? 'Borehole'
-                              : property.waterAvailability,
-                        ),
-                        if (property.solarPower)
-                          const _Pill(
-                            icon: CupertinoIcons.bolt,
-                            label: 'Solar',
-                          ),
                       ],
-                      if (property.sharedRoom)
-                        const _Pill(
-                          icon: CupertinoIcons.person_2,
-                          label: 'Shared room',
-                        ),
-                      if (property.isStudentAccommodation &&
-                          property.accommodationInstitution.isNotEmpty)
-                        _Pill(
-                          icon: CupertinoIcons.book,
-                          label: property.accommodationInstitution,
-                        ),
-                      if (property.has360Tour)
-                        const _Pill(
-                          icon: CupertinoIcons.rotate_right,
-                          label: '360 tour',
-                        ),
-                      if (property.isStay)
-                        const _Pill(
-                          icon: CupertinoIcons.bed_double,
-                          label: 'Stay',
-                        ),
-                      if (property.isVenue)
-                        const _Pill(
-                          icon: CupertinoIcons.calendar,
-                          label: 'Venue',
-                        ),
-                      if (property.isVenue &&
-                          !property.isStay &&
-                          property.conferenceCapacity > 0)
-                        _Pill(
-                          icon: CupertinoIcons.person_2,
-                          label: 'Conference ${property.conferenceCapacity}',
-                        ),
-                    ],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodyMedium?.copyWith(fontSize: 13),
                   ),
                 ],
               ),
@@ -308,6 +206,49 @@ class PropertyCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PropertyImagePlaceholder extends StatelessWidget {
+  const _PropertyImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xfffaf8ff), Color(0xffc8b8ff)],
+            ),
+          ),
+        ),
+        CustomPaint(painter: _PlaceholderStripePainter()),
+      ],
+    );
+  }
+}
+
+class _PlaceholderStripePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.28)
+      ..strokeWidth = 1.2;
+    const step = 28.0;
+    for (var start = -size.height; start < size.width; start += step) {
+      canvas.drawLine(
+        Offset(start, size.height),
+        Offset(start + size.height, 0),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _RoundIconButton extends StatelessWidget {
@@ -409,84 +350,6 @@ class AvailabilityActionMenu extends StatelessWidget {
         PopupMenuItem(value: 'sold', child: Text('Mark sold')),
       ],
       icon: const Icon(CupertinoIcons.ellipsis_circle),
-    );
-  }
-}
-
-class _ImageBadge extends StatelessWidget {
-  const _ImageBadge({
-    required this.icon,
-    required this.label,
-    required this.emphasized,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: emphasized
-            ? AppTheme.trustHigh
-            : colorScheme.surface.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 15,
-            color: emphasized ? colorScheme.onPrimary : colorScheme.onSurface,
-          ),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: emphasized ? colorScheme.onPrimary : colorScheme.onSurface,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: colorScheme.onSurfaceVariant),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.labelMedium,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

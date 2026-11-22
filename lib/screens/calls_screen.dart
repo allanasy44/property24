@@ -1,8 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../models/rental_models.dart';
+import '../routes/app_routes.dart';
 import '../services/property24_api.dart';
 import 'property_detail_screen.dart';
 import '../state/property24_state.dart';
@@ -16,14 +18,19 @@ class SavedHomesScreen extends StatefulWidget {
 }
 
 class _SavedHomesScreenState extends State<SavedHomesScreen> {
+  String _tab = 'Saved';
   _SavedFilter filter = _SavedFilter.all;
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<Property24State>();
-    final properties = state.snapshot.savedProperties
-        .map(state.currentProperty)
-        .toList(growable: false);
+    final properties = _tab == 'Saved'
+        ? state.snapshot.savedProperties
+              .map(state.currentProperty)
+              .toList(growable: false)
+        : state.snapshot.properties
+              .where((property) => property.reserved)
+              .toList(growable: false);
     final sale = properties
         .where((property) => property.listingIntent == 'sale')
         .toList();
@@ -50,11 +57,66 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
                 elevation: 0,
                 scrolledUnderElevation: 0,
                 pinned: true,
-                title: const Text('Saved & Reserved'),
+                title: const Text('Saved'),
               ),
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                  child: Container(
+                    height: 40,
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgSurface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        for (final tab in const ['Saved', 'Reserved'])
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setState(() {
+                                _tab = tab;
+                                filter = _SavedFilter.all;
+                              }),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 160),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: _tab == tab
+                                      ? AppTheme.bgCard
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(9),
+                                  boxShadow: _tab == tab
+                                      ? [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(
+                                              alpha: 0.08,
+                                            ),
+                                            blurRadius: 5,
+                                            offset: const Offset(0, 1),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: Text(
+                                  tab,
+                                  style: TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -67,14 +129,14 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
                         ),
                         const SizedBox(width: 8),
                         _FilterChip(
-                          label: 'For Sale',
+                          label: 'For sale',
                           selected: filter == _SavedFilter.sale,
                           onTap: () =>
                               setState(() => filter = _SavedFilter.sale),
                         ),
                         const SizedBox(width: 8),
                         _FilterChip(
-                          label: 'For Rent',
+                          label: 'For rent',
                           selected: filter == _SavedFilter.rent,
                           onTap: () =>
                               setState(() => filter = _SavedFilter.rent),
@@ -93,15 +155,52 @@ class _SavedHomesScreenState extends State<SavedHomesScreen> {
               else if (visible.isEmpty)
                 SliverFillRemaining(
                   child: Center(
-                    child: Text(
-                      switch (filter) {
-                        _SavedFilter.sale => 'No saved properties for sale.',
-                        _SavedFilter.rent => 'No saved rental properties.',
-                        _SavedFilter.all => 'Nothing saved or reserved yet.',
-                      },
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        color: AppTheme.textMuted,
+                    child: Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              CupertinoIcons.heart,
+                              color: AppTheme.accent,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _tab == 'Reserved'
+                                ? 'No homes reserved yet'
+                                : 'Nothing saved yet',
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            _tab == 'Reserved'
+                                ? 'Homes you reserve will appear here.'
+                                : 'Tap the heart on any listing to keep it here.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          FilledButton(
+                            onPressed: () =>
+                                context.go(AppRoutes.exploreScreen),
+                            child: const Text('Browse homes'),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -159,17 +258,17 @@ class _FilterChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppTheme.accent : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
+          color: selected ? AppTheme.textPrimary : AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(18),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? Colors.white : AppTheme.textPrimary,
+            color: selected ? Colors.white : AppTheme.textSecondary,
             fontWeight: FontWeight.w600,
-            fontSize: 14,
+            fontSize: 11,
           ),
         ),
       ),

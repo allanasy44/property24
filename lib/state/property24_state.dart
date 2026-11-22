@@ -34,6 +34,9 @@ class Property24State extends ChangeNotifier {
   String? _liveConnectionIssue;
   final Set<String> _joinedConversationIds = <String>{};
   final Map<String, int> _conversationRevisions = <String, int>{};
+  final Map<String, int> _propertyRevisions = <String, int>{};
+  final Map<String, int> _supplierFollowRevisions = <String, int>{};
+  int _adminDataRevision = 0;
   final Map<String, String> _typingUsers = <String, String>{};
   final Map<String, String> _typingUserIds = <String, String>{};
   final Map<String, Timer> _typingExpiryTimers = <String, Timer>{};
@@ -66,6 +69,11 @@ class Property24State extends ChangeNotifier {
 
   int conversationRevision(String conversationId) =>
       _conversationRevisions[conversationId] ?? 0;
+  int propertyRevision(String propertyId) =>
+      _propertyRevisions[propertyId] ?? 0;
+  int supplierFollowRevision(String supplierId) =>
+      _supplierFollowRevisions[supplierId] ?? 0;
+  int get adminDataRevision => _adminDataRevision;
   String? typingUserForConversation(String conversationId) =>
       _typingUsers[conversationId];
   bool isUserOnline(String userId, {bool fallback = false}) {
@@ -247,7 +255,6 @@ class Property24State extends ChangeNotifier {
         activeToken.isEmpty ||
         !signedIn ||
         _disposed ||
-        user?.role == AccountRole.admin ||
         _connectingLiveSocket) {
       return;
     }
@@ -289,11 +296,13 @@ class Property24State extends ChangeNotifier {
         },
         cancelOnError: true,
       );
-      _joinedConversationIds.addAll(
-        snapshot.conversations.map((conversation) => conversation.id),
-      );
-      for (final conversationId in _joinedConversationIds) {
-        sendLiveEvent('conversation.join', conversationId);
+      if (user?.role != AccountRole.admin) {
+        _joinedConversationIds.addAll(
+          snapshot.conversations.map((conversation) => conversation.id),
+        );
+        for (final conversationId in _joinedConversationIds) {
+          sendLiveEvent('conversation.join', conversationId);
+        }
       }
       _presencePingTimer?.cancel();
       _presencePingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
@@ -346,6 +355,18 @@ class Property24State extends ChangeNotifier {
       if (event is! Map<String, dynamic>) return;
       final type = '${event['type'] ?? ''}';
       final payload = event['payload'];
+      if (type == 'admin.data.changed' && user?.role == AccountRole.admin) {
+        _adminDataRevision++;
+        notifyListeners();
+      }
+      if (type == 'supplier.followers.changed' && payload is Map) {
+        final supplierId = '${payload['supplier_id'] ?? ''}';
+        if (supplierId.isNotEmpty) {
+          _supplierFollowRevisions[supplierId] =
+              supplierFollowRevision(supplierId) + 1;
+          notifyListeners();
+        }
+      }
       final conversationId = payload is Map
           ? '${payload['conversation_id'] ?? ''}'
           : '';
@@ -405,31 +426,56 @@ class Property24State extends ChangeNotifier {
         if (notifiedConversationId.isNotEmpty) {
           joinConversation(notifiedConversationId);
         }
-        final message = '${payload['message'] ?? ''}'.trim();
-        final kind = '${payload['kind'] ?? ''}';
-        final fallback = switch (kind) {
-          'application' => 'New application received',
-          'application.updated' => 'Application status updated',
-          'viewing' => 'New viewing request',
-          'viewing.updated' => 'Viewing status updated',
-          'conversation.created' => 'New conversation',
-          'property.hold' => 'Property hold updated',
-          'identity_verification' => 'Identity verification updated',
-          _ => kind.isEmpty ? 'New notification' : titleize(kind),
-        };
         final notificationId = '${payload['notification_id'] ?? ''}'.trim();
-        if (notificationId.isNotEmpty) {
-          addNotification(
-            NotificationItem(
-              id: notificationId,
-              kind: kind.isEmpty ? 'general' : kind,
-              message: message.isNotEmpty ? message : fallback,
-              isRead: false,
-              createdAt: 'Just now',
-              payload: Map<String, dynamic>.from(payload),
-            ),
-          );
+        final createdAt = payload['created_at'];
+        if (notificationId.isNotEmpty && createdAt is String) {
+          final notificationData = Map<String, dynamic>.from(payload)
+            ..['id'] = payload['id'] ?? notificationId
+            ..['payload'] = payload['payload'] is Map
+                ? Map<String, dynamic>.from(payload['payload'] as Map)
+                : Map<String, dynamic>.from(payload);
+          addNotification(NotificationItem.fromJson(notificationData));
+        } else {
+          // Older servers may send only an event summary. Load the persisted
+          // notification instead of inventing a timestamp or message locally.
+          unawaited(refresh(silent: true));
         }
+      }
+      if (type == 'notification.updated' && payload is Map<String, dynamic>) {
+        final updated = NotificationItem.fromJson(payload);
+        _replaceSnapshot(
+          snapshot.copyWith(
+            notifications: snapshot.notifications
+                .map((item) => item.id == updated.id ? updated : item)
+                .toList(growable: false),
+          ),
+        );
+        notifyListeners();
+      }
+      if (type == 'notification.deleted' && payload is Map) {
+        final notificationId = '${payload['id'] ?? ''}';
+        _replaceSnapshot(
+          snapshot.copyWith(
+            notifications: snapshot.notifications
+                .where((item) => item.id != notificationId)
+                .toList(growable: false),
+          ),
+        );
+        notifyListeners();
+      }
+      if (type == 'notifications.read_all') {
+        _replaceSnapshot(
+          snapshot.copyWith(
+            notifications: snapshot.notifications
+                .map((item) => item.copyWith(isRead: true))
+                .toList(growable: false),
+          ),
+        );
+        notifyListeners();
+      }
+      if (type == 'notifications.cleared') {
+        _replaceSnapshot(snapshot.copyWith(notifications: const []));
+        notifyListeners();
       }
       if (type == 'message.created' && payload is Map<String, dynamic>) {
         final message = ChatMessageItem.fromJson(payload);
@@ -446,13 +492,17 @@ class Property24State extends ChangeNotifier {
             conversationRevision(conversationId) + 1;
         notifyListeners();
       }
-      if (type == 'property.changed' && payload is Map<String, dynamic>) {
+      if ((type == 'property.changed' ||
+              type == 'property.engagement.changed') &&
+          payload is Map<String, dynamic>) {
         final rawProperty = payload['property'];
         if (rawProperty is Map<String, dynamic>) {
+          final propertyId = '${rawProperty['id'] ?? ''}';
+          final action = '${payload['action'] ?? ''}';
           final changedPayload = Map<String, dynamic>.from(rawProperty);
           PropertyListing? savedProperty;
           for (final property in snapshot.savedProperties) {
-            if (property.id == '${rawProperty['id']}') {
+            if (property.id == propertyId) {
               savedProperty = property;
               break;
             }
@@ -463,12 +513,64 @@ class Property24State extends ChangeNotifier {
               ..['reserved'] = savedProperty.reserved;
           }
           final changedProperty = PropertyListing.fromJson(changedPayload);
-          _changedProperties[changedProperty.id] = changedProperty;
+          if (action == 'archived' || action == 'deleted') {
+            _changedProperties.remove(propertyId);
+            _replaceSnapshot(
+              snapshot.copyWith(
+                properties: snapshot.properties
+                    .where((property) => property.id != propertyId)
+                    .toList(growable: false),
+                savedProperties: snapshot.savedProperties
+                    .where(
+                      (property) =>
+                          property.id != propertyId || property.reserved,
+                    )
+                    .toList(growable: false),
+                comparisonProperties: snapshot.comparisonProperties
+                    .where((property) => property.id != propertyId)
+                    .toList(growable: false),
+              ),
+            );
+          } else {
+            List<PropertyListing> replaceProperty(
+              List<PropertyListing> properties, {
+              bool addIfMissing = false,
+            }) {
+              var found = false;
+              final updated = properties
+                  .map((property) {
+                    if (property.id != propertyId) return property;
+                    found = true;
+                    return changedProperty;
+                  })
+                  .toList(growable: false);
+              return !found && addIfMissing
+                  ? [...updated, changedProperty]
+                  : updated;
+            }
+
+            _replaceSnapshot(
+              snapshot.copyWith(
+                properties: replaceProperty(
+                  snapshot.properties,
+                  addIfMissing: true,
+                ),
+                savedProperties: replaceProperty(snapshot.savedProperties),
+                comparisonProperties: replaceProperty(
+                  snapshot.comparisonProperties,
+                ),
+              ),
+            );
+          }
+          _propertyRevisions[propertyId] = propertyRevision(propertyId) + 1;
           notifyListeners();
         }
       }
       if (type == 'property.changed' ||
+          type == 'marketplace.changed' ||
           type == 'comparison.changed' ||
+          type == 'saved_searches.changed' ||
+          type == 'admin.data.changed' ||
           (type == 'notification.created' &&
               (conversationId.isEmpty ||
                   !snapshot.conversations.any(

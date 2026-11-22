@@ -107,34 +107,27 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 22),
               Row(
                 children: [
-                  for (final action in const [
-                    _HomeAction(
-                      label: 'Property',
-                      icon: CupertinoIcons.house_fill,
-                      market: 'properties',
-                    ),
-                    _HomeAction(
-                      label: 'Services',
-                      icon: CupertinoIcons.wrench_fill,
-                      market: 'services',
-                    ),
-                    _HomeAction(
-                      label: 'Jobs',
-                      icon: CupertinoIcons.briefcase_fill,
-                      market: 'jobs',
-                    ),
-                  ])
+                  for (var index = 0; index < _homeActions.length; index++)
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.only(right: 10),
+                        padding: EdgeInsets.only(
+                          right: index == _homeActions.length - 1 ? 0 : 8,
+                        ),
                         child: _ActionTile(
-                          action: action,
-                          onTap: () => _openExplore(context, action.market),
+                          action: _homeActions[index],
+                          onTap: () =>
+                              _openExplore(context, _homeActions[index].market),
                         ),
                       ),
                     ),
                 ],
               ),
+              if (state.user != null && !state.canManageListings) ...[
+                const SizedBox(height: 14),
+                _VerifyIdentityCard(
+                  onTap: () => context.go(AppRoutes.profileScreen),
+                ),
+              ],
               const SizedBox(height: 28),
               Row(
                 children: [
@@ -266,6 +259,100 @@ class _HomeAction {
   final String market;
 }
 
+const _homeActions = [
+  _HomeAction(
+    label: 'Homes',
+    icon: CupertinoIcons.building_2_fill,
+    market: 'properties',
+  ),
+  _HomeAction(
+    label: 'Stays',
+    icon: CupertinoIcons.bed_double_fill,
+    market: 'stays',
+  ),
+  _HomeAction(label: 'Venues', icon: CupertinoIcons.star, market: 'venues'),
+  _HomeAction(
+    label: 'Services',
+    icon: CupertinoIcons.pencil,
+    market: 'services',
+  ),
+  _HomeAction(label: 'Jobs', icon: CupertinoIcons.briefcase, market: 'jobs'),
+];
+
+class _VerifyIdentityCard extends StatelessWidget {
+  const _VerifyIdentityCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.bgCard,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.border),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xff201044).withValues(alpha: 0.05),
+                blurRadius: 18,
+                offset: const Offset(0, 7),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  CupertinoIcons.shield,
+                  color: AppTheme.accent,
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Verify your ID',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Required before you can list',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(CupertinoIcons.chevron_right, color: AppTheme.textPrimary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ActionTile extends StatelessWidget {
   const _ActionTile({required this.action, required this.onTap});
 
@@ -281,22 +368,22 @@ class _ActionTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          height: 94,
+          height: 88,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: AppTheme.border),
           ),
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(action.icon, size: 25, color: AppTheme.accent),
-              const SizedBox(height: 8),
+              Icon(action.icon, size: 24, color: AppTheme.accent),
+              const SizedBox(height: 7),
               Text(
                 action.label,
                 style: TextStyle(
                   color: AppTheme.textPrimary,
-                  fontSize: 12,
+                  fontSize: 10,
                   fontWeight: FontWeight.w600,
                 ),
               ),

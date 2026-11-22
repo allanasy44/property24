@@ -150,43 +150,14 @@ class _ListingsScreenState extends State<ListingsScreen> {
                                 Text(
                                   'My listings',
                                   style: TextStyle(
-                                    fontSize: 25,
+                                    fontSize: 27,
                                     height: 1.15,
                                     color: _textDark,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: -0.6,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Manage your property adverts',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: _textMuted,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
                               ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          FilledButton.icon(
-                            onPressed: hasSubmittedId
-                                ? () => _openEditor(context)
-                                : () => context.go(AppRoutes.profileScreen),
-                            icon: const Icon(CupertinoIcons.add, size: 18),
-                            label: Text(
-                              hasSubmittedId ? 'Add listing' : 'Upload ID',
-                            ),
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 12,
-                              ),
-                              textStyle: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
                             ),
                           ),
                         ],
@@ -200,7 +171,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                           _searchController.clear();
                         }),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Text(
@@ -224,54 +195,56 @@ class _ListingsScreenState extends State<ListingsScreen> {
                           ],
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      Container(
-                        height: 50,
-                        decoration: BoxDecoration(
-                          color: _searchFill,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppTheme.border),
-                        ),
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (value) => setState(() => _query = value),
-                          textInputAction: TextInputAction.search,
-                          style: TextStyle(color: _textDark, fontSize: 13.5),
-                          decoration: InputDecoration(
-                            hintText: 'Search your listings',
-                            hintStyle: TextStyle(
-                              color: _textMuted,
-                              fontSize: 13,
-                            ),
-                            prefixIcon: Icon(
-                              CupertinoIcons.search,
-                              color: _textMuted,
-                              size: 20,
-                            ),
-                            suffixIcon: _query.isEmpty
-                                ? null
-                                : IconButton(
-                                    tooltip: 'Clear search',
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() => _query = '');
-                                    },
-                                    icon: Icon(
-                                      CupertinoIcons.xmark_circle_fill,
-                                      color: _textMuted,
-                                      size: 18,
+                      if (visibleListings.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: _searchFill,
+                            borderRadius: BorderRadius.circular(13),
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (value) =>
+                                setState(() => _query = value),
+                            textInputAction: TextInputAction.search,
+                            style: TextStyle(color: _textDark, fontSize: 13.5),
+                            decoration: InputDecoration(
+                              hintText: 'Search your listings',
+                              hintStyle: TextStyle(
+                                color: _textMuted,
+                                fontSize: 13,
+                              ),
+                              prefixIcon: Icon(
+                                CupertinoIcons.search,
+                                color: _textMuted,
+                                size: 20,
+                              ),
+                              suffixIcon: _query.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      tooltip: 'Clear search',
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() => _query = '');
+                                      },
+                                      icon: Icon(
+                                        CupertinoIcons.xmark_circle_fill,
+                                        color: _textMuted,
+                                        size: 18,
+                                      ),
                                     ),
-                                  ),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 14,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 14,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
                     ],
                   ),
                 ),
