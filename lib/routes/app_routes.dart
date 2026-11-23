@@ -169,6 +169,7 @@ final GoRouter appRouter = GoRouter(
             initialCategories: [
               state.uri.queryParameters['category'] ?? 'homes',
             ],
+            initialPropertyType: state.uri.queryParameters['type'],
             openComposerOnOpen: state.uri.queryParameters['create'] != null,
           ),
         ),

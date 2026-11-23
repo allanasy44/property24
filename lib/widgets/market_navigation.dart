@@ -58,12 +58,12 @@ class MarketNavigation extends StatelessWidget {
       label: label,
       child: Material(
         color: isSelected
-            ? (compact ? AppTheme.textPrimary : AppTheme.accent)
+            ? AppTheme.accent
             : AppTheme.bgSurface,
         borderRadius: BorderRadius.circular(compact ? 18 : 15),
-        child: InkWell(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => onSelected(value),
-          borderRadius: BorderRadius.circular(compact ? 18 : 15),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             constraints: compact
@@ -74,7 +74,7 @@ class MarketNavigation extends StatelessWidget {
               borderRadius: BorderRadius.circular(compact ? 18 : 15),
               border: Border.all(
                 color: isSelected
-                    ? (compact ? AppTheme.textPrimary : AppTheme.accent)
+                    ? AppTheme.accent
                     : AppTheme.border,
               ),
               boxShadow: isSelected && !compact

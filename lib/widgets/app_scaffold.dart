@@ -517,14 +517,29 @@ Future<void> _showCreateActions(BuildContext context) async {
     ),
     const _CreateAction(
       icon: CupertinoIcons.bed_double,
-      label: 'Stay',
+      label: 'Lodge / stay',
       category: 'stays',
+      propertyType: 'lodge',
       requiresPropertyCapability: true,
     ),
     const _CreateAction(
       icon: Icons.celebration,
       label: 'Event venue',
       category: 'venues',
+      requiresPropertyCapability: true,
+    ),
+    const _CreateAction(
+      icon: CupertinoIcons.bed_double,
+      label: 'Student accommodation',
+      category: 'stays',
+      propertyType: 'student_accommodation',
+      requiresPropertyCapability: true,
+    ),
+    const _CreateAction(
+      icon: CupertinoIcons.map,
+      label: 'Land / stand',
+      category: 'homes',
+      propertyType: 'land',
       requiresPropertyCapability: true,
     ),
     const _CreateAction(
@@ -625,10 +640,16 @@ Future<void> _showCreateActions(BuildContext context) async {
                           ),
                           const SizedBox(height: 8),
                           const _CreateSectionLabel('LIST'),
-                          Row(
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 4,
+                            runSpacing: 8,
                             children: [
-                              for (final action in actions.take(3))
-                                Expanded(
+                              for (final action in actions.where(
+                                (action) => action.category != null,
+                              ))
+                                SizedBox(
+                                  width: 100,
                                   child: _CreateActionBubble(
                                     action: action,
                                     onTap: () => Navigator.of(
@@ -641,10 +662,16 @@ Future<void> _showCreateActions(BuildContext context) async {
                           ),
                           const SizedBox(height: 8),
                           const _CreateSectionLabel('OFFER OR HIRE'),
-                          Row(
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 4,
+                            runSpacing: 8,
                             children: [
-                              for (final action in actions.skip(3))
-                                Expanded(
+                              for (final action in actions.where(
+                                (action) => action.category == null,
+                              ))
+                                SizedBox(
+                                  width: 100,
                                   child: _CreateActionBubble(
                                     action: action,
                                     onTap: () => Navigator.of(
@@ -784,6 +811,7 @@ class _CreateAction {
     required this.label,
     this.category,
     this.market,
+    this.propertyType,
     this.requiresPropertyCapability = false,
     this.opensComposer = false,
   });
@@ -792,6 +820,7 @@ class _CreateAction {
   final String label;
   final String? category;
   final String? market;
+  final String? propertyType;
   final bool requiresPropertyCapability;
   final bool opensComposer;
 }
@@ -808,7 +837,14 @@ Future<void> _runCreateAction(
     if (!context.mounted) return;
     if (action.category != null) {
       await context.push<void>(
-        '${AppRoutes.listingsScreen}?category=${action.category}&create=${DateTime.now().microsecondsSinceEpoch}',
+        Uri(
+          path: AppRoutes.listingsScreen,
+          queryParameters: {
+            'category': action.category!,
+            if (action.propertyType != null) 'type': action.propertyType!,
+            'create': DateTime.now().microsecondsSinceEpoch.toString(),
+          },
+        ).toString(),
       );
       return;
     }

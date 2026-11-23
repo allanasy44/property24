@@ -24,11 +24,13 @@ import 'property_detail_screen.dart';
 class ListingsScreen extends StatefulWidget {
   const ListingsScreen({
     this.initialCategories = const ['homes'],
+    this.initialPropertyType,
     this.openComposerOnOpen = false,
     super.key,
   });
 
   final List<String> initialCategories;
+  final String? initialPropertyType;
   final bool openComposerOnOpen;
 
   @override
@@ -368,6 +370,9 @@ class _ListingsScreenState extends State<ListingsScreen> {
         pageBuilder: (context, animation, secondaryAnimation) => PropertyEditor(
           property: property,
           initialCategories: widget.initialCategories,
+          initialPropertyType: property == null
+              ? widget.initialPropertyType
+              : null,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final curvedAnimation = CurvedAnimation(
@@ -785,11 +790,13 @@ class PropertyEditor extends StatefulWidget {
   const PropertyEditor({
     this.property,
     this.initialCategories = const ['homes'],
+    this.initialPropertyType,
     super.key,
   });
 
   final PropertyListing? property;
   final List<String> initialCategories;
+  final String? initialPropertyType;
 
   @override
   State<PropertyEditor> createState() => _PropertyEditorState();
@@ -943,12 +950,16 @@ class _PropertyEditorState extends State<PropertyEditor> {
     _audio = TextEditingController();
     _type =
         property?.propertyType.toLowerCase().replaceAll(' ', '_') ??
+        widget.initialPropertyType ??
         (widget.initialCategories.contains('stays')
             ? 'student_accommodation'
             : widget.initialCategories.contains('venues')
             ? 'function_hall'
             : 'house');
-    _intent = property?.listingIntent == 'sale' ? 'Sale' : 'Rent';
+    _intent = property?.listingIntent == 'sale' ||
+            (property == null && _type == 'land')
+        ? 'Sale'
+        : 'Rent';
     _furnished = property?.furnished ?? false;
     _solar = property?.solarPower ?? false;
     _borehole = property?.borehole ?? false;

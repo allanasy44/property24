@@ -683,7 +683,7 @@ class _ViewTabs extends StatelessWidget {
               duration: const Duration(milliseconds: 180),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? AppTheme.textPrimary : AppTheme.bgSurface,
+                color: isSelected ? AppTheme.accent : AppTheme.bgSurface,
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Text(
